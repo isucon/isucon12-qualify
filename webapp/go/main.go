@@ -82,5 +82,12 @@ func main() {
 
 func tenantsAddHandler(c echo.Context) error {
 	// TODO: SaaS管理者かどうかをチェック
+
+	// tenantテーブルでテーブルロック
+	// identifier 発行 => id_generatorの文字列
+	// tenant テーブルへINSERT
+
+	// テナント初期化スキーマをsqliteコマンドで実行
+	// ロック解放
 	return nil
 }
