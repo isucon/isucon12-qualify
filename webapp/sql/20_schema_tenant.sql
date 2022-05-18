@@ -8,8 +8,8 @@ CREATE TABLE `competition` (
 
 CREATE TABLE `competitor` (
   `id` INTEGER PRIMARY KEY,
-  `identifier` VARCHAR(191) NOT NULL UNIQUE,
-  `name` VARCHAR(191) NOT NULL,
+  `identifier` TEXT NOT NULL UNIQUE,
+  `name` TEXT NOT NULL,
   `created_at` DATETIME NOT NULL,
   `updated_at` DATETIME NOT NULL
 );
