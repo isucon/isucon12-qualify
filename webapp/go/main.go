@@ -79,3 +79,8 @@ func main() {
 	serverPort := fmt.Sprintf(":%s", port)
 	e.Logger.Fatal(e.Start(serverPort))
 }
+
+func tenantsAddHandler(c echo.Context) error {
+	// TODO: SaaS管理者かどうかをチェック
+	return nil
+}
