@@ -44,7 +44,7 @@ func main() {
 
 	dummy := func(c echo.Context) error { return nil }
 	// for admin endpoint
-	e.POST("/api/tenants/add", dummy)
+	e.POST("/api/tenants/add", tenantsAddHandler)
 	e.GET("/api/tenants/billing", dummy)
 
 	// for tenant endpoint
