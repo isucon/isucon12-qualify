@@ -6,9 +6,9 @@ import (
 	"github.com/isucon/isucandar"
 )
 
-// 整合性検証シナリオ
-// 自分で作ったplaylistを直後に削除したりするので、並列で実行するとfavした他人のplaylistが削除されて壊れる可能性がある
-// 負荷テスト中には実行してはいけない
+// ベンチ実行後の整合性検証シナリオ
+// isucandar.ValidateScenarioを満たすメソッド
+// isucandar.Benchmark の validation ステップで実行される
 func (s *Scenario) ValidationScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
 	report := timeReporter("validation")
 	defer report()
@@ -18,6 +18,8 @@ func (s *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Bench
 
 	ag, _ := s.Option.NewAgent(false)
 	_ = ag
+
+	// TODO: 検証シナリオがココに書かれる
 
 	return nil
 }

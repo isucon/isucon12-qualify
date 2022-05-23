@@ -1,4 +1,4 @@
-module github.com/kayac/inhouse-isucon-2022/bench
+module github.com/isucon/isucon12-qualify/bench
 
 go 1.18
 

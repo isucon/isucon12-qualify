@@ -30,3 +30,5 @@ func LoadFromJSONFile[T Model](jsonFile string) ([]*T, error) {
 	}
 	return objects, nil
 }
+
+// TODO: ユーザーの挙動みたいなのがここに入る、たぶん

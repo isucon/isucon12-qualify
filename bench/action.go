@@ -43,6 +43,8 @@ func GetRootAction(ctx context.Context, ag *agent.Agent) (*http.Response, error)
 	return ag.Do(ctx, req)
 }
 
+// TODO: 各エンドポイントにリクエストを飛ばすものを書く、書いたものはscenarioで呼ぶ
+
 func newRequestBody(obj any) (*bytes.Buffer, func(), error) {
 	b := globalPool.Get().(*bytes.Buffer)
 	reset := func() {
