@@ -1,14 +1,25 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"time"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
+	_ "github.com/mattn/go-sqlite3"
+)
+
+const (
+	tenantDBSchemaFilePath = "../sql/20_schema_tenant.sql"
 )
 
 func getEnv(key string, defaultValue string) string {
@@ -19,7 +30,7 @@ func getEnv(key string, defaultValue string) string {
 	return defaultValue
 }
 
-func connectDB() (*sqlx.DB, error) {
+func connectCenterDB() (*sqlx.DB, error) {
 	config := mysql.NewConfig()
 	config.Net = "tcp"
 	config.Addr = getEnv("ISUCON_DB_HOST", "127.0.0.1") + ":" + getEnv("ISUCON_DB_PORT", "3306")
@@ -32,7 +43,32 @@ func connectDB() (*sqlx.DB, error) {
 	return sqlx.Open("mysql", dsn)
 }
 
-var db *sqlx.DB
+func tenantDBPath(tenantID string) string {
+	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "./tenants")
+	return filepath.Join(tenantDBDir, tenantID+".db")
+}
+
+func connectTenantDB(tenantID string) (*sqlx.DB, error) {
+	p := tenantDBPath(tenantID)
+	return sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rw", p))
+}
+
+func createTenantDB(tenantID string) error {
+	p := tenantDBPath(tenantID)
+
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("sqlite3 %s < %s", p, tenantDBSchemaFilePath))
+	return cmd.Run()
+}
+
+func dispenseID(ctx context.Context) (int64, error) {
+	ret, err := centerDB.ExecContext(ctx, "REPLACE INTO `id_generator` (`stub`) VALUES (?);", "a")
+	if err != nil {
+		return 0, fmt.Errorf("error REPLACE INTO `id_generator`: %w", err)
+	}
+	return ret.LastInsertId()
+}
+
+var centerDB *sqlx.DB
 
 func main() {
 	e := echo.New()
@@ -42,7 +78,6 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	dummy := func(c echo.Context) error { return nil }
 	// for admin endpoint
 	e.POST("/api/tenants/add", tenantsAddHandler)
 	e.GET("/api/tenants/billing", tenantsBillingHandler)
@@ -66,13 +101,13 @@ func main() {
 	e.POST("/initialize", initializeHandler)
 
 	var err error
-	db, err = connectDB()
+	centerDB, err = connectCenterDB()
 	if err != nil {
 		e.Logger.Fatalf("failed to connect db: %v", err)
 		return
 	}
-	db.SetMaxOpenConns(10)
-	defer db.Close()
+	centerDB.SetMaxOpenConns(10)
+	defer centerDB.Close()
 
 	port := getEnv("SERVER_APP_PORT", "3000")
 	e.Logger.Infof("starting isuports server on : %s ...", port)
@@ -82,13 +117,54 @@ func main() {
 
 func tenantsAddHandler(c echo.Context) error {
 	// TODO: SaaS管理者かどうかをチェック
+	name := c.FormValue("name")
+	icon, err := c.FormFile("icon")
+	if err != nil {
+		return fmt.Errorf("error retrieve icon from FormFile: %w", err)
+	}
+	iconFile, err := icon.Open()
+	if err != nil {
+		return fmt.Errorf("error icon.Open: %w", err)
+	}
+	defer iconFile.Close()
+	iconBytes, err := io.ReadAll(iconFile)
+	if err != nil {
+		return fmt.Errorf("error io.ReadAll: %w", err)
+	}
 
-	// tenantテーブルでテーブルロック
-	// identifier 発行 => id_generatorの文字列
-	// tenant テーブルへINSERT
+	ctx := c.Request().Context()
+	tx, err := centerDB.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("error centerDB.BeginTxx: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, "LOCK TABLE `tenant` WRITE"); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("error Lock table: %w", err)
+	}
+	id, err := dispenseID(ctx)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("error dispenseID: %w", err)
+	}
+	identifier := strconv.FormatInt(id, 10)
+	now := time.Now()
+	_, err = tx.ExecContext(
+		ctx,
+		"INSERT INTO `tenant` (`id`, `identifier`, `name`, `image`, `created_at`, `updated_at`)",
+		id, identifier, name, iconBytes, now, now,
+	)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("error Insert `tenant`: %w", err)
+	}
 
-	// テナント初期化スキーマをsqliteコマンドで実行
-	// ロック解放
+	if err := createTenantDB(identifier); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("error createTenantDB: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("error tx.Commit: %w", err)
+	}
 	return nil
 }
 
