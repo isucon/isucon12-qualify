@@ -54,16 +54,16 @@ func main() {
 	// 大会操作
 	e.POST("/api/competitions/add", competitionsAddHandler)
 	e.POST("/api/competition/:competition_id/finish", competitionFinishHandler)
-	e.POST("/api/competition/:competition_id/result", competitionPostResultHandler)
+	e.POST("/api/competition/:competition_id/result", competitionResultHandler)
 	// テナント操作
-	e.GET("/api/tenant/billing", dummy)
+	e.GET("/api/tenant/billing", tenantBillingHandler)
 	// 参加者からの閲覧
-	e.GET("/api/competitor/:competitor_id", dummy)
-	e.GET("/api/competition/:competition_id/ranking", dummy)
-	e.GET("/api/competitions", dummy)
+	e.GET("/api/competitor/:competitor_id", competitorHandler)
+	e.GET("/api/competition/:competition_id/ranking", competitionRankingHandler)
+	e.GET("/api/competitions", competitionsHandler)
 
 	// for benchmarker
-	e.POST("/initialize", dummy)
+	e.POST("/initialize", initializeHandler)
 
 	var err error
 	db, err = connectDB()
@@ -135,9 +135,60 @@ func competitionFinishHandler(c echo.Context) error {
 	return nil
 }
 
-func competitionPostResultHandler(c echo.Context) error {
+func competitionResultHandler(c echo.Context) error {
 	// TODO: テナント管理者かチェック
 
 	// アップロードされたCSVを読みながらテナントDBのcompetitor_scoreテーブルにループクエリでINSERT
+	return nil
+}
+
+func tenantBillingHandler(c echo.Context) error {
+	// TODO: テナント管理者かチェック
+
+	// 大会ごとに
+	//   scoreに登録されているaccountでアクセスした人 * 100
+	//   scoreに登録されているaccountでアクセスしていない人 * 50
+	//   scoreに登録されていないaccountでアクセスした人 * 10
+	// を合計したものを計算する
+	return nil
+}
+
+func competitorHandler(c echo.Context) error {
+	// TODO: テナント管理者 or テナント参加者 or SaaS管理者かチェック
+	// TODO: 失格者かチェック
+
+	// テナントDBからcompetitorを取ってくる
+	// テナントDBからcompetitor_idでcompetitor_scoreを取ってくる
+	//    ループクエリでcompetitionを取ってくる
+	return nil
+}
+
+func competitionRankingHandler(c echo.Context) error {
+	// TODO: テナント管理者 or テナント参加者 or SaaS管理者かチェック
+	// TODO: 失格者かチェック
+
+	// テナントDBからcompetition_idでcompetitor_scoreを取ってくる
+	//   ループクエリでテナントDBのcompetitorを引いて名前を埋め込む
+	//   上から数えた順位を作成する。同じスコアなら同じ順位とする
+	return nil
+}
+
+func competitionsHandler(c echo.Context) error {
+	// TODO: テナント管理者 or テナント参加者 or SaaS管理者かチェック
+	// TODO: 失格者かチェック
+
+	// テナントDBからcompetition一覧を取ってくる
+	return nil
+}
+
+func initializeHandler(c echo.Context) error {
+	// TODO: SaaS管理者かチェック
+
+	// constに定義されたmax_idより大きいIDのtenantを削除
+	// constに定義されたmax_idより大きいIDのaccountを削除
+	// constに定義されたmax_idより大きいIDのaccount_access_logを削除
+	// constに定義されたmax_idにid_generatorを戻す
+	// 残ったtenantのうち、max_idより大きいcompetition, competitor, competitor_scoreを削除
+
 	return nil
 }
