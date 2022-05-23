@@ -9,7 +9,14 @@ CREATE TABLE `account` (
   `image` LONGBLOB NOT NULL,
   `tenant_id` BIGINT NULL,
   `role` ENUM('saas_operator', 'tenant_admin', 'competitor'),
-  `last_accessed_at` DATETIME NULL,
+  `created_at` DATETIME NOT NULL,
+  `updated_at` DATETIME NOT NULL
+) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;
+
+CREATE TABLE `account_access_log` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `account_id` BIGINT UNSIGNED NOT NULL,
+  `competition_id` BIGINT UNSIGNED NOT NULL,
   `created_at` DATETIME NOT NULL,
   `updated_at` DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;

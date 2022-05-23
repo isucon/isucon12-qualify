@@ -45,7 +45,7 @@ func main() {
 	dummy := func(c echo.Context) error { return nil }
 	// for admin endpoint
 	e.POST("/api/tenants/add", tenantsAddHandler)
-	e.GET("/api/tenants/billing", dummy)
+	e.GET("/api/tenants/billing", tenantsBillingHandler)
 
 	// for tenant endpoint
 	// 参加者操作
@@ -89,5 +89,18 @@ func tenantsAddHandler(c echo.Context) error {
 
 	// テナント初期化スキーマをsqliteコマンドで実行
 	// ロック解放
+	return nil
+}
+
+func tenantsBillingHandler(c echo.Context) error {
+	// TODO: SaaS管理者かどうかをチェック
+
+	// テナントごとに
+	//   大会ごとに
+	//     scoreに登録されているaccountでアクセスした人 * 100
+	//     scoreに登録されているaccountでアクセスしていない人 * 50
+	//     scoreに登録されていないaccountでアクセスした人 * 10
+	//   を合計したものを
+	// テナントの課金とする
 	return nil
 }
