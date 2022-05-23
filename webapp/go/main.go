@@ -52,9 +52,9 @@ func main() {
 	e.POST("/api/competitors/add", competitorsAddHandler)
 	e.POST("/api/competitor/:competitior_id/disqualified", competitorsDisqualifiedHandler)
 	// 大会操作
-	e.POST("/api/competitions/add", dummy)
-	e.POST("/api/competition/:competition_id/finish", dummy)
-	e.GET("/api/competition/:competition_id/result", dummy)
+	e.POST("/api/competitions/add", competitionsAddHandler)
+	e.POST("/api/competition/:competition_id/finish", competitionFinishHandler)
+	e.POST("/api/competition/:competition_id/result", competitionPostResultHandler)
 	// テナント操作
 	e.GET("/api/tenant/billing", dummy)
 	// 参加者からの閲覧
@@ -118,5 +118,26 @@ func competitorsDisqualifiedHandler(c echo.Context) error {
 	// TODO: テナント管理者かチェック
 
 	// 管理DBのaccountを`disqualified_competitor`にする
+	return nil
+}
+
+func competitionsAddHandler(c echo.Context) error {
+	// TODO: テナント管理者かチェック
+
+	// テナントDBのcompetitionテーブルにinsert
+	return nil
+}
+
+func competitionFinishHandler(c echo.Context) error {
+	// TODO: テナント管理者かチェック
+
+	// テナントDBのcompetitionテーブルのfinished_atを現在時刻を入れるようにupdate
+	return nil
+}
+
+func competitionPostResultHandler(c echo.Context) error {
+	// TODO: テナント管理者かチェック
+
+	// アップロードされたCSVを読みながらテナントDBのcompetitor_scoreテーブルにループクエリでINSERT
 	return nil
 }
