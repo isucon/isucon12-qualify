@@ -49,8 +49,8 @@ func main() {
 
 	// for tenant endpoint
 	// 参加者操作
-	e.POST("/api/competitors/add", dummy)
-	e.POST("/api/competitor/:competitior_id/disqualified", dummy)
+	e.POST("/api/competitors/add", competitorsAddHandler)
+	e.POST("/api/competitor/:competitior_id/disqualified", competitorsDisqualifiedHandler)
 	// 大会操作
 	e.POST("/api/competitions/add", dummy)
 	e.POST("/api/competition/:competition_id/finish", dummy)
@@ -102,5 +102,21 @@ func tenantsBillingHandler(c echo.Context) error {
 	//     scoreに登録されていないaccountでアクセスした人 * 10
 	//   を合計したものを
 	// テナントの課金とする
+	return nil
+}
+
+func competitorsAddHandler(c echo.Context) error {
+	// TODO: テナント管理者かチェック
+
+	// 管理DBのaccountにinsert
+	// テナントDBのcompetitorにinsert
+
+	return nil
+}
+
+func competitorsDisqualifiedHandler(c echo.Context) error {
+	// TODO: テナント管理者かチェック
+
+	// 管理DBのaccountを`disqualified_competitor`にする
 	return nil
 }
