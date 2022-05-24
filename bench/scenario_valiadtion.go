@@ -17,9 +17,9 @@ func (s *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Bench
 	defer ContestantLogger.Printf("整合性チェックを終了します")
 
 	ag, _ := s.Option.NewAgent(false)
-	_ = ag
 
 	// TODO: 検証シナリオがココに書かれる
+	DummyAction(ctx, ag)
 
 	return nil
 }

@@ -16,14 +16,19 @@ var globalPool = sync.Pool{
 	},
 }
 
-func GetInitializeAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+func DummyAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	// 面倒なのでとりあえずinitしておこう
+	return PostInitializeAction(ctx, ag)
+}
+
+func PostInitializeAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
 	// リクエストを生成
-	b, reset, err := newRequestBody(struct{}{})
+	body, reset, err := newRequestBody(struct{}{})
 	if err != nil {
 		return nil, err
 	}
 	defer reset()
-	req, err := ag.POST("/initialize", b)
+	req, err := ag.POST("/initialize", body)
 	if err != nil {
 		return nil, err
 	}

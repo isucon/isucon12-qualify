@@ -35,7 +35,7 @@ type Scenario struct {
 
 	Option Option
 
-	// TODO: シナリオを回す全データをしまう定義が列挙される
+	// TODO: シナリオを回すのに必要な全データをしまう定義が列挙される
 
 	lastPlaylistCreatedAt   time.Time
 	rateGetPopularPlaylists int32
@@ -67,7 +67,7 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 	Debug = true // prepareは常にデバッグログを出す
 
 	// POST /initialize へ初期化リクエスト実行
-	res, err := GetInitializeAction(ctx, ag)
+	res, err := PostInitializeAction(ctx, ag)
 	if v := ValidateResponse("初期化", step, res, err, WithStatusCode(200)); !v.IsEmpty() {
 		return fmt.Errorf("初期化リクエストに失敗しました %v", v)
 	}
@@ -81,7 +81,8 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 	return nil
 }
 
-// isucandar.PrepeareScenario を満たすメソッド
+// ベンチ本編
+// isucandar.LoadScenario を満たすメソッド
 // isucandar.Benchmark の Load ステップで実行される
 func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) error {
 	if s.Option.PrepareOnly {
