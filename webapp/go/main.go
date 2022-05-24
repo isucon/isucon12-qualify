@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -168,7 +169,75 @@ func tenantsAddHandler(c echo.Context) error {
 	return nil
 }
 
+type competitor struct {
+	ID         int64
+	Identifier string
+	Name       string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+type competitorScore struct {
+	CompetitionID        int64
+	CompetitorIdentifier string
+	Score                int64
+}
+
+func listScoresAll(ctx context.Context, tenantID string) ([]competitorScore, error) {
+	tenantDB, err := connectTenantDB(tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("error connectTenantDB: %w", err)
+	}
+
+	scores := []competitorScore{}
+	rows, err := tenantDB.QueryxContext(
+		ctx,
+		"SELECT competition_id, competitor_id, score FROM competitor_score",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error SELECT competitor_score: %w", err)
+	}
+	for rows.Next() {
+		var competitionID, competitorID, score int64
+		if err := rows.Scan(&competitionID, &competitorID, &score); err != nil {
+			return nil, fmt.Errorf("error rows.Scan: %w", err)
+		}
+		var c competitor
+		if err := tenantDB.GetContext(ctx, &c, "SELECT * FROM competitor WHERE id = ?", competitorID); err != nil {
+			return nil, fmt.Errorf("erorr SELECT competitor: %w", err)
+		}
+		scores = append(scores, competitorScore{
+			CompetitionID:        competitionID,
+			CompetitorIdentifier: c.Identifier,
+			Score:                score,
+		})
+	}
+
+	return scores, nil
+}
+
+type successResult struct {
+	Success bool `json:"status"`
+	Data    any  `json:"data"`
+}
+
+type failureResult struct {
+	Success bool   `json:"status"`
+	Message string `json:"message"`
+}
+
+type tenantsBillingResult struct {
+	Tenants []tenantBilling
+}
+
+type tenantBilling struct {
+	TenantIdentifier string `json:"tenant_identifier"`
+	TenantName       string `json:"tenant_name"`
+	Billing          int64  `json:"billing"`
+}
+
 func tenantsBillingHandler(c echo.Context) error {
+	ctx := c.Request().Context()
 	// TODO: SaaS管理者かどうかをチェック
 
 	// テナントごとに
@@ -178,6 +247,83 @@ func tenantsBillingHandler(c echo.Context) error {
 	//     scoreに登録されていないaccountでアクセスした人 * 10
 	//   を合計したものを
 	// テナントの課金とする
+	conn, err := centerDB.Connx(ctx)
+	if err != nil {
+		return fmt.Errorf("error centerDB.Conxx: %w", err)
+	}
+	defer conn.Close()
+	_, err = conn.ExecContext(ctx, `
+CREATE TEMPORARY TABLE account_score (
+	competition_id BIGINT UNSIGNED NOT NULL,
+	account_identifier VARCAHR(191) NOT NULL,
+	score BIGINT UNSIGNED NOT NULL
+);
+	`)
+	if err != nil {
+		return fmt.Errorf("error CREATE TEMPORARY TABLE account_score: %w", err)
+	}
+	tenantIDs := []string{}
+	if err := conn.SelectContext(ctx, &tenantIDs, "SELECT id FROM tenant"); err != nil {
+		return fmt.Errorf("error Select tenant: %w", err)
+	}
+	for _, tenantID := range tenantIDs {
+		scores, err := listScoresAll(ctx, tenantID)
+		if err != nil {
+			return fmt.Errorf("error listScoresAll: %w", err)
+		}
+		for _, score := range scores {
+			_, err := conn.ExecContext(
+				ctx,
+				"INSERT INTO account_score (competition_id, account_identifier, score) VALUES (?, ?, ?)",
+				score.CompetitionID, score.CompetitorIdentifier, score.Score,
+			)
+			if err != nil {
+				return fmt.Errorf("error INSERT account_score: %w", err)
+			}
+		}
+
+	}
+	tenantBillings := make([]tenantBilling, 0, len(tenantIDs))
+	err = conn.SelectContext(ctx, &tenantBillings, `
+WITH
+q1 AS (
+  SELECT
+    tenant_id,
+    competition_id,
+    CASE account_access_log.id IS NULL WHEN 1 THEN 50 ELSE 100 END AS billing_scored,
+    0 billing_accessed
+  FROM account_score
+  INNER JOIN account ON account_score.account_identifier = account.identifier
+  LEFT OUTER JOIN account_access_log ON
+    account_score.competition_id = account_access_log.competition_id AND
+    account.account_account_id = account_access_log.account_id
+  UNION ALL
+  SELECT
+    tenant_id,
+    competition_id,
+    0 AS billing_scored,
+    10 AS billing_accessed
+  FROM account_access_log
+  INNER JOIN account ON account_access_log.account_id = account.id
+),
+q2 AS (
+  SELECT tenant_id, competition_id,
+  CASE SUM(billing_scored) > SUM(billing_accessed) WHEN 1 THEN SUM(billing_scored) ELSE SUM(billing_accessed) END AS billing
+  GROUP BY tenant_id, competition_id
+)
+SELECT
+  tenant.identifier AS tenant_identifier, tenant.name AS tenant_name, SUM(q1.billing)
+FROM q2 JOIN tenant ON q1.tennant_id = tenant.id GROUP BY q1.tenant_id
+	`)
+	if err != nil {
+		return fmt.Errorf("error retrieve tenantBillings: %w", err)
+	}
+	if err := c.JSON(http.StatusOK, successResult{
+		Success: true,
+		Data:    tenantBillings,
+	}); err != nil {
+		return fmt.Errorf("error c.JSON: %w", err)
+	}
 	return nil
 }
 
