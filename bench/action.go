@@ -16,11 +16,6 @@ var globalPool = sync.Pool{
 	},
 }
 
-func DummyAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
-	// 面倒なのでとりあえずinitしておこう
-	return PostInitializeAction(ctx, ag)
-}
-
 func PostInitializeAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
 	// リクエストを生成
 	body, reset, err := newRequestBody(struct{}{})
@@ -48,7 +43,39 @@ func GetRootAction(ctx context.Context, ag *agent.Agent) (*http.Response, error)
 	return ag.Do(ctx, req)
 }
 
-// TODO: 各エンドポイントにリクエストを飛ばすものを書く、書いたものはscenarioで呼ぶ
+func PostTenantsAddAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	return GetRootAction(ctx, ag)
+}
+func GetTenantsBillingAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	return GetRootAction(ctx, ag)
+}
+func PostCompetititorsAddAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	return GetRootAction(ctx, ag)
+}
+func PostCompetitorDisqualifiedAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	return GetRootAction(ctx, ag)
+}
+func PostCompetitionsAddAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	return GetRootAction(ctx, ag)
+}
+func PostCompetitionFinishAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	return GetRootAction(ctx, ag)
+}
+func PostCompetitionResultAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	return GetRootAction(ctx, ag)
+}
+func GetTenantBillingAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	return GetRootAction(ctx, ag)
+}
+func GetCompetitorAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	return GetRootAction(ctx, ag)
+}
+func GetCompetitionRankingAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	return GetRootAction(ctx, ag)
+}
+func GetCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	return GetRootAction(ctx, ag)
+}
 
 func newRequestBody(obj any) (*bytes.Buffer, func(), error) {
 	b := globalPool.Get().(*bytes.Buffer)
