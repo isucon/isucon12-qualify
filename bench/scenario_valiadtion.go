@@ -19,8 +19,8 @@ func (s *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Bench
 	ag, _ := s.Option.NewAgent(false)
 
 	{
-		res, err := PostTenantsAddAction(ctx, ag)
-		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200))
+		res, err := PostTenantsAddAction(ctx, "name", ag)
+		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200, 500)) // TODO
 		if !v.IsEmpty() {
 			return v
 		}
@@ -33,35 +33,35 @@ func (s *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Bench
 		}
 	}
 	{
-		res, err := PostCompetititorsAddAction(ctx, ag)
+		res, err := PostCompetititorsAddAction(ctx, "name", ag)
 		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := PostCompetitorDisqualifiedAction(ctx, ag)
+		res, err := PostCompetitorDisqualifiedAction(ctx, "competitor_id", ag)
 		v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := PostCompetitionsAddAction(ctx, ag)
+		res, err := PostCompetitionsAddAction(ctx, "title", ag)
 		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := PostCompetitionFinishAction(ctx, ag)
+		res, err := PostCompetitionFinishAction(ctx, "competition_id", ag)
 		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := PostCompetitionResultAction(ctx, ag)
+		res, err := PostCompetitionResultAction(ctx, "competition_id", ag)
 		v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
@@ -75,22 +75,22 @@ func (s *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Bench
 		}
 	}
 	{
-		res, err := GetCompetitorAction(ctx, ag)
+		res, err := GetCompetitorAction(ctx, "competitor_id", ag)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := GetCompetitionRankingAction(ctx, ag)
-		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200))
+		res, err := GetCompetitionRankingAction(ctx, "competiton_id", ag)
+		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200, 404)) // TODO
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
 		res, err := GetCompetitionsAction(ctx, ag)
-		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200))
+		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200, 404)) // TODO
 		if !v.IsEmpty() {
 			return v
 		}
