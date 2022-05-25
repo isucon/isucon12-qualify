@@ -26,7 +26,25 @@ const (
 // シナリオで発生するスコアのタグ
 const (
 	ScoreGETRoot score.ScoreTag = "GET /"
-	// TODO: ここにエンドポイント毎のタグが列挙される
+
+	// for admin endpoint
+	ScorePOSTTenantsAdd    score.ScoreTag = "GET /api/tenants/add"
+	ScoreGETTenantsBilling score.ScoreTag = "GET /api/tenants/billing"
+
+	// for tenant endpoint
+	// 参加者操作
+	ScorePOSTCompetititorsAdd       score.ScoreTag = "POST /api/competitors/add"
+	ScorePOSTCompetitorDisqualified score.ScoreTag = "POST /api/competitor/:competitior_id/disqualified"
+	// 大会操作
+	ScorePOSTCompetitionsAdd   score.ScoreTag = "POST /api/competitions/add"
+	ScorePOSTCompetitionFinish score.ScoreTag = "POST /api/competition/:competition_id/finish"
+	ScorePOSTCompetitionResult score.ScoreTag = "POST /api/competition/:competition_id/result"
+	// テナント操作
+	ScoreGETTenantBilling score.ScoreTag = "GET /api/tenant/billing"
+	// 参加者からの閲覧
+	ScoreGETCompetitor         score.ScoreTag = "GET /api/competitor/:competitor_id"
+	ScoreGETCompetitionRanking score.ScoreTag = "GET /api/competition/:competition_id/ranking"
+	ScoreGETCometitions        score.ScoreTag = "GET /api/competitions"
 )
 
 // オプションと全データを持つシナリオ構造体
@@ -36,6 +54,14 @@ type Scenario struct {
 	Option Option
 
 	// TODO: シナリオを回すのに必要な全データをしまう定義が列挙される
+	// 必要になりそうなメモ
+	// AdminUsers // SaaS管理者
+	// Tenants // = 主催者一覧
+	// +- Billing // 請求情報
+	// +- Competitions // 大会一覧
+	// | +- Comeptitors // 大会参加者一覧
+	// | +- Disqualifieds // 失格済み参加者一覧
+	// +- Organizer // 主催者(1 tenantに1人)
 
 	lastPlaylistCreatedAt   time.Time
 	rateGetPopularPlaylists int32
@@ -92,14 +118,16 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	defer ContestantLogger.Println("負荷テストを終了します")
 	wg := &sync.WaitGroup{}
 
-	// 通常シナリオ
-	normalCase, err := s.NormalWorker(step, 1)
+	// 主催者(テナントオーナー)シナリオ
+	ownerCase, err := s.OwnerScenarioWorker(step, 1)
 	if err != nil {
 		return err
 	}
+	// 一般参加者シナリオ
+	// SaaS管理者ユーザーシナリオ
 
 	workers := []*worker.Worker{
-		normalCase,
+		ownerCase,
 	}
 	for _, w := range workers {
 		wg.Add(1)
@@ -112,7 +140,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		s.loadAdjustor(ctx, step, normalCase)
+		s.loadAdjustor(ctx, step, ownerCase)
 	}()
 	wg.Wait()
 	return nil

@@ -1,34 +1,51 @@
 package bench
 
 import (
-	"fmt"
-	"io"
-	"os"
+	"sync"
 
-	"encoding/json"
+	"github.com/isucon/isucandar/agent"
 )
 
-type Model interface {
-	// TODO: dataset jsonをunmarshalする先の構造体をここに入れる
-}
+// TODO: ユーザーの挙動みたいなのがここに入る、たぶん
+type Tenant struct {
+	// `id` BIGINT UNSIGNED NOT NULL,
+	// `identifier` VARCHAR(191) NOT NULL,
+	// `name` VARCHAR(191) NOT NULL,
+	// `image` LONGBLOB NOT NULL,
 
-func LoadFromJSONFile[T Model](jsonFile string) ([]*T, error) {
-	// 引数に渡されたファイルを開く
-	file, err := os.Open(jsonFile)
+	mu    sync.RWMutex
+	Agent *agent.Agent
+}
+type Tenants []*Tenant
+
+func (t *Tenant) GetAgent(opt Option) (*agent.Agent, error) {
+	t.mu.RLock()
+	ag := t.Agent
+	t.mu.RUnlock()
+	if ag != nil {
+		return ag, nil
+	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	ag, err := opt.NewAgent(false)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
-
-	objects := make([]*T, 0, 10000) // 大きく確保しておく
-	// JSON 形式としてデコード
-	decoder := json.NewDecoder(file)
-	if err := decoder.Decode(&objects); err != nil {
-		if err != io.EOF {
-			return nil, fmt.Errorf("failed to decode json: %w", err)
-		}
-	}
-	return objects, nil
+	t.Agent = ag
+	return ag, nil
 }
 
-// TODO: ユーザーの挙動みたいなのがここに入る、たぶん
+type Competition struct {
+	// `id` INTEGER NOT NULL PRIMARY KEY,
+	// `title` TEXT NOT NULL,
+}
+type Competitions []*Competition
+
+type Competitor struct {
+	// `id` INTEGER PRIMARY KEY,
+	// `identifier` TEXT NOT NULL UNIQUE,
+	// `name` TEXT NOT NULL,
+}
+type Competitors []*Competitor

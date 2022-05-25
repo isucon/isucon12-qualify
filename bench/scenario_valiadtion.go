@@ -13,13 +13,19 @@ func (s *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Bench
 	report := timeReporter("validation")
 	defer report()
 
-	ContestantLogger.Println("整合性チェックを開始します")
-	defer ContestantLogger.Printf("整合性チェックを終了します")
+	ContestantLogger.Println("[ValidationScenario] 整合性チェックを開始します")
+	defer ContestantLogger.Printf("[ValidationScenario] 整合性チェックを終了します")
 
 	ag, _ := s.Option.NewAgent(false)
 
 	// TODO: 検証シナリオがココに書かれる
-	DummyAction(ctx, ag)
+	{
+		res, err := DummyAction(ctx, ag)
+		v := ValidateResponse("ダミー", step, res, err, WithStatusCode(200))
+		if !v.IsEmpty() {
+			return v
+		}
+	}
 
 	return nil
 }
