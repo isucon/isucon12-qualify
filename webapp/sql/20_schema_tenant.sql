@@ -20,5 +20,6 @@ CREATE TABLE `competitor_score` (
   `competition_id` INTEGER NOT NULL,
   `score` INTEGER NOT NULL,
   `created_at` DATETIME NOT NULL,
-  `updated_at` DATETIME NOT NULL
+  `updated_at` DATETIME NOT NULL,
+  UNIQUE (`competitor_id`, `competition_id`, `score`)
 );

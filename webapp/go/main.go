@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -199,9 +201,25 @@ type account struct {
 func retrieveAccountByIdentifier(ctx context.Context, identifier string) (*account, error) {
 	var a account
 	if err := centerDB.SelectContext(ctx, &a, "SELECT * FROM account WHERE identifier = ?", identifier); err != nil {
-		return nil, fmt.Errorf("error Select tenant: %w", err)
+		return nil, fmt.Errorf("error Select account: %w", err)
 	}
 	return &a, nil
+}
+
+type competitor struct {
+	ID         uint64
+	Identifier string
+	Name       string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+func retrieveCompetitorByIdentifier(ctx context.Context, tenantDB *sqlx.DB, identifier string) (*competitor, error) {
+	var c competitor
+	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM competitor WHERE identifier = ?", identifier); err != nil {
+		return nil, fmt.Errorf("error Select competitor: %w", err)
+	}
+	return &c, nil
 }
 
 var (
@@ -263,14 +281,6 @@ func tenantsAddHandler(c echo.Context) error {
 		return fmt.Errorf("error tx.Commit: %w", err)
 	}
 	return nil
-}
-
-type competitor struct {
-	ID         int64
-	Identifier string
-	Name       string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
 }
 
 type competitorScore struct {
@@ -434,11 +444,11 @@ func competitorsAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
-	tenant, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
+	t, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
 	if err != nil {
 		return fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
 	}
-	tenantDB, err := connectTenantDB(tenant.Identifier)
+	tenantDB, err := connectTenantDB(t.Identifier)
 	if err != nil {
 		return fmt.Errorf("error connectTenantDB: %w", err)
 	}
@@ -457,19 +467,24 @@ func competitorsAddHandler(c echo.Context) error {
 	}
 	ttx, err := tenantDB.BeginTxx(ctx, nil)
 	if err != nil {
+		tx.Rollback()
 		return fmt.Errorf("error tenantDB.BeginTxx: %w", err)
 	}
 	for _, name := range names {
 		id, err := dispenseID(ctx)
 		if err != nil {
+			tx.Rollback()
+			ttx.Rollback()
 			return fmt.Errorf("error dispenseID: %w", err)
 		}
 
 		if _, err := tx.ExecContext(
 			ctx,
 			"INSERT INTO account (id, identifier, name, tenant_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-			id, id, name, tenant.ID, "competitor", now, now,
+			id, id, name, t.ID, "competitor", now, now,
 		); err != nil {
+			tx.Rollback()
+			ttx.Rollback()
 			return fmt.Errorf("error Insert account at centerDB: %w", err)
 		}
 
@@ -478,10 +493,13 @@ func competitorsAddHandler(c echo.Context) error {
 			"INSERT INTO competitor (id, identifier, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
 			id, id, name, now, now,
 		); err != nil {
+			tx.Rollback()
+			ttx.Rollback()
 			return fmt.Errorf("error Insert account at tenantDB: %w", err)
 		}
 	}
 	if err := ttx.Commit(); err != nil {
+		tx.Rollback()
 		return fmt.Errorf("error ttx.Commit: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -498,13 +516,17 @@ func competitorsDisqualifiedHandler(c echo.Context) error {
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
 
-	identifier := c.FormValue("identifier")
+	idStr := c.Param("competitor_id")
+	var id uint64
+	if id, err = strconv.ParseUint(idStr, 10, 64); err != nil {
+		return fmt.Errorf("error strconv.ParseUint: %w", err)
+	}
 
 	now := time.Now()
 	if _, err := centerDB.ExecContext(
 		ctx,
-		"UPDATE account SET role = ?, updated_at = ? WHERE identifier = ?",
-		"disqualified_competitor", identifier, now,
+		"UPDATE account SET role = ?, updated_at = ? WHERE id = ?",
+		"disqualified_competitor", now, id,
 	); err != nil {
 		return fmt.Errorf("error Update account: %w", err)
 	}
@@ -519,11 +541,11 @@ func competitionsAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
-	tenant, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
+	t, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
 	if err != nil {
 		return fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
 	}
-	tenantDB, err := connectTenantDB(tenant.Identifier)
+	tenantDB, err := connectTenantDB(t.Identifier)
 	if err != nil {
 		return fmt.Errorf("error connectTenantDB: %w", err)
 	}
@@ -554,26 +576,23 @@ func competitionFinishHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
-	tenant, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
+	t, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
 	if err != nil {
 		return fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
 	}
-	tenantDB, err := connectTenantDB(tenant.Identifier)
+	tenantDB, err := connectTenantDB(t.Identifier)
 	if err != nil {
 		return fmt.Errorf("error connectTenantDB: %w", err)
 	}
 	defer tenantDB.Close()
 
-	idStr := c.FormValue("id")
+	idStr := c.Param("competition_id")
 	var id uint64
 	if id, err = strconv.ParseUint(idStr, 10, 64); err != nil {
 		return fmt.Errorf("error strconv.ParseUint: %w", err)
 	}
 
 	now := time.Now()
-	if err != nil {
-		return fmt.Errorf("error dispenseID: %w", err)
-	}
 	if _, err := tenantDB.ExecContext(
 		ctx,
 		"UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?",
@@ -586,9 +605,95 @@ func competitionFinishHandler(c echo.Context) error {
 }
 
 func competitionResultHandler(c echo.Context) error {
-	// TODO: テナント管理者かチェック
+	ctx := c.Request().Context()
 
-	// アップロードされたCSVを読みながらテナントDBのcompetitor_scoreテーブルにループクエリでINSERT
+	v, err := parseViewerMustOrganizer(c)
+	if err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	}
+	t, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
+	if err != nil {
+		return fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
+	}
+	tenantDB, err := connectTenantDB(t.Identifier)
+	if err != nil {
+		return fmt.Errorf("error connectTenantDB: %w", err)
+	}
+	defer tenantDB.Close()
+
+	competitionIDStr := c.Param("competition_id")
+	var competitionID uint64
+	if competitionID, err = strconv.ParseUint(competitionIDStr, 10, 64); err != nil {
+		return fmt.Errorf("error strconv.ParseUint: %w", err)
+	}
+
+	fh, err := c.FormFile("scores")
+	if err != nil {
+		return fmt.Errorf("error c.FormFile: %w", err)
+	}
+	f, err := fh.Open()
+	if err != nil {
+		return fmt.Errorf("error fh.Open: %w", err)
+	}
+	defer f.Close()
+
+	now := time.Now()
+
+	r := csv.NewReader(f)
+	headers, err := r.Read()
+	if err != nil {
+		return fmt.Errorf("error r.Read at header: %w", err)
+	}
+	if !reflect.DeepEqual(headers, []string{"competitor_identifier", "score"}) {
+		return fmt.Errorf("not match header: %#v", headers)
+	}
+	ttx, err := tenantDB.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("error tenantDB.BeginTxx: %w", err)
+	}
+	for {
+		row, err := r.Read()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			ttx.Rollback()
+			return fmt.Errorf("error r.Read at rows: %w", err)
+		}
+		if len(row) != 2 {
+			ttx.Rollback()
+			return fmt.Errorf("row must have two columns: %#v", row)
+		}
+		competitorIdentifier, scoreStr := row[0], row[1]
+		c, err := retrieveCompetitorByIdentifier(ctx, tenantDB, competitorIdentifier)
+		if err != nil {
+			ttx.Rollback()
+			return fmt.Errorf("error retrieveCompetitorByIdentifier: %w", err)
+		}
+		var score uint64
+		if score, err = strconv.ParseUint(scoreStr, 10, 64); err != nil {
+			ttx.Rollback()
+			return fmt.Errorf("error strconv.ParseUint: %w", err)
+		}
+		id, err := dispenseID(ctx)
+		if err != nil {
+			ttx.Rollback()
+			return fmt.Errorf("error dispenseID: %w", err)
+		}
+		if _, err := ttx.ExecContext(
+			ctx,
+			"REPLACE INTO competitor_score (id, competitor_id, competition_id, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+			id, c.ID, competitionID, score, now, now,
+		); err != nil {
+			ttx.Rollback()
+			return fmt.Errorf("error Update competition: %w", err)
+		}
+	}
+
+	if err := ttx.Commit(); err != nil {
+		return fmt.Errorf("error txx.Commit: %w", err)
+	}
+
 	return nil
 }
 
