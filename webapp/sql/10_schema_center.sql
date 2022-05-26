@@ -19,8 +19,7 @@ CREATE TABLE `account_access_log` (
   `competition_id` BIGINT UNSIGNED NOT NULL,
   `created_at` DATETIME NOT NULL,
   `updated_at` DATETIME NOT NULL,
-  UNIQUE (`account_id`, `competition_id`),
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`account_id`, `competition_id`)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;
 
 CREATE TABLE `tenant` (
