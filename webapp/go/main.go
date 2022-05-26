@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -116,6 +117,63 @@ func main() {
 	e.Logger.Fatal(e.Start(serverPort))
 }
 
+type role int
+
+const (
+	roleAdmin role = iota + 1
+	roleOrganizer
+	roleCompetitor
+)
+
+type auth struct {
+	role              role
+	accountIdentifier string
+	tenantIdentifier  string
+}
+
+func parseAuth(c echo.Context) (*auth, error) {
+	// TODO: JWTをパースして権限などを確認する
+	return nil, nil
+}
+
+type tenant struct {
+	ID         uint64
+	Identifier string
+	Name       string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+func retrieveTenantByIdentifier(ctx context.Context, identifier string) (*tenant, error) {
+	var t tenant
+	if err := centerDB.SelectContext(ctx, &t, "SELECT * FROM tenant WHERE identifier = ?", identifier); err != nil {
+		return nil, fmt.Errorf("error Select tenant: %w", err)
+	}
+	return &t, nil
+}
+
+type account struct {
+	ID         uint64
+	Identifier string
+	Name       string
+	TenantID   uint64
+	Role       string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+func retrieveAccountByIdentifier(ctx context.Context, identifier string) (*account, error) {
+	var a account
+	if err := centerDB.SelectContext(ctx, &a, "SELECT * FROM account WHERE identifier = ?", identifier); err != nil {
+		return nil, fmt.Errorf("error Select tenant: %w", err)
+	}
+	return &a, nil
+}
+
+var (
+	errNotPermitted = errors.New("this role is not permitted")
+)
+
 func tenantsAddHandler(c echo.Context) error {
 	// TODO: SaaS管理者かどうかをチェック
 	name := c.FormValue("name")
@@ -188,6 +246,7 @@ func listScoresAll(ctx context.Context, tenantID string) ([]competitorScore, err
 	if err != nil {
 		return nil, fmt.Errorf("error connectTenantDB: %w", err)
 	}
+	defer tenantDB.Close()
 
 	scores := []competitorScore{}
 	rows, err := tenantDB.QueryxContext(
@@ -328,11 +387,68 @@ FROM q2 JOIN tenant ON q1.tennant_id = tenant.id GROUP BY q1.tenant_id
 }
 
 func competitorsAddHandler(c echo.Context) error {
-	// TODO: テナント管理者かチェック
+	ctx := c.Request().Context()
 
-	// 管理DBのaccountにinsert
-	// テナントDBのcompetitorにinsert
+	auth, err := parseAuth(c)
+	if err != nil {
+		return fmt.Errorf("error parseAuth: %w", err)
+	}
+	if auth.role != roleOrganizer {
+		return errNotPermitted
+	}
+	tenant, err := retrieveTenantByIdentifier(ctx, auth.tenantIdentifier)
+	if err != nil {
+		return fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
+	}
+	tenantDB, err := connectTenantDB(tenant.Identifier)
+	if err != nil {
+		return fmt.Errorf("error connectTenantDB: %w", err)
+	}
+	defer tenantDB.Close()
 
+	params, err := c.FormParams()
+	if err != nil {
+		return fmt.Errorf("error c.FormParams: %w", err)
+	}
+	names := params["name"]
+
+	now := time.Now()
+	tx, err := centerDB.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("error centerDB.BeginTxx: %w", err)
+	}
+	ttx, err := tenantDB.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("error tenantDB.BeginTxx: %w", err)
+	}
+	for _, name := range names {
+		id, err := dispenseID(ctx)
+		if err != nil {
+			return fmt.Errorf("error dispenseID: %w", err)
+		}
+
+		if _, err := tx.ExecContext(
+			ctx,
+			"INSERT INTO account (id, identifier, name, tenant_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			id, id, name, tenant.ID, "competitor", now, now,
+		); err != nil {
+			return fmt.Errorf("error Insert account at centerDB: %w", err)
+		}
+
+		if _, err := ttx.ExecContext(
+			ctx,
+			"INSERT INTO competitor (id, identifier, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+			id, id, name, now, now,
+		); err != nil {
+			return fmt.Errorf("error Insert account at tenantDB: %w", err)
+		}
+	}
+	if err := ttx.Commit(); err != nil {
+		return fmt.Errorf("error ttx.Commit: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("error tx.Commit: %w", err)
+	}
 	return nil
 }
 

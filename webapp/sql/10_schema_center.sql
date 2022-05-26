@@ -6,9 +6,8 @@ CREATE TABLE `account` (
   `id` BIGINT UNSIGNED NOT NULL,
   `identifier` VARCHAR(191) NOT NULL UNIQUE,
   `name` VARCHAR(191) NOT NULL,
-  `image` LONGBLOB NOT NULL,
   `tenant_id` BIGINT NULL,
-  `role` ENUM('saas_operator', 'tenant_admin', 'competitor', 'disqualified_competitor'),
+  `role` ENUM('admin', 'organizer', 'competitor', 'disqualified_competitor'),
   `created_at` DATETIME NOT NULL,
   `updated_at` DATETIME NOT NULL,
   PRIMARY KEY (`id`)
@@ -28,7 +27,6 @@ CREATE TABLE `tenant` (
   `id` BIGINT UNSIGNED NOT NULL,
   `identifier` VARCHAR(191) NOT NULL,
   `name` VARCHAR(191) NOT NULL,
-  `image` LONGBLOB NOT NULL,
   `created_at` DATETIME NOT NULL,
   `updated_at` DATETIME NOT NULL,
   PRIMARY KEY (`id`)
