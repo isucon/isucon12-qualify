@@ -780,23 +780,23 @@ func competitorHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error retrieveCompetitorByIdentifier: %w", err)
 	}
-	css := []competitorScore{}
+	css := []competitorScoreRow{}
 	if err := tenantDB.SelectContext(
 		ctx,
 		&css,
-		"SELECT competition_id, score FROM competitor_score WHERE competitor_id = ? ORDER BY competition_id ASC",
+		"SELECT * FROM competitor_score WHERE competitor_id = ? ORDER BY competition_id ASC",
 		co.ID,
 	); err != nil {
 		return fmt.Errorf("error Select competitor_score: %w", err)
 	}
 	csds := make([]competitorScoreDetail, 0, len(css))
 	for _, cs := range css {
-		cmp, err := retrieveCompetition(ctx, tenantDB, cs.CompetitionID)
+		comp, err := retrieveCompetition(ctx, tenantDB, cs.CompetitionID)
 		if err != nil {
 			return fmt.Errorf("error retrieveCompetition: %w", err)
 		}
 		csds = append(csds, competitorScoreDetail{
-			CompetitionTitle: cmp.Title,
+			CompetitionTitle: comp.Title,
 			Score:            cs.Score,
 		})
 	}
