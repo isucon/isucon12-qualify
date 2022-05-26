@@ -58,6 +58,19 @@ func connectTenantDB(tenantID string) (*sqlx.DB, error) {
 	return sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rw", p))
 }
 
+func connectTenantDBByViewer(ctx context.Context, v *viewer) (*sqlx.DB, error) {
+	t, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
+	}
+	tenantDB, err := connectTenantDB(t.Identifier)
+	if err != nil {
+		return nil, fmt.Errorf("error connectTenantDB: %w", err)
+	}
+	return tenantDB, nil
+
+}
+
 func createTenantDB(tenantID string) error {
 	p := tenantDBPath(tenantID)
 
@@ -98,7 +111,7 @@ func main() {
 	// テナント操作
 	e.GET("/api/tenant/billing", tenantBillingHandler)
 	// 参加者からの閲覧
-	e.GET("/api/competitor/:competitor_id", competitorHandler)
+	e.GET("/api/competitor/:competitor_identifier", competitorHandler)
 	e.GET("/api/competition/:competition_id/ranking", competitionRankingHandler)
 	e.GET("/api/competitions", competitionsHandler)
 
@@ -161,19 +174,26 @@ func parseViewerMustOrganizer(c echo.Context) (*viewer, error) {
 	return v, nil
 }
 
-func parseViewerMustCompetitor(c echo.Context) (*viewer, error) {
+func parseViewerIgnoreDisqualified(c echo.Context) (*viewer, error) {
 	v, err := parseViewer(c)
 	if err != nil {
 		return nil, fmt.Errorf("error parseViewer:%w", err)
 	}
-	if v.role != roleCompetitor {
+	if v.role == roleCompetitor {
+		a, err := retrieveAccountByIdentifier(c.Request().Context(), v.accountIdentifier)
+		if err != nil {
+			return nil, fmt.Errorf("error retrieveAccountByIdentifier: %w", err)
+		}
+		if a.Role == "disqualified_competitor" {
+			return nil, errNotPermitted
+		}
 		return nil, errNotPermitted
 	}
 	return v, nil
 }
 
 type tenant struct {
-	ID         uint64
+	ID         int64
 	Identifier string
 	Name       string
 	CreatedAt  time.Time
@@ -189,10 +209,10 @@ func retrieveTenantByIdentifier(ctx context.Context, identifier string) (*tenant
 }
 
 type account struct {
-	ID         uint64
+	ID         int64
 	Identifier string
 	Name       string
-	TenantID   uint64
+	TenantID   int64
 	Role       string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
@@ -207,7 +227,7 @@ func retrieveAccountByIdentifier(ctx context.Context, identifier string) (*accou
 }
 
 type competitor struct {
-	ID         uint64
+	ID         int64
 	Identifier string
 	Name       string
 	CreatedAt  time.Time
@@ -218,6 +238,22 @@ func retrieveCompetitorByIdentifier(ctx context.Context, tenantDB *sqlx.DB, iden
 	var c competitor
 	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM competitor WHERE identifier = ?", identifier); err != nil {
 		return nil, fmt.Errorf("error Select competitor: %w", err)
+	}
+	return &c, nil
+}
+
+type competition struct {
+	ID         int64
+	Title      string
+	FinishedAt sql.NullTime
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+func retrieveCompetition(ctx context.Context, tenantDB *sqlx.DB, id int64) (*competition, error) {
+	var c competition
+	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM competition WHERE id = ?", id); err != nil {
+		return nil, fmt.Errorf("error Select competition: %w", err)
 	}
 	return &c, nil
 }
@@ -333,7 +369,7 @@ type failureResult struct {
 	Message string `json:"message"`
 }
 
-type tenantsBillingResult struct {
+type tenantsBillingHandlerResult struct {
 	Tenants []tenantBilling
 }
 
@@ -444,15 +480,16 @@ func competitorsAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
+	tenantDB, err := connectTenantDBByViewer(ctx, v)
+	if err != nil {
+		return fmt.Errorf("error connectTenantDBByViewer: %w", err)
+	}
+	defer tenantDB.Close()
+
 	t, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
 	if err != nil {
 		return fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
 	}
-	tenantDB, err := connectTenantDB(t.Identifier)
-	if err != nil {
-		return fmt.Errorf("error connectTenantDB: %w", err)
-	}
-	defer tenantDB.Close()
 
 	params, err := c.FormParams()
 	if err != nil {
@@ -517,7 +554,7 @@ func competitorsDisqualifiedHandler(c echo.Context) error {
 	}
 
 	idStr := c.Param("competitor_id")
-	var id uint64
+	var id int64
 	if id, err = strconv.ParseUint(idStr, 10, 64); err != nil {
 		return fmt.Errorf("error strconv.ParseUint: %w", err)
 	}
@@ -541,13 +578,9 @@ func competitionsAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
-	t, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
+	tenantDB, err := connectTenantDBByViewer(ctx, v)
 	if err != nil {
-		return fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
-	}
-	tenantDB, err := connectTenantDB(t.Identifier)
-	if err != nil {
-		return fmt.Errorf("error connectTenantDB: %w", err)
+		return fmt.Errorf("error connectTenantDBByViewer: %w", err)
 	}
 	defer tenantDB.Close()
 
@@ -576,18 +609,14 @@ func competitionFinishHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
-	t, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
+	tenantDB, err := connectTenantDBByViewer(ctx, v)
 	if err != nil {
-		return fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
-	}
-	tenantDB, err := connectTenantDB(t.Identifier)
-	if err != nil {
-		return fmt.Errorf("error connectTenantDB: %w", err)
+		return fmt.Errorf("error connectTenantDBByViewer: %w", err)
 	}
 	defer tenantDB.Close()
 
 	idStr := c.Param("competition_id")
-	var id uint64
+	var id int64
 	if id, err = strconv.ParseUint(idStr, 10, 64); err != nil {
 		return fmt.Errorf("error strconv.ParseUint: %w", err)
 	}
@@ -611,18 +640,14 @@ func competitionResultHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
-	t, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
+	tenantDB, err := connectTenantDBByViewer(ctx, v)
 	if err != nil {
-		return fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
-	}
-	tenantDB, err := connectTenantDB(t.Identifier)
-	if err != nil {
-		return fmt.Errorf("error connectTenantDB: %w", err)
+		return fmt.Errorf("error connectTenantDBByViewer: %w", err)
 	}
 	defer tenantDB.Close()
 
 	competitionIDStr := c.Param("competition_id")
-	var competitionID uint64
+	var competitionID int64
 	if competitionID, err = strconv.ParseUint(competitionIDStr, 10, 64); err != nil {
 		return fmt.Errorf("error strconv.ParseUint: %w", err)
 	}
@@ -670,7 +695,7 @@ func competitionResultHandler(c echo.Context) error {
 			ttx.Rollback()
 			return fmt.Errorf("error retrieveCompetitorByIdentifier: %w", err)
 		}
-		var score uint64
+		var score int64
 		if score, err = strconv.ParseUint(scoreStr, 10, 64); err != nil {
 			ttx.Rollback()
 			return fmt.Errorf("error strconv.ParseUint: %w", err)
@@ -708,13 +733,68 @@ func tenantBillingHandler(c echo.Context) error {
 	return nil
 }
 
-func competitorHandler(c echo.Context) error {
-	// TODO: テナント管理者 or テナント参加者 or SaaS管理者かチェック
-	// TODO: 失格者かチェック
+type competitorScoreDetail struct {
+	CompetitionTitle string
+	Score            int64
+}
 
-	// テナントDBからcompetitorを取ってくる
-	// テナントDBからcompetitor_idでcompetitor_scoreを取ってくる
-	//    ループクエリでcompetitionを取ってくる
+type competitorHandlerResult struct {
+	Name   string                  `json:"name"`
+	Scores []competitorScoreDetail `json:"scores"`
+}
+
+func competitorHandler(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	v, err := parseViewerIgnoreDisqualified(c)
+	if err != nil {
+		return fmt.Errorf("error parseViewerIgnoreDisqualified: %w", err)
+	}
+
+	tenantDB, err := connectTenantDBByViewer(ctx, v)
+	if err != nil {
+		return fmt.Errorf("error connectTenantDB: %w", err)
+	}
+	defer tenantDB.Close()
+
+	ci := c.Param("competitor_identifier")
+
+	co, err := retrieveCompetitorByIdentifier(ctx, tenantDB, ci)
+	if err != nil {
+		return fmt.Errorf("error retrieveCompetitorByIdentifier: %w", err)
+	}
+	css := []competitorScore{}
+	if err := tenantDB.SelectContext(
+		ctx,
+		&css,
+		"SELECT competition_id, score FROM competitor_score WHERE competitor_id = ? ORDER BY competition_id ASC",
+		co.ID,
+	); err != nil {
+		return fmt.Errorf("error Select competitor_score: %w", err)
+	}
+	csds := make([]competitorScoreDetail, 0, len(css))
+	for _, cs := range css {
+		cmp, err := retrieveCompetition(ctx, tenantDB, cs.CompetitionID)
+		if err != nil {
+			return fmt.Errorf("error retrieveCompetition: %w", err)
+		}
+		csds = append(csds, competitorScoreDetail{
+			CompetitionTitle: cmp.Title,
+			Score:            cs.Score,
+		})
+	}
+
+	ret := successResult{
+		Success: true,
+		Data: competitorHandlerResult{
+			Name:   co.Name,
+			Scores: []competitorScoreDetail{},
+		},
+	}
+	if err := c.JSON(http.StatusOK, ret); err != nil {
+		return fmt.Errorf("error c.JSON: %w", err)
+	}
+
 	return nil
 }
 
