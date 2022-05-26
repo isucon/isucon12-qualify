@@ -125,15 +125,48 @@ const (
 	roleCompetitor
 )
 
-type auth struct {
+type viewer struct {
 	role              role
 	accountIdentifier string
 	tenantIdentifier  string
 }
 
-func parseAuth(c echo.Context) (*auth, error) {
+func parseViewer(c echo.Context) (*viewer, error) {
 	// TODO: JWTをパースして権限などを確認する
 	return nil, nil
+}
+
+func parseViewerMustAdmin(c echo.Context) (*viewer, error) {
+	v, err := parseViewer(c)
+	if err != nil {
+		return nil, fmt.Errorf("error parseViewer:%w", err)
+	}
+	if v.role != roleAdmin {
+		return nil, errNotPermitted
+	}
+	return v, nil
+}
+
+func parseViewerMustOrganizer(c echo.Context) (*viewer, error) {
+	v, err := parseViewer(c)
+	if err != nil {
+		return nil, fmt.Errorf("error parseViewer:%w", err)
+	}
+	if v.role != roleOrganizer {
+		return nil, errNotPermitted
+	}
+	return v, nil
+}
+
+func parseViewerMustCompetitor(c echo.Context) (*viewer, error) {
+	v, err := parseViewer(c)
+	if err != nil {
+		return nil, fmt.Errorf("error parseViewer:%w", err)
+	}
+	if v.role != roleCompetitor {
+		return nil, errNotPermitted
+	}
+	return v, nil
 }
 
 type tenant struct {
@@ -175,7 +208,11 @@ var (
 )
 
 func tenantsAddHandler(c echo.Context) error {
-	// TODO: SaaS管理者かどうかをチェック
+	_, err := parseViewerMustAdmin(c)
+	if err != nil {
+		return fmt.Errorf("error parseViewerMustAdmin: %w", err)
+	}
+
 	name := c.FormValue("name")
 	icon, err := c.FormFile("icon")
 	if err != nil {
@@ -297,7 +334,10 @@ type tenantBilling struct {
 
 func tenantsBillingHandler(c echo.Context) error {
 	ctx := c.Request().Context()
-	// TODO: SaaS管理者かどうかをチェック
+	_, err := parseViewerMustAdmin(c)
+	if err != nil {
+		return fmt.Errorf("error parseViewerMustAdmin: %w", err)
+	}
 
 	// テナントごとに
 	//   大会ごとに
@@ -389,14 +429,11 @@ FROM q2 JOIN tenant ON q1.tennant_id = tenant.id GROUP BY q1.tenant_id
 func competitorsAddHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	auth, err := parseAuth(c)
+	v, err := parseViewerMustOrganizer(c)
 	if err != nil {
-		return fmt.Errorf("error parseAuth: %w", err)
+		return fmt.Errorf("error parseViewer: %w", err)
 	}
-	if auth.role != roleOrganizer {
-		return errNotPermitted
-	}
-	tenant, err := retrieveTenantByIdentifier(ctx, auth.tenantIdentifier)
+	tenant, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
 	if err != nil {
 		return fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
 	}
@@ -453,9 +490,24 @@ func competitorsAddHandler(c echo.Context) error {
 }
 
 func competitorsDisqualifiedHandler(c echo.Context) error {
-	// TODO: テナント管理者かチェック
+	ctx := c.Request().Context()
 
-	// 管理DBのaccountを`disqualified_competitor`にする
+	_, err := parseViewerMustOrganizer(c)
+	if err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	}
+
+	identifier := c.FormValue("identifier")
+
+	now := time.Now()
+	if _, err := centerDB.ExecContext(
+		ctx,
+		"UPDATE account SET role = ?, updated_at = ? WHERE identifier = ?",
+		"disqualified_competitor", identifier, now,
+	); err != nil {
+		return fmt.Errorf("error Update account: %w", err)
+	}
+
 	return nil
 }
 
