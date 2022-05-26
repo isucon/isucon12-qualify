@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -512,9 +513,37 @@ func competitorsDisqualifiedHandler(c echo.Context) error {
 }
 
 func competitionsAddHandler(c echo.Context) error {
-	// TODO: テナント管理者かチェック
+	ctx := c.Request().Context()
 
-	// テナントDBのcompetitionテーブルにinsert
+	v, err := parseViewerMustOrganizer(c)
+	if err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	}
+	tenant, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
+	if err != nil {
+		return fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
+	}
+	tenantDB, err := connectTenantDB(tenant.Identifier)
+	if err != nil {
+		return fmt.Errorf("error connectTenantDB: %w", err)
+	}
+	defer tenantDB.Close()
+
+	title := c.FormValue("title")
+
+	now := time.Now()
+	id, err := dispenseID(ctx)
+	if err != nil {
+		return fmt.Errorf("error dispenseID: %w", err)
+	}
+	if _, err := tenantDB.ExecContext(
+		ctx,
+		"INSERT INTO competition (id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+		id, title, sql.NullTime{}, now, now,
+	); err != nil {
+		return fmt.Errorf("error Insert competition: %w", err)
+	}
+
 	return nil
 }
 
