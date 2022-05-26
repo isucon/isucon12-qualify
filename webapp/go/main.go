@@ -548,9 +548,40 @@ func competitionsAddHandler(c echo.Context) error {
 }
 
 func competitionFinishHandler(c echo.Context) error {
-	// TODO: テナント管理者かチェック
+	ctx := c.Request().Context()
 
-	// テナントDBのcompetitionテーブルのfinished_atを現在時刻を入れるようにupdate
+	v, err := parseViewerMustOrganizer(c)
+	if err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	}
+	tenant, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
+	if err != nil {
+		return fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
+	}
+	tenantDB, err := connectTenantDB(tenant.Identifier)
+	if err != nil {
+		return fmt.Errorf("error connectTenantDB: %w", err)
+	}
+	defer tenantDB.Close()
+
+	idStr := c.FormValue("id")
+	var id uint64
+	if id, err = strconv.ParseUint(idStr, 10, 64); err != nil {
+		return fmt.Errorf("error strconv.ParseUint: %w", err)
+	}
+
+	now := time.Now()
+	if err != nil {
+		return fmt.Errorf("error dispenseID: %w", err)
+	}
+	if _, err := tenantDB.ExecContext(
+		ctx,
+		"UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?",
+		now, now, id,
+	); err != nil {
+		return fmt.Errorf("error Update competition: %w", err)
+	}
+
 	return nil
 }
 
