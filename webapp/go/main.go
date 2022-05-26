@@ -734,8 +734,8 @@ func tenantBillingHandler(c echo.Context) error {
 }
 
 type competitorScoreDetail struct {
-	CompetitionTitle string
-	Score            int64
+	CompetitionTitle string `json:"competition_title"`
+	Score            int64  `json:"score"`
 }
 
 type competitorHandlerResult struct {
@@ -808,11 +808,57 @@ func competitionRankingHandler(c echo.Context) error {
 	return nil
 }
 
-func competitionsHandler(c echo.Context) error {
-	// TODO: テナント管理者 or テナント参加者 or SaaS管理者かチェック
-	// TODO: 失格者かチェック
+type competitionDetail struct {
+	ID         int64
+	Title      string
+	IsFinished bool
+}
 
-	// テナントDBからcompetition一覧を取ってくる
+type competitionsHandlerResult struct {
+	Competitions []competitionDetail
+}
+
+func competitionsHandler(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	v, err := parseViewerIgnoreDisqualified(c)
+	if err != nil {
+		return fmt.Errorf("error parseViewerIgnoreDisqualified: %w", err)
+	}
+
+	tenantDB, err := connectTenantDBByViewer(ctx, v)
+	if err != nil {
+		return fmt.Errorf("error connectTenantDB: %w", err)
+	}
+	defer tenantDB.Close()
+
+	cs := []competition{}
+	if err := tenantDB.SelectContext(
+		ctx,
+		&cs,
+		"SELECT * FROM competition ORDER BY id ASC",
+	); err != nil {
+		return fmt.Errorf("error Select competitor_score: %w", err)
+	}
+	cds := make([]competitionDetail, 0, len(cs))
+	for _, comp := range cs {
+		cds = append(cds, competitionDetail{
+			ID:         comp.ID,
+			Title:      comp.Title,
+			IsFinished: comp.FinishedAt.Valid,
+		})
+	}
+
+	ret := successResult{
+		Success: true,
+		Data: competitionsHandlerResult{
+			Competitions: cds,
+		},
+	}
+	if err := c.JSON(http.StatusOK, ret); err != nil {
+		return fmt.Errorf("error c.JSON: %w", err)
+	}
+
 	return nil
 }
 
