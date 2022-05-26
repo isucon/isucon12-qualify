@@ -226,6 +226,22 @@ func retrieveAccountByIdentifier(ctx context.Context, identifier string) (*accou
 	return &a, nil
 }
 
+func retrieveAccount(ctx context.Context, id int64) (*accountRow, error) {
+	var a accountRow
+	if err := centerDB.SelectContext(ctx, &a, "SELECT * FROM account WHERE id = ?", id); err != nil {
+		return nil, fmt.Errorf("error Select account: %w", err)
+	}
+	return &a, nil
+}
+
+type accountAccessLogRow struct {
+	ID            int64
+	AccountID     int64
+	CompetitionID int64
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
 type competitorRow struct {
 	ID         int64
 	Identifier string
@@ -374,6 +390,70 @@ func listScoresAll(ctx context.Context, tenantID string) ([]competitorScore, err
 	}
 
 	return scores, nil
+}
+
+type tenantBillingReport struct {
+	CompetitionID    int64
+	CompetitionTitle string
+	CompetitorCount  int64
+	BillingYen       int64
+}
+
+func billingReportByCompetition(ctx context.Context, tenantDB *sqlx.DB, competitonID int64) (*tenantBillingReport, error) {
+	comp, err := retrieveCompetition(ctx, tenantDB, competitonID)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieveCompetition: %w", err)
+	}
+
+	aals := []accountAccessLogRow{}
+	if err := centerDB.SelectContext(
+		ctx,
+		aals,
+		"SELECT * FROM account_access_log WHERE competition_id = ?",
+		comp.ID,
+	); err != nil {
+		return nil, fmt.Errorf("error Select account_access_log: %w", err)
+	}
+	billingMap := map[string]int64{}
+	for _, aal := range aals {
+		a, err := retrieveAccount(ctx, aal.AccountID)
+		if err != nil {
+			return nil, fmt.Errorf("error retrieveAccount: %w", err)
+		}
+		billingMap[a.Identifier] = 10
+	}
+
+	css := []competitorScoreRow{}
+	if err := tenantDB.SelectContext(
+		ctx,
+		&css,
+		"SELECT * FROM competitor_score WHERE competition_id = ?",
+		comp.ID,
+	); err != nil {
+		return nil, fmt.Errorf("error Select count competitor_score: %w", err)
+	}
+	for _, cs := range css {
+		competitor, err := retrieveCompetitor(ctx, tenantDB, cs.CompetitorID)
+		if err != nil {
+			return nil, fmt.Errorf("error retrieveCompetitor: %w", err)
+		}
+		if _, ok := billingMap[competitor.Identifier]; ok {
+			billingMap[competitor.Identifier] = 100
+		} else {
+			billingMap[competitor.Identifier] = 50
+		}
+	}
+
+	var billingYen int64
+	for _, v := range billingMap {
+		billingYen += v
+	}
+	return &tenantBillingReport{
+		CompetitionID:    comp.ID,
+		CompetitionTitle: comp.Title,
+		CompetitorCount:  int64(len(css)),
+		BillingYen:       billingYen,
+	}, nil
 }
 
 type successResult struct {
@@ -572,7 +652,7 @@ func competitorsDisqualifiedHandler(c echo.Context) error {
 
 	idStr := c.Param("competitor_id")
 	var id int64
-	if id, err = strconv.ParseUint(idStr, 10, 64); err != nil {
+	if id, err = strconv.ParseInt(idStr, 10, 64); err != nil {
 		return fmt.Errorf("error strconv.ParseUint: %w", err)
 	}
 
@@ -739,14 +819,50 @@ func competitionResultHandler(c echo.Context) error {
 	return nil
 }
 
-func tenantBillingHandler(c echo.Context) error {
-	// TODO: テナント管理者かチェック
+type tenantBillingHandlerResult struct {
+	Reports []tenantBillingReport
+}
 
-	// 大会ごとに
-	//   scoreに登録されているaccountでアクセスした人 * 100
-	//   scoreに登録されているaccountでアクセスしていない人 * 50
-	//   scoreに登録されていないaccountでアクセスした人 * 10
-	// を合計したものを計算する
+func tenantBillingHandler(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	v, err := parseViewerMustOrganizer(c)
+	if err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	}
+	tenantDB, err := connectTenantDBByViewer(ctx, v)
+	if err != nil {
+		return fmt.Errorf("error connectTenantDBByViewer: %w", err)
+	}
+	defer tenantDB.Close()
+
+	cs := []competitionRow{}
+	if err := tenantDB.SelectContext(
+		ctx,
+		&cs,
+		"SELECT * FROM competition ORDER BY id ASC",
+	); err != nil {
+		return fmt.Errorf("error Select competition: %w", err)
+	}
+	tbrs := make([]tenantBillingReport, 0, len(cs))
+	for _, comp := range cs {
+		report, err := billingReportByCompetition(ctx, tenantDB, comp.ID)
+		if err != nil {
+			return fmt.Errorf("error billingReportByCompetition: %w", err)
+		}
+		tbrs = append(tbrs, *report)
+	}
+
+	ret := successResult{
+		Success: true,
+		Data: tenantBillingHandlerResult{
+			Reports: tbrs,
+		},
+	}
+	if err := c.JSON(http.StatusOK, ret); err != nil {
+		return fmt.Errorf("error c.JSON: %w", err)
+	}
+
 	return nil
 }
 
