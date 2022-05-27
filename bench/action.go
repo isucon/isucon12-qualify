@@ -17,7 +17,6 @@ var globalPool = sync.Pool{
 }
 
 func PostInitializeAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
-	// リクエストを生成
 	body, reset, err := newRequestBody(struct{}{})
 	if err != nil {
 		return nil, err
@@ -28,23 +27,19 @@ func PostInitializeAction(ctx context.Context, ag *agent.Agent) (*http.Response,
 		return nil, err
 	}
 
-	// リクエストを実行
 	return ag.Do(ctx, req)
 }
 
 func GetRootAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
-	// リクエストを生成
 	req, err := ag.GET("/")
 	if err != nil {
 		return nil, err
 	}
 
-	// リクエストを実行
 	return ag.Do(ctx, req)
 }
 
 func PostTenantsAddAction(ctx context.Context, name string, ag *agent.Agent) (*http.Response, error) {
-	// リクエストを生成
 	body, reset, err := newRequestBody(struct {
 		Name string `json:"name"`
 	}{
@@ -59,23 +54,19 @@ func PostTenantsAddAction(ctx context.Context, name string, ag *agent.Agent) (*h
 		return nil, err
 	}
 
-	// リクエストを実行
 	return ag.Do(ctx, req)
 }
 
 func GetTenantsBillingAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
-	// リクエストを生成
 	req, err := ag.GET("/api/tenants/billing")
 	if err != nil {
 		return nil, err
 	}
 
-	// リクエストを実行
 	return ag.Do(ctx, req)
 }
 
 func PostCompetititorsAddAction(ctx context.Context, name string, ag *agent.Agent) (*http.Response, error) {
-	// リクエストを生成
 	body, reset, err := newRequestBody(struct {
 		Name string `json:"name"`
 	}{
@@ -90,12 +81,10 @@ func PostCompetititorsAddAction(ctx context.Context, name string, ag *agent.Agen
 		return nil, err
 	}
 
-	// リクエストを実行
 	return ag.Do(ctx, req)
 }
 
 func PostCompetitorDisqualifiedAction(ctx context.Context, competitor string, ag *agent.Agent) (*http.Response, error) {
-	// リクエストを生成
 	body, reset, err := newRequestBody(struct{}{})
 	if err != nil {
 		return nil, err
@@ -106,12 +95,10 @@ func PostCompetitorDisqualifiedAction(ctx context.Context, competitor string, ag
 		return nil, err
 	}
 
-	// リクエストを実行
 	return ag.Do(ctx, req)
 }
 
 func PostCompetitionsAddAction(ctx context.Context, title string, ag *agent.Agent) (*http.Response, error) {
-	// リクエストを生成
 	body, reset, err := newRequestBody(struct {
 		Title string `json:"title"`
 	}{
@@ -126,12 +113,10 @@ func PostCompetitionsAddAction(ctx context.Context, title string, ag *agent.Agen
 		return nil, err
 	}
 
-	// リクエストを実行
 	return ag.Do(ctx, req)
 }
 
 func PostCompetitionFinishAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
-	// リクエストを生成
 	body, reset, err := newRequestBody(struct{}{})
 	if err != nil {
 		return nil, err
@@ -142,12 +127,10 @@ func PostCompetitionFinishAction(ctx context.Context, competition string, ag *ag
 		return nil, err
 	}
 
-	// リクエストを実行
 	return ag.Do(ctx, req)
 }
 
 func PostCompetitionResultAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
-	// リクエストを生成
 	// multipart/form-dataをあとでいれる
 	body, reset, err := newRequestBody(struct{}{})
 	if err != nil {
@@ -159,51 +142,42 @@ func PostCompetitionResultAction(ctx context.Context, competition string, ag *ag
 		return nil, err
 	}
 
-	// リクエストを実行
 	return ag.Do(ctx, req)
 }
 
 func GetTenantBillingAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
-	// リクエストを生成
 	req, err := ag.GET("/api/tenant/billing")
 	if err != nil {
 		return nil, err
 	}
 
-	// リクエストを実行
 	return ag.Do(ctx, req)
 }
 
 func GetCompetitorAction(ctx context.Context, competitor string, ag *agent.Agent) (*http.Response, error) {
-	// リクエストを生成
 	req, err := ag.GET("/api/competitor/" + competitor)
 	if err != nil {
 		return nil, err
 	}
 
-	// リクエストを実行
 	return ag.Do(ctx, req)
 }
 
 func GetCompetitionRankingAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
-	// リクエストを生成
 	req, err := ag.GET("/api/competiton/" + competition + "/ranking")
 	if err != nil {
 		return nil, err
 	}
 
-	// リクエストを実行
 	return ag.Do(ctx, req)
 }
 
 func GetCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
-	// リクエストを生成
 	req, err := ag.GET("/api/competitions/")
 	if err != nil {
 		return nil, err
 	}
 
-	// リクエストを実行
 	return ag.Do(ctx, req)
 }
 

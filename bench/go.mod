@@ -3,6 +3,7 @@ module github.com/isucon/isucon12-qualify/bench
 go 1.18
 
 require (
+	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/isucon/isucandar v0.0.0-20220322062028-6dd56dc57d72
 	github.com/oklog/ulid/v2 v2.0.2
 )
