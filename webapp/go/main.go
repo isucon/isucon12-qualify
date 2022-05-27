@@ -444,9 +444,9 @@ func tenantsBillingHandler(c echo.Context) error {
 
 	// テナントごとに
 	//   大会ごとに
-	//     scoreに登録されているaccountでアクセスした人 * 100
-	//     scoreに登録されているaccountでアクセスしていない人 * 50
-	//     scoreに登録されていないaccountでアクセスした人 * 10
+	//     scoreに登録されているplayerでアクセスした人 * 100
+	//     scoreに登録されているplayerでアクセスしていない人 * 50
+	//     scoreに登録されていないplayerでアクセスした人 * 10
 	//   を合計したものを
 	// テナントの課金とする
 	ts := []tenantRow{}
@@ -537,7 +537,7 @@ func playersAddHandler(c echo.Context) error {
 			id, id, name, false, now, now,
 		); err != nil {
 			ttx.Rollback()
-			return fmt.Errorf("error Insert account at tenantDB: %w", err)
+			return fmt.Errorf("error Insert player at tenantDB: %w", err)
 		}
 		p, err := retrievePlayer(ctx, ttx, id)
 		if err != nil {
