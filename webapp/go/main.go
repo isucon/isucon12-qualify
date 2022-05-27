@@ -124,6 +124,8 @@ func main() {
 	e.POST("/admin/api/tenants/add", tenantsAddHandler)
 	e.GET("/admin/api/tenants/billing", tenantsBillingHandler)
 
+	e.HTTPErrorHandler = errorResponseHandler
+
 	var err error
 	centerDB, err = connectCenterDB()
 	if err != nil {
@@ -137,6 +139,14 @@ func main() {
 	e.Logger.Infof("starting isuports server on : %s ...", port)
 	serverPort := fmt.Sprintf(":%s", port)
 	e.Logger.Fatal(e.Start(serverPort))
+}
+
+func errorResponseHandler(err error, c echo.Context) {
+	c.Logger().Errorf("error at %s: %s", c.Path(), err.Error())
+	c.JSON(http.StatusInternalServerError, failureResult{
+		Success: false,
+		Message: err.Error(),
+	})
 }
 
 type successResult struct {
