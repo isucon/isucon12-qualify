@@ -21,6 +21,9 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -165,8 +168,48 @@ type viewer struct {
 }
 
 func parseViewer(c echo.Context) (*viewer, error) {
-	// TODO: JWTをパースして権限などを確認する
-	return nil, nil
+	ah := c.Request().Header.Get("Authorization")
+	tokenStr := strings.TrimPrefix(ah, "Bearer ")
+	if ah == tokenStr {
+		return nil, fmt.Errorf("unexpected header scheme: %s", ah)
+	}
+
+	keysrc := getEnv("ISUCON_JWT_KEY", "")
+	key, err := jwk.ParseKey([]byte(keysrc))
+	if err != nil {
+		return nil, fmt.Errorf("error jwk.ParseKey: %w", err)
+	}
+
+	token, err := jwt.Parse([]byte(tokenStr), jwt.WithKey(jwa.RS256, key))
+	if err != nil {
+		return nil, fmt.Errorf("error parseViewer: %w", err)
+	}
+	var r role
+	tr, ok := token.Get("role")
+	if !ok {
+		return nil, fmt.Errorf("token is invalid, not have role field: %s", tokenStr)
+	}
+	switch tr {
+	case "admin":
+		r = roleAdmin
+	case "organizer":
+		r = roleOrganizer
+	case "player":
+		r = rolePlayer
+	default:
+		return nil, fmt.Errorf("token is invalid, unknown role: %s", tokenStr)
+	}
+	aud := token.Audience()
+	if len(aud) != 1 {
+		return nil, fmt.Errorf("token is invalid, aud field is few or too many: %s", tokenStr)
+	}
+
+	v := &viewer{
+		role:             r,
+		playerIdentifier: token.Subject(),
+		tenantIdentifier: aud[0],
+	}
+	return v, nil
 }
 
 func parseViewerMustAdmin(c echo.Context) (*viewer, error) {
