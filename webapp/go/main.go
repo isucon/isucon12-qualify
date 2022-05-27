@@ -367,6 +367,15 @@ type playerScoreRow struct {
 	UpdatedAt     time.Time
 }
 
+type tenantDetail struct {
+	Identifier string `json:"identifier"`
+	Name       string `json:"name"`
+}
+
+type tenantsAddHandlerResult struct {
+	Tenant tenantDetail `json:"tenant"`
+}
+
 func tenantsAddHandler(c echo.Context) error {
 	if _, err := parseViewerMustAdmin(c); err != nil {
 		return fmt.Errorf("error parseViewerMustAdmin: %w", err)
@@ -408,17 +417,23 @@ func tenantsAddHandler(c echo.Context) error {
 		return fmt.Errorf("error tx.Commit: %w", err)
 	}
 
-	if err := c.JSON(http.StatusOK, successResult{Success: true}); err != nil {
+	res := tenantsAddHandlerResult{
+		Tenant: tenantDetail{
+			Identifier: identifier,
+			Name:       name,
+		},
+	}
+	if err := c.JSON(http.StatusOK, successResult{Success: true, Data: res}); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 	return nil
 }
 
 type billingReport struct {
-	CompetitionID    int64
-	CompetitionTitle string
-	PlayerCount      int64
-	BillingYen       int64
+	CompetitionID    int64  `json:"competition_id"`
+	CompetitionTitle string `json:"competition_title"`
+	PlayerCount      int64  `json:"player_count"`
+	BillingYen       int64  `json:"billing_yen"`
 }
 
 func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competitonID int64) (*billingReport, error) {
@@ -478,14 +493,14 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competiton
 	}, nil
 }
 
-type tenantsBillingHandlerResult struct {
-	Tenants []tenantBilling
+type tenantWithBilling struct {
+	Identifier string `json:"identifier"`
+	Name       string `json:"name"`
+	BillingYen int64  `json:"billing"`
 }
 
-type tenantBilling struct {
-	TenantIdentifier string `json:"tenant_identifier"`
-	TenantName       string `json:"tenant_name"`
-	Billing          int64  `json:"billing"`
+type tenantsBillingHandlerResult struct {
+	Tenants []tenantWithBilling `json:"tenants"`
 }
 
 func tenantsBillingHandler(c echo.Context) error {
@@ -494,6 +509,7 @@ func tenantsBillingHandler(c echo.Context) error {
 		return fmt.Errorf("error parseViewerMustAdmin: %w", err)
 	}
 
+	before := c.QueryParam("before")
 	// テナントごとに
 	//   大会ごとに
 	//     scoreに登録されているplayerでアクセスした人 * 100
@@ -502,14 +518,17 @@ func tenantsBillingHandler(c echo.Context) error {
 	//   を合計したものを
 	// テナントの課金とする
 	ts := []tenantRow{}
-	if err := centerDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY id ASC"); err != nil {
+	if err := centerDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY identifier ASC"); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
-	tenantBillings := make([]tenantBilling, 0, len(ts))
+	tenantBillings := make([]tenantWithBilling, 0, len(ts))
 	for _, t := range ts {
-		tb := tenantBilling{
-			TenantIdentifier: t.Identifier,
-			TenantName:       t.Name,
+		if before != "" && before > t.Identifier {
+			continue
+		}
+		tb := tenantWithBilling{
+			Identifier: t.Identifier,
+			Name:       t.Name,
 		}
 		tenantDB, err := connectTenantDB(t.Identifier)
 		if err != nil {
@@ -529,9 +548,12 @@ func tenantsBillingHandler(c echo.Context) error {
 			if err != nil {
 				return fmt.Errorf("error billingReportByCompetition: %w", err)
 			}
-			tb.Billing += report.BillingYen
+			tb.BillingYen += report.BillingYen
 		}
 		tenantBillings = append(tenantBillings, tb)
+		if len(tenantBillings) >= 20 {
+			break
+		}
 	}
 	if err := c.JSON(http.StatusOK, successResult{
 		Success: true,
@@ -660,13 +682,13 @@ func playerDisqualifiedHandler(c echo.Context) error {
 }
 
 type competitionDetail struct {
-	ID         int64
-	Title      string
-	IsFinished bool
+	ID         int64  `json:"id"`
+	Title      string `json:"title"`
+	IsFinished bool   `json:"is_finished"`
 }
 
 type competitionsAddHandlerResult struct {
-	Competition competitionDetail
+	Competition competitionDetail `json:"competition"`
 }
 
 func competitionsAddHandler(c echo.Context) error {
@@ -764,6 +786,19 @@ func competitionResultHandler(c echo.Context) error {
 	if competitionID, err = strconv.ParseInt(competitionIDStr, 10, 64); err != nil {
 		return fmt.Errorf("error strconv.ParseUint: %w", err)
 	}
+	comp, err := retrieveCompetition(ctx, tenantDB, competitionID)
+	if err != nil {
+		return fmt.Errorf("error retrieveCompetition: %w", err)
+	}
+	if comp.FinishedAt.Valid {
+		res := failureResult{
+			Success: false,
+			Message: "competition is finished",
+		}
+		if err := c.JSON(http.StatusBadRequest, res); err != nil {
+			return fmt.Errorf("error c.JSON: %w", err)
+		}
+	}
 
 	fh, err := c.FormFile("scores")
 	if err != nil {
@@ -788,6 +823,13 @@ func competitionResultHandler(c echo.Context) error {
 	ttx, err := tenantDB.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("error tenantDB.BeginTxx: %w", err)
+	}
+	if _, err := ttx.ExecContext(
+		ctx,
+		"DELETE FROM player_score WHERE competition_id = ?",
+		competitionID,
+	); err != nil {
+		return fmt.Errorf("error Delete player_score: %w", err)
 	}
 	for {
 		row, err := r.Read()
@@ -839,7 +881,7 @@ func competitionResultHandler(c echo.Context) error {
 }
 
 type billingHandlerResult struct {
-	Reports []billingReport
+	Reports []billingReport `json:"reports"`
 }
 
 func billingHandler(c echo.Context) error {
@@ -890,7 +932,7 @@ type playerScoreDetail struct {
 }
 
 type playerHandlerResult struct {
-	Name   string              `json:"name"`
+	Player playerDetail        `json:"player"`
 	Scores []playerScoreDetail `json:"scores"`
 }
 
@@ -908,7 +950,7 @@ func playerHandler(c echo.Context) error {
 
 	ci := c.Param("player_identifier")
 
-	co, err := retrievePlayerByIdentifier(ctx, tenantDB, ci)
+	p, err := retrievePlayerByIdentifier(ctx, tenantDB, ci)
 	if err != nil {
 		return fmt.Errorf("error retrievePlayerByIdentifier: %w", err)
 	}
@@ -917,7 +959,7 @@ func playerHandler(c echo.Context) error {
 		ctx,
 		&css,
 		"SELECT * FROM player_score WHERE player_id = ? ORDER BY competition_id ASC",
-		co.ID,
+		p.ID,
 	); err != nil {
 		return fmt.Errorf("error Select player_score: %w", err)
 	}
@@ -936,7 +978,11 @@ func playerHandler(c echo.Context) error {
 	res := successResult{
 		Success: true,
 		Data: playerHandlerResult{
-			Name:   co.Name,
+			Player: playerDetail{
+				Identifier:     p.Identifier,
+				Name:           p.Name,
+				IsDisqualified: p.IsDisqualified,
+			},
 			Scores: csds,
 		},
 	}
@@ -1010,6 +1056,9 @@ func competitionRankingHandler(c echo.Context) error {
 			PlayerIdentifier: co.Identifier,
 			CompetitiorName:  co.Name,
 		})
+		if len(crs) >= 100 {
+			break
+		}
 	}
 
 	res := successResult{
