@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -58,12 +59,15 @@ func connectTenantDB(tenantID string) (*sqlx.DB, error) {
 	return sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rw", p))
 }
 
-func connectTenantDBByViewer(ctx context.Context, v *viewer) (*sqlx.DB, error) {
-	t, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
-	if err != nil {
-		return nil, fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
+func connectTenantDBByHost(c echo.Context) (*sqlx.DB, error) {
+	baseHost := getEnv("ISUCON_BASE_HOSTNAME", ".isuports.isucon.local")
+	host := c.Request().Host
+	if !strings.HasSuffix(host, baseHost) {
+		return nil, fmt.Errorf("host is not contains %s: %s", baseHost, host)
 	}
-	tenantDB, err := connectTenantDB(t.Identifier)
+	tenantIdentifier := strings.TrimSuffix(host, baseHost)
+
+	tenantDB, err := connectTenantDB(tenantIdentifier)
 	if err != nil {
 		return nil, fmt.Errorf("error connectTenantDB: %w", err)
 	}
@@ -95,27 +99,27 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// for admin endpoint
-	e.POST("/api/tenants/add", tenantsAddHandler)
-	e.GET("/api/tenants/billing", tenantsBillingHandler)
+	// for benchmarker
+	e.POST("/initialize", initializeHandler)
 
 	// for tenant endpoint
 	// 参加者操作
-	e.POST("/api/competitors/add", competitorsAddHandler)
-	e.POST("/api/competitor/:competitior_id/disqualified", competitorsDisqualifiedHandler)
+	e.POST("/organizer/api/players/add", playersAddHandler)
+	e.POST("/organizer/api/player/:competitior_id/disqualified", playerDisqualifiedHandler)
 	// 大会操作
-	e.POST("/api/competitions/add", competitionsAddHandler)
-	e.POST("/api/competition/:competition_id/finish", competitionFinishHandler)
-	e.POST("/api/competition/:competition_id/result", competitionResultHandler)
+	e.POST("/organizer/api/competitions/add", competitionsAddHandler)
+	e.POST("/organizer/api/competition/:competition_id/finish", competitionFinishHandler)
+	e.POST("/organizer/api/competition/:competition_id/result", competitionResultHandler)
 	// テナント操作
-	e.GET("/api/tenant/billing", tenantBillingHandler)
+	e.GET("/organizer/api/billing", billingHandler)
 	// 参加者からの閲覧
-	e.GET("/api/competitor/:competitor_identifier", competitorHandler)
-	e.GET("/api/competition/:competition_id/ranking", competitionRankingHandler)
-	e.GET("/api/competitions", competitionsHandler)
+	e.GET("/player/api/player/:player_identifier", playerHandler)
+	e.GET("/player/api/competition/:competition_id/ranking", competitionRankingHandler)
+	e.GET("/player/api/competitions", competitionsHandler)
 
-	// for benchmarker
-	e.POST("/initialize", initializeHandler)
+	// for admin endpoint
+	e.POST("/admin/api/tenants/add", tenantsAddHandler)
+	e.GET("/admin/api/tenants/billing", tenantsBillingHandler)
 
 	var err error
 	centerDB, err = connectCenterDB()
@@ -132,18 +136,32 @@ func main() {
 	e.Logger.Fatal(e.Start(serverPort))
 }
 
+type successResult struct {
+	Success bool `json:"status"`
+	Data    any  `json:"data,omitempty"`
+}
+
+type failureResult struct {
+	Success bool   `json:"status"`
+	Message string `json:"message"`
+}
+
 type role int
 
 const (
 	roleAdmin role = iota + 1
 	roleOrganizer
-	roleCompetitor
+	rolePlayer
+)
+
+var (
+	errNotPermitted = errors.New("this role is not permitted")
 )
 
 type viewer struct {
-	role              role
-	accountIdentifier string
-	tenantIdentifier  string
+	role             role
+	playerIdentifier string
+	tenantIdentifier string
 }
 
 func parseViewer(c echo.Context) (*viewer, error) {
@@ -180,25 +198,34 @@ func parseViewerIgnoreDisqualified(c echo.Context, competitionID int64) (*viewer
 	if err != nil {
 		return nil, fmt.Errorf("error parseViewer:%w", err)
 	}
-	if v.role == roleCompetitor {
-		a, err := retrieveAccountByIdentifier(c.Request().Context(), v.accountIdentifier)
+	if v.role == rolePlayer {
+		tenantDB, err := connectTenantDBByHost(c)
 		if err != nil {
-			return nil, fmt.Errorf("error retrieveAccountByIdentifier: %w", err)
+			return nil, fmt.Errorf("error connectTenantDBByHost: %w", err)
 		}
-		if a.Role == "disqualified_competitor" {
+		p, err := retrievePlayerByIdentifier(c.Request().Context(), tenantDB, v.playerIdentifier)
+		if err != nil {
+			return nil, fmt.Errorf("error retrievePlayerByIdentifier: %w", err)
+		}
+		if p.IsDisqualified {
 			return nil, errNotPermitted
 		}
+
 		now := time.Now()
 		id, err := dispenseID(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("error dispenseID: %w", err)
 		}
+		t, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
+		if err != nil {
+			return nil, fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
+		}
 		if _, err := centerDB.ExecContext(
 			ctx,
-			"INSERT INTO account_access_log (id, account_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE id = VALUES(id), updated_at = VALUES(updated_at)",
-			id, a.ID, competitionID, now, now,
+			"INSERT INTO access_log (id, identifier, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE updated_at = VALUES(updated_at)",
+			id, p.Identifier, t.ID, competitionID, now, now,
 		); err != nil {
-			return nil, fmt.Errorf("error Insert account_access_log: %w", err)
+			return nil, fmt.Errorf("error Insert access_log: %w", err)
 		}
 		return nil, errNotPermitted
 	}
@@ -221,60 +248,42 @@ func retrieveTenantByIdentifier(ctx context.Context, identifier string) (*tenant
 	return &t, nil
 }
 
-type accountRow struct {
-	ID         int64
-	Identifier string
-	Name       string
-	TenantID   int64
-	Role       string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+type dbOrTx interface {
+	GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+	SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 }
 
-func retrieveAccountByIdentifier(ctx context.Context, identifier string) (*accountRow, error) {
-	var a accountRow
-	if err := centerDB.SelectContext(ctx, &a, "SELECT * FROM account WHERE identifier = ?", identifier); err != nil {
-		return nil, fmt.Errorf("error Select account: %w", err)
-	}
-	return &a, nil
-}
-
-func retrieveAccount(ctx context.Context, id int64) (*accountRow, error) {
-	var a accountRow
-	if err := centerDB.SelectContext(ctx, &a, "SELECT * FROM account WHERE id = ?", id); err != nil {
-		return nil, fmt.Errorf("error Select account: %w", err)
-	}
-	return &a, nil
-}
-
-type accountAccessLogRow struct {
+type accessLogRow struct {
 	ID            int64
-	AccountID     int64
+	Identifier    string
+	TenantID      int64
 	CompetitionID int64
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
 
-type competitorRow struct {
-	ID         int64
-	Identifier string
-	Name       string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+type playerRow struct {
+	ID             int64
+	Identifier     string
+	Name           string
+	IsDisqualified bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
-func retrieveCompetitorByIdentifier(ctx context.Context, tenantDB *sqlx.DB, identifier string) (*competitorRow, error) {
-	var c competitorRow
-	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM competitor WHERE identifier = ?", identifier); err != nil {
-		return nil, fmt.Errorf("error Select competitor: %w", err)
+func retrievePlayerByIdentifier(ctx context.Context, tenantDB dbOrTx, identifier string) (*playerRow, error) {
+	var c playerRow
+	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM player WHERE identifier = ?", identifier); err != nil {
+		return nil, fmt.Errorf("error Select player: %w", err)
 	}
 	return &c, nil
 }
 
-func retrieveCompetitor(ctx context.Context, tenantDB *sqlx.DB, id int64) (*competitorRow, error) {
-	var c competitorRow
-	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM competitor WHERE id = ?", id); err != nil {
-		return nil, fmt.Errorf("error Select competitor: %w", err)
+func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id int64) (*playerRow, error) {
+	var c playerRow
+	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM player WHERE id = ?", id); err != nil {
+		return nil, fmt.Errorf("error Select player: %w", err)
 	}
 	return &c, nil
 }
@@ -288,7 +297,7 @@ type competitionRow struct {
 	UpdatedAt  time.Time
 }
 
-func retrieveCompetition(ctx context.Context, tenantDB *sqlx.DB, id int64) (*competitionRow, error) {
+func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id int64) (*competitionRow, error) {
 	var c competitionRow
 	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM competition WHERE id = ?", id); err != nil {
 		return nil, fmt.Errorf("error Select competition: %w", err)
@@ -296,18 +305,14 @@ func retrieveCompetition(ctx context.Context, tenantDB *sqlx.DB, id int64) (*com
 	return &c, nil
 }
 
-type competitorScoreRow struct {
+type playerScoreRow struct {
 	ID            int64
-	CompetitorID  int64
+	PlayerID      int64
 	CompetitionID int64
 	Score         int64
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
-
-var (
-	errNotPermitted = errors.New("this role is not permitted")
-)
 
 func tenantsAddHandler(c echo.Context) error {
 	_, err := parseViewerMustAdmin(c)
@@ -316,19 +321,6 @@ func tenantsAddHandler(c echo.Context) error {
 	}
 
 	name := c.FormValue("name")
-	icon, err := c.FormFile("icon")
-	if err != nil {
-		return fmt.Errorf("error retrieve icon from FormFile: %w", err)
-	}
-	iconFile, err := icon.Open()
-	if err != nil {
-		return fmt.Errorf("error icon.Open: %w", err)
-	}
-	defer iconFile.Close()
-	iconBytes, err := io.ReadAll(iconFile)
-	if err != nil {
-		return fmt.Errorf("error io.ReadAll: %w", err)
-	}
 
 	ctx := c.Request().Context()
 	tx, err := centerDB.BeginTxx(ctx, nil)
@@ -348,12 +340,12 @@ func tenantsAddHandler(c echo.Context) error {
 	now := time.Now()
 	_, err = tx.ExecContext(
 		ctx,
-		"INSERT INTO `tenant` (`id`, `identifier`, `name`, `image`, `created_at`, `updated_at`)",
-		id, identifier, name, iconBytes, now, now,
+		"INSERT INTO `tenant` (`id`, `identifier`, `name`, `created_at`, `updated_at`)",
+		id, identifier, name, now, now,
 	)
 	if err != nil {
 		tx.Rollback()
-		return fmt.Errorf("error Insert `tenant`: %w", err)
+		return fmt.Errorf("error Insert tenant: %w", err)
 	}
 
 	if err := createTenantDB(identifier); err != nil {
@@ -363,102 +355,62 @@ func tenantsAddHandler(c echo.Context) error {
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("error tx.Commit: %w", err)
 	}
+
+	if err := c.JSON(http.StatusOK, successResult{Success: true}); err != nil {
+		return fmt.Errorf("error c.JSON: %w", err)
+	}
 	return nil
 }
 
-type competitorScore struct {
-	CompetitionID        int64
-	CompetitorIdentifier string
-	Score                int64
-}
-
-func listScoresAll(ctx context.Context, tenantID string) ([]competitorScore, error) {
-	tenantDB, err := connectTenantDB(tenantID)
-	if err != nil {
-		return nil, fmt.Errorf("error connectTenantDB: %w", err)
-	}
-	defer tenantDB.Close()
-
-	scores := []competitorScore{}
-	rows, err := tenantDB.QueryxContext(
-		ctx,
-		"SELECT competition_id, competitor_id, score FROM competitor_score",
-	)
-	if err != nil {
-		return nil, fmt.Errorf("error SELECT competitor_score: %w", err)
-	}
-	for rows.Next() {
-		var competitionID, competitorID, score int64
-		if err := rows.Scan(&competitionID, &competitorID, &score); err != nil {
-			return nil, fmt.Errorf("error rows.Scan: %w", err)
-		}
-		var c competitorRow
-		if err := tenantDB.GetContext(ctx, &c, "SELECT * FROM competitor WHERE id = ?", competitorID); err != nil {
-			return nil, fmt.Errorf("erorr SELECT competitor: %w", err)
-		}
-		scores = append(scores, competitorScore{
-			CompetitionID:        competitionID,
-			CompetitorIdentifier: c.Identifier,
-			Score:                score,
-		})
-	}
-
-	return scores, nil
-}
-
-type tenantBillingReport struct {
+type billingReport struct {
 	CompetitionID    int64
 	CompetitionTitle string
-	CompetitorCount  int64
+	PlayerCount      int64
 	BillingYen       int64
 }
 
-func billingReportByCompetition(ctx context.Context, tenantDB *sqlx.DB, competitonID int64) (*tenantBillingReport, error) {
+func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competitonID int64) (*billingReport, error) {
 	comp, err := retrieveCompetition(ctx, tenantDB, competitonID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieveCompetition: %w", err)
 	}
 
-	aals := []accountAccessLogRow{}
+	aals := []accessLogRow{}
 	if err := centerDB.SelectContext(
 		ctx,
 		aals,
-		"SELECT * FROM account_access_log WHERE competition_id = ?",
+		"SELECT * FROM access_log WHERE competition_id = ?",
 		comp.ID,
 	); err != nil {
-		return nil, fmt.Errorf("error Select account_access_log: %w", err)
+		return nil, fmt.Errorf("error Select access_log: %w", err)
 	}
 	billingMap := map[string]int64{}
 	for _, aal := range aals {
-		a, err := retrieveAccount(ctx, aal.AccountID)
-		if err != nil {
-			return nil, fmt.Errorf("error retrieveAccount: %w", err)
-		}
 		// competition.finished_idよりも大きいidの場合は、終了後にアクセスしたとみなしてアクセスしたとみなさない
 		if comp.FinishedID.Valid && comp.FinishedID.Int64 < aal.ID {
 			continue
 		}
-		billingMap[a.Identifier] = 10
+		billingMap[aal.Identifier] = 10
 	}
 
-	css := []competitorScoreRow{}
+	css := []playerScoreRow{}
 	if err := tenantDB.SelectContext(
 		ctx,
 		&css,
-		"SELECT * FROM competitor_score WHERE competition_id = ?",
+		"SELECT * FROM player_score WHERE competition_id = ?",
 		comp.ID,
 	); err != nil {
-		return nil, fmt.Errorf("error Select count competitor_score: %w", err)
+		return nil, fmt.Errorf("error Select count player_score: %w", err)
 	}
 	for _, cs := range css {
-		competitor, err := retrieveCompetitor(ctx, tenantDB, cs.CompetitorID)
+		player, err := retrievePlayer(ctx, tenantDB, cs.PlayerID)
 		if err != nil {
-			return nil, fmt.Errorf("error retrieveCompetitor: %w", err)
+			return nil, fmt.Errorf("error retrievePlayer: %w", err)
 		}
-		if _, ok := billingMap[competitor.Identifier]; ok {
-			billingMap[competitor.Identifier] = 100
+		if _, ok := billingMap[player.Identifier]; ok {
+			billingMap[player.Identifier] = 100
 		} else {
-			billingMap[competitor.Identifier] = 50
+			billingMap[player.Identifier] = 50
 		}
 	}
 
@@ -466,22 +418,12 @@ func billingReportByCompetition(ctx context.Context, tenantDB *sqlx.DB, competit
 	for _, v := range billingMap {
 		billingYen += v
 	}
-	return &tenantBillingReport{
+	return &billingReport{
 		CompetitionID:    comp.ID,
 		CompetitionTitle: comp.Title,
-		CompetitorCount:  int64(len(css)),
+		PlayerCount:      int64(len(css)),
 		BillingYen:       billingYen,
 	}, nil
-}
-
-type successResult struct {
-	Success bool `json:"status"`
-	Data    any  `json:"data"`
-}
-
-type failureResult struct {
-	Success bool   `json:"status"`
-	Message string `json:"message"`
 }
 
 type tenantsBillingHandlerResult struct {
@@ -496,8 +438,7 @@ type tenantBilling struct {
 
 func tenantsBillingHandler(c echo.Context) error {
 	ctx := c.Request().Context()
-	_, err := parseViewerMustAdmin(c)
-	if err != nil {
+	if _, err := parseViewerMustAdmin(c); err != nil {
 		return fmt.Errorf("error parseViewerMustAdmin: %w", err)
 	}
 
@@ -549,23 +490,27 @@ func tenantsBillingHandler(c echo.Context) error {
 	return nil
 }
 
-func competitorsAddHandler(c echo.Context) error {
+type playerDetail struct {
+	Identifier     string `json:"identifier"`
+	Name           string `json:"name"`
+	IsDisqualified bool   `json:"is_disqualified"`
+}
+
+type playersAddHandlerResult struct {
+	Players []playerDetail `json:"players"`
+}
+
+func playersAddHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	v, err := parseViewerMustOrganizer(c)
-	if err != nil {
-		return fmt.Errorf("error parseViewer: %w", err)
+	if _, err := parseViewerMustOrganizer(c); err != nil {
+		return fmt.Errorf("error parseViewerMustOrganizer: %w", err)
 	}
-	tenantDB, err := connectTenantDBByViewer(ctx, v)
+	tenantDB, err := connectTenantDBByHost(c)
 	if err != nil {
-		return fmt.Errorf("error connectTenantDBByViewer: %w", err)
+		return fmt.Errorf("error connectTenantDBByHost: %w", err)
 	}
 	defer tenantDB.Close()
-
-	t, err := retrieveTenantByIdentifier(ctx, v.tenantIdentifier)
-	if err != nil {
-		return fmt.Errorf("error retrieveTenantByIdentifier: %w", err)
-	}
 
 	params, err := c.FormParams()
 	if err != nil {
@@ -574,89 +519,113 @@ func competitorsAddHandler(c echo.Context) error {
 	names := params["name"]
 
 	now := time.Now()
-	tx, err := centerDB.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("error centerDB.BeginTxx: %w", err)
-	}
 	ttx, err := tenantDB.BeginTxx(ctx, nil)
 	if err != nil {
-		tx.Rollback()
 		return fmt.Errorf("error tenantDB.BeginTxx: %w", err)
 	}
+	pds := make([]playerDetail, 0, len(names))
 	for _, name := range names {
 		id, err := dispenseID(ctx)
 		if err != nil {
-			tx.Rollback()
 			ttx.Rollback()
 			return fmt.Errorf("error dispenseID: %w", err)
 		}
 
-		if _, err := tx.ExecContext(
-			ctx,
-			"INSERT INTO account (id, identifier, name, tenant_id, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-			id, id, name, t.ID, "competitor", now, now,
-		); err != nil {
-			tx.Rollback()
-			ttx.Rollback()
-			return fmt.Errorf("error Insert account at centerDB: %w", err)
-		}
-
 		if _, err := ttx.ExecContext(
 			ctx,
-			"INSERT INTO competitor (id, identifier, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-			id, id, name, now, now,
+			"INSERT INTO player (id, identifier, name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+			id, id, name, false, now, now,
 		); err != nil {
-			tx.Rollback()
 			ttx.Rollback()
 			return fmt.Errorf("error Insert account at tenantDB: %w", err)
 		}
+		p, err := retrievePlayer(ctx, ttx, id)
+		if err != nil {
+			ttx.Rollback()
+			return fmt.Errorf("error retrievePlayer: %w", err)
+		}
+		pds = append(pds, playerDetail{
+			Identifier:     p.Identifier,
+			Name:           p.Name,
+			IsDisqualified: p.IsDisqualified,
+		})
 	}
 	if err := ttx.Commit(); err != nil {
-		tx.Rollback()
 		return fmt.Errorf("error ttx.Commit: %w", err)
 	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("error tx.Commit: %w", err)
+
+	res := playersAddHandlerResult{
+		Players: pds,
+	}
+	if err := c.JSON(http.StatusOK, successResult{Success: true, Data: res}); err != nil {
+		return fmt.Errorf("error c.JSON: %w", err)
 	}
 	return nil
 }
 
-func competitorsDisqualifiedHandler(c echo.Context) error {
+type playerDisqualifiedHandlerResult struct {
+	Player playerDetail `json:"player"`
+}
+
+func playerDisqualifiedHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	_, err := parseViewerMustOrganizer(c)
+	if _, err := parseViewerMustOrganizer(c); err != nil {
+		return fmt.Errorf("error parseViewerMustOrganizer: %w", err)
+	}
+	tenantDB, err := connectTenantDBByHost(c)
 	if err != nil {
-		return fmt.Errorf("error parseViewer: %w", err)
+		return fmt.Errorf("error connectTenantDBByHost: %w", err)
 	}
+	defer tenantDB.Close()
 
-	idStr := c.Param("competitor_id")
-	var id int64
-	if id, err = strconv.ParseInt(idStr, 10, 64); err != nil {
-		return fmt.Errorf("error strconv.ParseUint: %w", err)
-	}
+	identifier := c.Param("player_identifier")
 
 	now := time.Now()
-	if _, err := centerDB.ExecContext(
+	if _, err := tenantDB.ExecContext(
 		ctx,
-		"UPDATE account SET role = ?, updated_at = ? WHERE id = ?",
-		"disqualified_competitor", now, id,
+		"UPDATE player SET is_disqualified = ?, updated_at = ? WHERE identifier = ?",
+		true, now, identifier,
 	); err != nil {
-		return fmt.Errorf("error Update account: %w", err)
+		return fmt.Errorf("error Update player: %w", err)
+	}
+	p, err := retrievePlayerByIdentifier(ctx, tenantDB, identifier)
+	if err != nil {
+		return fmt.Errorf("error retrievePlayerByIdentifier: %w", err)
 	}
 
+	res := playerDisqualifiedHandlerResult{
+		Player: playerDetail{
+			Identifier:     p.Identifier,
+			Name:           p.Name,
+			IsDisqualified: p.IsDisqualified,
+		},
+	}
+	if err := c.JSON(http.StatusOK, successResult{Success: true, Data: res}); err != nil {
+		return fmt.Errorf("error c.JSON: %w", err)
+	}
 	return nil
+}
+
+type competitionDetail struct {
+	ID         int64
+	Title      string
+	IsFinished bool
+}
+
+type competitionsAddHandlerResult struct {
+	Competition competitionDetail
 }
 
 func competitionsAddHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	v, err := parseViewerMustOrganizer(c)
-	if err != nil {
-		return fmt.Errorf("error parseViewer: %w", err)
+	if _, err := parseViewerMustOrganizer(c); err != nil {
+		return fmt.Errorf("error parseViewerMustOrganizer: %w", err)
 	}
-	tenantDB, err := connectTenantDBByViewer(ctx, v)
+	tenantDB, err := connectTenantDBByHost(c)
 	if err != nil {
-		return fmt.Errorf("error connectTenantDBByViewer: %w", err)
+		return fmt.Errorf("error connectTenantDBByHost: %w", err)
 	}
 	defer tenantDB.Close()
 
@@ -669,25 +638,34 @@ func competitionsAddHandler(c echo.Context) error {
 	}
 	if _, err := tenantDB.ExecContext(
 		ctx,
-		"INSERT INTO competition (id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-		id, title, sql.NullTime{}, now, now,
+		"INSERT INTO competition (id, title, finished_at, finished_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+		id, title, sql.NullTime{}, sql.NullInt64{}, now, now,
 	); err != nil {
 		return fmt.Errorf("error Insert competition: %w", err)
 	}
 
+	res := competitionsAddHandlerResult{
+		Competition: competitionDetail{
+			ID:         id,
+			Title:      title,
+			IsFinished: false,
+		},
+	}
+	if err := c.JSON(http.StatusOK, successResult{Success: true, Data: res}); err != nil {
+		return fmt.Errorf("error c.JSON: %w", err)
+	}
 	return nil
 }
 
 func competitionFinishHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	v, err := parseViewerMustOrganizer(c)
-	if err != nil {
-		return fmt.Errorf("error parseViewer: %w", err)
+	if _, err := parseViewerMustOrganizer(c); err != nil {
+		return fmt.Errorf("error parseViewerMustOrganizer: %w", err)
 	}
-	tenantDB, err := connectTenantDBByViewer(ctx, v)
+	tenantDB, err := connectTenantDBByHost(c)
 	if err != nil {
-		return fmt.Errorf("error connectTenantDBByViewer: %w", err)
+		return fmt.Errorf("error connectTenantDBByHost: %w", err)
 	}
 	defer tenantDB.Close()
 
@@ -711,19 +689,21 @@ func competitionFinishHandler(c echo.Context) error {
 		return fmt.Errorf("error Update competition: %w", err)
 	}
 
+	if err := c.JSON(http.StatusOK, successResult{Success: true}); err != nil {
+		return fmt.Errorf("error c.JSON: %w", err)
+	}
 	return nil
 }
 
 func competitionResultHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	v, err := parseViewerMustOrganizer(c)
-	if err != nil {
-		return fmt.Errorf("error parseViewer: %w", err)
+	if _, err := parseViewerMustOrganizer(c); err != nil {
+		return fmt.Errorf("error parseViewerMustOrganizer: %w", err)
 	}
-	tenantDB, err := connectTenantDBByViewer(ctx, v)
+	tenantDB, err := connectTenantDBByHost(c)
 	if err != nil {
-		return fmt.Errorf("error connectTenantDBByViewer: %w", err)
+		return fmt.Errorf("error connectTenantDBByHost: %w", err)
 	}
 	defer tenantDB.Close()
 
@@ -750,7 +730,7 @@ func competitionResultHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error r.Read at header: %w", err)
 	}
-	if !reflect.DeepEqual(headers, []string{"competitor_identifier", "score"}) {
+	if !reflect.DeepEqual(headers, []string{"player_identifier", "score"}) {
 		return fmt.Errorf("not match header: %#v", headers)
 	}
 	ttx, err := tenantDB.BeginTxx(ctx, nil)
@@ -770,11 +750,11 @@ func competitionResultHandler(c echo.Context) error {
 			ttx.Rollback()
 			return fmt.Errorf("row must have two columns: %#v", row)
 		}
-		competitorIdentifier, scoreStr := row[0], row[1]
-		c, err := retrieveCompetitorByIdentifier(ctx, tenantDB, competitorIdentifier)
+		playerIdentifier, scoreStr := row[0], row[1]
+		c, err := retrievePlayerByIdentifier(ctx, tenantDB, playerIdentifier)
 		if err != nil {
 			ttx.Rollback()
-			return fmt.Errorf("error retrieveCompetitorByIdentifier: %w", err)
+			return fmt.Errorf("error retrievePlayerByIdentifier: %w", err)
 		}
 		var score int64
 		if score, err = strconv.ParseInt(scoreStr, 10, 64); err != nil {
@@ -788,7 +768,7 @@ func competitionResultHandler(c echo.Context) error {
 		}
 		if _, err := ttx.ExecContext(
 			ctx,
-			"REPLACE INTO competitor_score (id, competitor_id, competition_id, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+			"REPLACE INTO player_score (id, player_id, competition_id, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
 			id, c.ID, competitionID, score, now, now,
 		); err != nil {
 			ttx.Rollback()
@@ -800,23 +780,25 @@ func competitionResultHandler(c echo.Context) error {
 		return fmt.Errorf("error txx.Commit: %w", err)
 	}
 
+	if err := c.JSON(http.StatusOK, successResult{Success: true}); err != nil {
+		return fmt.Errorf("error c.JSON: %w", err)
+	}
 	return nil
 }
 
-type tenantBillingHandlerResult struct {
-	Reports []tenantBillingReport
+type billingHandlerResult struct {
+	Reports []billingReport
 }
 
-func tenantBillingHandler(c echo.Context) error {
+func billingHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	v, err := parseViewerMustOrganizer(c)
-	if err != nil {
-		return fmt.Errorf("error parseViewer: %w", err)
+	if _, err := parseViewerMustOrganizer(c); err != nil {
+		return fmt.Errorf("error parseViewerMustOrganizer: %w", err)
 	}
-	tenantDB, err := connectTenantDBByViewer(ctx, v)
+	tenantDB, err := connectTenantDBByHost(c)
 	if err != nil {
-		return fmt.Errorf("error connectTenantDBByViewer: %w", err)
+		return fmt.Errorf("error connectTenantDBByHost: %w", err)
 	}
 	defer tenantDB.Close()
 
@@ -828,7 +810,7 @@ func tenantBillingHandler(c echo.Context) error {
 	); err != nil {
 		return fmt.Errorf("error Select competition: %w", err)
 	}
-	tbrs := make([]tenantBillingReport, 0, len(cs))
+	tbrs := make([]billingReport, 0, len(cs))
 	for _, comp := range cs {
 		report, err := billingReportByCompetition(ctx, tenantDB, comp.ID)
 		if err != nil {
@@ -837,78 +819,76 @@ func tenantBillingHandler(c echo.Context) error {
 		tbrs = append(tbrs, *report)
 	}
 
-	ret := successResult{
+	res := successResult{
 		Success: true,
-		Data: tenantBillingHandlerResult{
+		Data: billingHandlerResult{
 			Reports: tbrs,
 		},
 	}
-	if err := c.JSON(http.StatusOK, ret); err != nil {
+	if err := c.JSON(http.StatusOK, res); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 
 	return nil
 }
 
-type competitorScoreDetail struct {
+type playerScoreDetail struct {
 	CompetitionTitle string `json:"competition_title"`
 	Score            int64  `json:"score"`
 }
 
-type competitorHandlerResult struct {
-	Name   string                  `json:"name"`
-	Scores []competitorScoreDetail `json:"scores"`
+type playerHandlerResult struct {
+	Name   string              `json:"name"`
+	Scores []playerScoreDetail `json:"scores"`
 }
 
-func competitorHandler(c echo.Context) error {
+func playerHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	v, err := parseViewerIgnoreDisqualified(c, 0)
-	if err != nil {
+	if _, err := parseViewerIgnoreDisqualified(c, 0); err != nil {
 		return fmt.Errorf("error parseViewerIgnoreDisqualified: %w", err)
 	}
-
-	tenantDB, err := connectTenantDBByViewer(ctx, v)
+	tenantDB, err := connectTenantDBByHost(c)
 	if err != nil {
-		return fmt.Errorf("error connectTenantDB: %w", err)
+		return fmt.Errorf("error connectTenantDBByHost: %w", err)
 	}
 	defer tenantDB.Close()
 
-	ci := c.Param("competitor_identifier")
+	ci := c.Param("player_identifier")
 
-	co, err := retrieveCompetitorByIdentifier(ctx, tenantDB, ci)
+	co, err := retrievePlayerByIdentifier(ctx, tenantDB, ci)
 	if err != nil {
-		return fmt.Errorf("error retrieveCompetitorByIdentifier: %w", err)
+		return fmt.Errorf("error retrievePlayerByIdentifier: %w", err)
 	}
-	css := []competitorScoreRow{}
+	css := []playerScoreRow{}
 	if err := tenantDB.SelectContext(
 		ctx,
 		&css,
-		"SELECT * FROM competitor_score WHERE competitor_id = ? ORDER BY competition_id ASC",
+		"SELECT * FROM player_score WHERE player_id = ? ORDER BY competition_id ASC",
 		co.ID,
 	); err != nil {
-		return fmt.Errorf("error Select competitor_score: %w", err)
+		return fmt.Errorf("error Select player_score: %w", err)
 	}
-	csds := make([]competitorScoreDetail, 0, len(css))
+	csds := make([]playerScoreDetail, 0, len(css))
 	for _, cs := range css {
 		comp, err := retrieveCompetition(ctx, tenantDB, cs.CompetitionID)
 		if err != nil {
 			return fmt.Errorf("error retrieveCompetition: %w", err)
 		}
-		csds = append(csds, competitorScoreDetail{
+		csds = append(csds, playerScoreDetail{
 			CompetitionTitle: comp.Title,
 			Score:            cs.Score,
 		})
 	}
 
-	ret := successResult{
+	res := successResult{
 		Success: true,
-		Data: competitorHandlerResult{
+		Data: playerHandlerResult{
 			Name:   co.Name,
 			Scores: csds,
 		},
 	}
-	if err := c.JSON(http.StatusOK, ret); err != nil {
+	if err := c.JSON(http.StatusOK, res); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 
@@ -916,10 +896,10 @@ func competitorHandler(c echo.Context) error {
 }
 
 type competitionRank struct {
-	Rank                 int64  `json:"rank"`
-	Score                int64  `json:"score"`
-	CompetitorIdentifier string `json:"competitor_identifier"`
-	CompetitiorName      string `json:"competitior_name"`
+	Rank             int64  `json:"rank"`
+	Score            int64  `json:"score"`
+	PlayerIdentifier string `json:"player_identifier"`
+	CompetitiorName  string `json:"competitior_name"`
 }
 
 type competitionRankingHandlerResult struct {
@@ -936,14 +916,13 @@ func competitionRankingHandler(c echo.Context) error {
 		return fmt.Errorf("error strconv.ParseUint: %w", err)
 	}
 
-	v, err := parseViewerIgnoreDisqualified(c, competitionID)
-	if err != nil {
+	if _, err := parseViewerIgnoreDisqualified(c, competitionID); err != nil {
 		return fmt.Errorf("error parseViewerIgnoreDisqualified: %w", err)
 	}
 
-	tenantDB, err := connectTenantDBByViewer(ctx, v)
+	tenantDB, err := connectTenantDBByHost(c)
 	if err != nil {
-		return fmt.Errorf("error connectTenantDB: %w", err)
+		return fmt.Errorf("error connectTenantDBByHost: %w", err)
 	}
 	defer tenantDB.Close()
 
@@ -955,49 +934,43 @@ func competitionRankingHandler(c echo.Context) error {
 		}
 	}
 
-	css := []competitorScoreRow{}
+	css := []playerScoreRow{}
 	if err := tenantDB.SelectContext(
 		ctx,
 		&css,
-		"SELECT * FROM competitor_score WHERE competition_id = ? ORDER BY score DESC, competitor_id DESC",
+		"SELECT * FROM player_score WHERE competition_id = ? ORDER BY score DESC, player_id DESC",
 		competitionID,
 	); err != nil {
-		return fmt.Errorf("error Select competitor_score: %w", err)
+		return fmt.Errorf("error Select player_score: %w", err)
 	}
 	crs := make([]competitionRank, 0, len(css))
 	for i, cs := range css {
-		co, err := retrieveCompetitor(ctx, tenantDB, cs.CompetitorID)
+		co, err := retrievePlayer(ctx, tenantDB, cs.PlayerID)
 		if err != nil {
-			return fmt.Errorf("error retrieveCompetitor: %w", err)
+			return fmt.Errorf("error retrievePlayer: %w", err)
 		}
 		if int64(i) < rankAfter {
 			continue
 		}
 		crs = append(crs, competitionRank{
-			Rank:                 int64(i + 1),
-			Score:                cs.Score,
-			CompetitorIdentifier: co.Identifier,
-			CompetitiorName:      co.Name,
+			Rank:             int64(i + 1),
+			Score:            cs.Score,
+			PlayerIdentifier: co.Identifier,
+			CompetitiorName:  co.Name,
 		})
 	}
 
-	ret := successResult{
+	res := successResult{
 		Success: true,
 		Data: competitionRankingHandlerResult{
 			Ranks: crs,
 		},
 	}
-	if err := c.JSON(http.StatusOK, ret); err != nil {
+	if err := c.JSON(http.StatusOK, res); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 
 	return nil
-}
-
-type competitionDetail struct {
-	ID         int64
-	Title      string
-	IsFinished bool
 }
 
 type competitionsHandlerResult struct {
@@ -1007,14 +980,13 @@ type competitionsHandlerResult struct {
 func competitionsHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	v, err := parseViewerIgnoreDisqualified(c, 0)
-	if err != nil {
+	if _, err := parseViewerIgnoreDisqualified(c, 0); err != nil {
 		return fmt.Errorf("error parseViewerIgnoreDisqualified: %w", err)
 	}
 
-	tenantDB, err := connectTenantDBByViewer(ctx, v)
+	tenantDB, err := connectTenantDBByHost(c)
 	if err != nil {
-		return fmt.Errorf("error connectTenantDB: %w", err)
+		return fmt.Errorf("error connectTenantDBByHost: %w", err)
 	}
 	defer tenantDB.Close()
 
@@ -1035,13 +1007,13 @@ func competitionsHandler(c echo.Context) error {
 		})
 	}
 
-	ret := successResult{
+	res := successResult{
 		Success: true,
 		Data: competitionsHandlerResult{
 			Competitions: cds,
 		},
 	}
-	if err := c.JSON(http.StatusOK, ret); err != nil {
+	if err := c.JSON(http.StatusOK, res); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 
@@ -1052,10 +1024,9 @@ func initializeHandler(c echo.Context) error {
 	// TODO: SaaS管理者かチェック
 
 	// constに定義されたmax_idより大きいIDのtenantを削除
-	// constに定義されたmax_idより大きいIDのaccountを削除
-	// constに定義されたmax_idより大きいIDのaccount_access_logを削除
+	// constに定義されたmax_idより大きいIDのaccess_logを削除
 	// constに定義されたmax_idにid_generatorを戻す
-	// 残ったtenantのうち、max_idより大きいcompetition, competitor, competitor_scoreを削除
+	// 残ったtenantのうち、max_idより大きいcompetition, player, player_scoreを削除
 
 	return nil
 }
