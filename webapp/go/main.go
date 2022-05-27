@@ -49,13 +49,13 @@ func connectCenterDB() (*sqlx.DB, error) {
 	return sqlx.Open("mysql", dsn)
 }
 
-func tenantDBPath(tenantID string) string {
+func tenantDBPath(identifier string) string {
 	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "./tenants")
-	return filepath.Join(tenantDBDir, tenantID+".db")
+	return filepath.Join(tenantDBDir, identifier+".db")
 }
 
-func connectTenantDB(tenantID string) (*sqlx.DB, error) {
-	p := tenantDBPath(tenantID)
+func connectTenantDB(identifier string) (*sqlx.DB, error) {
+	p := tenantDBPath(identifier)
 	return sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rw", p))
 }
 
@@ -74,8 +74,8 @@ func connectTenantDBByHost(c echo.Context) (*sqlx.DB, error) {
 	return tenantDB, nil
 }
 
-func createTenantDB(tenantID string) error {
-	p := tenantDBPath(tenantID)
+func createTenantDB(identifier string) error {
+	p := tenantDBPath(identifier)
 
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("sqlite3 %s < %s", p, tenantDBSchemaFilePath))
 	return cmd.Run()
@@ -315,8 +315,7 @@ type playerScoreRow struct {
 }
 
 func tenantsAddHandler(c echo.Context) error {
-	_, err := parseViewerMustAdmin(c)
-	if err != nil {
+	if _, err := parseViewerMustAdmin(c); err != nil {
 		return fmt.Errorf("error parseViewerMustAdmin: %w", err)
 	}
 
@@ -1020,13 +1019,94 @@ func competitionsHandler(c echo.Context) error {
 	return nil
 }
 
+const initializeMaxID = 10000 // 仮
+
+type initializeHandlerResult struct {
+	Lang   string `json:"lang"`
+	Appeal string `json:"appeal"`
+}
+
 func initializeHandler(c echo.Context) error {
-	// TODO: SaaS管理者かチェック
+	ctx := c.Request().Context()
+
+	if _, err := parseViewerMustAdmin(c); err != nil {
+		return fmt.Errorf("error parseViewerMustAdmin: %w", err)
+	}
 
 	// constに定義されたmax_idより大きいIDのtenantを削除
+	dtis := []string{}
+	if err := centerDB.SelectContext(
+		ctx,
+		&dtis,
+		"SELECT identifier FROM tenant WHERE id > ?",
+		initializeMaxID,
+	); err != nil {
+		return fmt.Errorf("error Select tenant: %w", err)
+	}
+	for _, ti := range dtis {
+		p := tenantDBPath(ti)
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("error os.Remove: %w", err)
+		}
+	}
+	if _, err := centerDB.ExecContext(
+		ctx,
+		"DELETE FROM tenant WHERE id > ?",
+		initializeMaxID,
+	); err != nil {
+		return fmt.Errorf("error Delete tenant: %w", err)
+	}
 	// constに定義されたmax_idより大きいIDのaccess_logを削除
+	if _, err := centerDB.ExecContext(
+		ctx,
+		"DELETE FROM access_log WHERE id > ?",
+		initializeMaxID,
+	); err != nil {
+		return fmt.Errorf("error Delete access_log: %w", err)
+	}
 	// constに定義されたmax_idにid_generatorを戻す
+	if _, err := centerDB.ExecContext(
+		ctx,
+		"UPDATE id_generator SET id = ? WHERE stub = ?",
+		initializeMaxID, "a",
+	); err != nil {
+		return fmt.Errorf("error Update id_generator: %w", err)
+	}
+
 	// 残ったtenantのうち、max_idより大きいcompetition, player, player_scoreを削除
+	utis := []string{}
+	if err := centerDB.SelectContext(
+		ctx,
+		&utis,
+		"SELECT identifier FROM tenant",
+	); err != nil {
+		return fmt.Errorf("error Select tenant: %w", err)
+	}
+	for _, ti := range utis {
+		tenantDB, err := connectTenantDB(ti)
+		if err != nil {
+			return fmt.Errorf("error connectTenantDB: %w", err)
+		}
+		if _, err := tenantDB.ExecContext(ctx, "DELETE FROM competition WHERE id > ?", initializeMaxID); err != nil {
+			return fmt.Errorf("error Delete competition: tenant=%s %w", ti, err)
+		}
+		if _, err := tenantDB.ExecContext(ctx, "DELETE FROM player WHERE id > ?", initializeMaxID); err != nil {
+			return fmt.Errorf("error Delete player: tenant=%s %w", ti, err)
+		}
+		if _, err := tenantDB.ExecContext(ctx, "DELETE FROM player_score WHERE id > ?", initializeMaxID); err != nil {
+			return fmt.Errorf("error Delete player: tenant=%s %w", ti, err)
+		}
+	}
+
+	res := initializeHandlerResult{
+		Lang: "go",
+		// 頑張ったポイントやこだわりポイントがあれば書いてください
+		// 競技中の最後に計測したものを参照して、講評記事などで使わせていただきます
+		Appeal: "",
+	}
+	if err := c.JSON(http.StatusOK, successResult{Success: true, Data: res}); err != nil {
+		return fmt.Errorf("error c.JSON: %w", err)
+	}
 
 	return nil
 }
