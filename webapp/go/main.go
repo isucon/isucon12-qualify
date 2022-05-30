@@ -222,47 +222,6 @@ func parseViewer(c echo.Context) (*viewer, error) {
 	return v, nil
 }
 
-func parseViewerIgnoreDisqualified(c echo.Context, competitionID int64) (*viewer, error) {
-	ctx := c.Request().Context()
-
-	v, err := parseViewer(c)
-	if err != nil {
-		return nil, fmt.Errorf("error parseViewer:%w", err)
-	}
-	if v.role == rolePlayer {
-		tenantDB, err := connectToTenantDBByHost(c)
-		if err != nil {
-			return nil, fmt.Errorf("error connectToTenantDBByHost: %w", err)
-		}
-		p, err := retrievePlayerByName(c.Request().Context(), tenantDB, v.playerName)
-		if err != nil {
-			return nil, fmt.Errorf("error retrievePlayerByName: %w", err)
-		}
-		if p.IsDisqualified {
-			return nil, errNotPermitted
-		}
-
-		now := time.Now()
-		id, err := dispenseID(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("error dispenseID: %w", err)
-		}
-		t, err := retrieveTenantByName(ctx, v.tenantName)
-		if err != nil {
-			return nil, fmt.Errorf("error retrieveTenantByName: %w", err)
-		}
-		if _, err := centerDB.ExecContext(
-			ctx,
-			"INSERT INTO access_log (id, player_name, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE updated_at = VALUES(updated_at)",
-			id, p.Name, t.ID, competitionID, now, now,
-		); err != nil {
-			return nil, fmt.Errorf("error Insert access_log: %w", err)
-		}
-		return nil, errNotPermitted
-	}
-	return v, nil
-}
-
 type tenantRow struct {
 	ID          int64
 	Name        string
@@ -927,14 +886,24 @@ type playerHandlerResult struct {
 func playerHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	if _, err := parseViewerIgnoreDisqualified(c, 0); err != nil {
-		return fmt.Errorf("error parseViewerIgnoreDisqualified: %w", err)
+	v, err := parseViewer(c)
+	if err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
 	}
+
 	tenantDB, err := connectToTenantDBByHost(c)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDBByHost: %w", err)
 	}
 	defer tenantDB.Close()
+
+	vp, err := retrievePlayerByName(c.Request().Context(), tenantDB, v.playerName)
+	if err != nil {
+		return fmt.Errorf("error retrievePlayerByName: %w", err)
+	}
+	if vp.IsDisqualified {
+		return errNotPermitted
+	}
 
 	pn := c.Param("player_name")
 
@@ -994,16 +963,15 @@ type competitionRankingHandlerResult struct {
 
 func competitionRankingHandler(c echo.Context) error {
 	ctx := c.Request().Context()
+	v, err := parseViewer(c)
+	if err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	}
 
 	competitionIDStr := c.Param("competition_id")
 	var competitionID int64
-	var err error
 	if competitionID, err = strconv.ParseInt(competitionIDStr, 10, 64); err != nil {
 		return fmt.Errorf("error strconv.ParseUint: %w", err)
-	}
-
-	if _, err := parseViewerIgnoreDisqualified(c, competitionID); err != nil {
-		return fmt.Errorf("error parseViewerIgnoreDisqualified: %w", err)
 	}
 
 	tenantDB, err := connectToTenantDBByHost(c)
@@ -1011,6 +979,31 @@ func competitionRankingHandler(c echo.Context) error {
 		return fmt.Errorf("error connectToTenantDBByHost: %w", err)
 	}
 	defer tenantDB.Close()
+
+	vp, err := retrievePlayerByName(c.Request().Context(), tenantDB, v.playerName)
+	if err != nil {
+		return fmt.Errorf("error retrievePlayerByName: %w", err)
+	}
+	if vp.IsDisqualified {
+		return errNotPermitted
+	}
+
+	now := time.Now()
+	id, err := dispenseID(ctx)
+	if err != nil {
+		return fmt.Errorf("error dispenseID: %w", err)
+	}
+	t, err := retrieveTenantByName(ctx, v.tenantName)
+	if err != nil {
+		return fmt.Errorf("error retrieveTenantByName: %w", err)
+	}
+	if _, err := centerDB.ExecContext(
+		ctx,
+		"INSERT INTO access_log (id, player_name, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE updated_at = VALUES(updated_at)",
+		id, vp.Name, t.ID, competitionID, now, now,
+	); err != nil {
+		return fmt.Errorf("error Insert access_log: %w", err)
+	}
 
 	var rankAfter int64
 	rankAfterStr := c.QueryParam("rank_after")
@@ -1069,8 +1062,9 @@ type competitionsHandlerResult struct {
 func competitionsHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 
-	if _, err := parseViewerIgnoreDisqualified(c, 0); err != nil {
-		return fmt.Errorf("error parseViewerIgnoreDisqualified: %w", err)
+	v, err := parseViewer(c)
+	if err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
 	}
 
 	tenantDB, err := connectToTenantDBByHost(c)
@@ -1078,6 +1072,14 @@ func competitionsHandler(c echo.Context) error {
 		return fmt.Errorf("error connectToTenantDBByHost: %w", err)
 	}
 	defer tenantDB.Close()
+
+	vp, err := retrievePlayerByName(c.Request().Context(), tenantDB, v.playerName)
+	if err != nil {
+		return fmt.Errorf("error retrievePlayerByName: %w", err)
+	}
+	if vp.IsDisqualified {
+		return errNotPermitted
+	}
 
 	cs := []competitionRow{}
 	if err := tenantDB.SelectContext(
@@ -1122,6 +1124,7 @@ func initializeHandler(c echo.Context) error {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != roleAdmin {
 		return errNotPermitted
+	}
 
 	// constに定義されたmax_idより大きいIDのtenantを削除
 	dtns := []string{}
