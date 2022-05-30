@@ -29,6 +29,7 @@ import (
 
 const (
 	tenantDBSchemaFilePath = "../sql/20_schema_tenant.sql"
+	cookieName             = "isuports_session"
 )
 
 func getEnv(key string, defaultValue string) string {
@@ -178,11 +179,11 @@ type viewer struct {
 }
 
 func parseViewer(c echo.Context) (*viewer, error) {
-	ah := c.Request().Header.Get("Authorization")
-	tokenStr := strings.TrimPrefix(ah, "Bearer ")
-	if ah == tokenStr {
-		return nil, fmt.Errorf("unexpected header scheme: %s", ah)
+	cookie, err := c.Request().Cookie(cookieName)
+	if err != nil {
+		return nil, fmt.Errorf("error c.Request().Cookie: %w", err)
 	}
+	tokenStr := cookie.Value
 
 	keysrc := getEnv("ISUCON_JWT_KEY", "")
 	key, err := jwk.ParseKey([]byte(keysrc))
