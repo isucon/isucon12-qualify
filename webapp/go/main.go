@@ -46,7 +46,7 @@ func connectCenterDB() (*sqlx.DB, error) {
 	config.Addr = getEnv("ISUCON_DB_HOST", "127.0.0.1") + ":" + getEnv("ISUCON_DB_PORT", "3306")
 	config.User = getEnv("ISUCON_DB_USER", "isucon")
 	config.Passwd = getEnv("ISUCON_DB_PASSWORD", "isucon")
-	config.DBName = getEnv("ISUCON_DB_NAME", "isucon_listen80")
+	config.DBName = getEnv("ISUCON_DB_NAME", "isuports")
 	config.ParseTime = true
 
 	dsn := config.FormatDSN()
