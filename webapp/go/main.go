@@ -222,28 +222,6 @@ func parseViewer(c echo.Context) (*viewer, error) {
 	return v, nil
 }
 
-func parseViewerMustAdmin(c echo.Context) (*viewer, error) {
-	v, err := parseViewer(c)
-	if err != nil {
-		return nil, fmt.Errorf("error parseViewer:%w", err)
-	}
-	if v.role != roleAdmin {
-		return nil, errNotPermitted
-	}
-	return v, nil
-}
-
-func parseViewerMustOrganizer(c echo.Context) (*viewer, error) {
-	v, err := parseViewer(c)
-	if err != nil {
-		return nil, fmt.Errorf("error parseViewer:%w", err)
-	}
-	if v.role != roleOrganizer {
-		return nil, errNotPermitted
-	}
-	return v, nil
-}
-
 func parseViewerIgnoreDisqualified(c echo.Context, competitionID int64) (*viewer, error) {
 	ctx := c.Request().Context()
 
@@ -376,8 +354,10 @@ type tenantsAddHandlerResult struct {
 }
 
 func tenantsAddHandler(c echo.Context) error {
-	if _, err := parseViewerMustAdmin(c); err != nil {
-		return fmt.Errorf("error parseViewerMustAdmin: %w", err)
+	if v, err := parseViewer(c); err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	} else if v.role != roleAdmin {
+		return errNotPermitted
 	}
 
 	displayName := c.FormValue("display_name")
@@ -504,8 +484,10 @@ type tenantsBillingHandlerResult struct {
 
 func tenantsBillingHandler(c echo.Context) error {
 	ctx := c.Request().Context()
-	if _, err := parseViewerMustAdmin(c); err != nil {
-		return fmt.Errorf("error parseViewerMustAdmin: %w", err)
+	if v, err := parseViewer(c); err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	} else if v.role != roleAdmin {
+		return errNotPermitted
 	}
 
 	before := c.QueryParam("before")
@@ -575,10 +557,12 @@ type playersAddHandlerResult struct {
 
 func playersAddHandler(c echo.Context) error {
 	ctx := c.Request().Context()
-
-	if _, err := parseViewerMustOrganizer(c); err != nil {
-		return fmt.Errorf("error parseViewerMustOrganizer: %w", err)
+	if v, err := parseViewer(c); err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	} else if v.role == roleOrganizer {
+		return errNotPermitted
 	}
+
 	tenantDB, err := connectToTenantDBByHost(c)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDBByHost: %w", err)
@@ -642,10 +626,12 @@ type playerDisqualifiedHandlerResult struct {
 
 func playerDisqualifiedHandler(c echo.Context) error {
 	ctx := c.Request().Context()
-
-	if _, err := parseViewerMustOrganizer(c); err != nil {
-		return fmt.Errorf("error parseViewerMustOrganizer: %w", err)
+	if v, err := parseViewer(c); err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	} else if v.role == roleOrganizer {
+		return errNotPermitted
 	}
+
 	tenantDB, err := connectToTenantDBByHost(c)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDBByHost: %w", err)
@@ -692,10 +678,12 @@ type competitionsAddHandlerResult struct {
 
 func competitionsAddHandler(c echo.Context) error {
 	ctx := c.Request().Context()
-
-	if _, err := parseViewerMustOrganizer(c); err != nil {
-		return fmt.Errorf("error parseViewerMustOrganizer: %w", err)
+	if v, err := parseViewer(c); err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	} else if v.role == roleOrganizer {
+		return errNotPermitted
 	}
+
 	tenantDB, err := connectToTenantDBByHost(c)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDBByHost: %w", err)
@@ -732,10 +720,12 @@ func competitionsAddHandler(c echo.Context) error {
 
 func competitionFinishHandler(c echo.Context) error {
 	ctx := c.Request().Context()
-
-	if _, err := parseViewerMustOrganizer(c); err != nil {
-		return fmt.Errorf("error parseViewerMustOrganizer: %w", err)
+	if v, err := parseViewer(c); err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	} else if v.role == roleOrganizer {
+		return errNotPermitted
 	}
+
 	tenantDB, err := connectToTenantDBByHost(c)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDBByHost: %w", err)
@@ -765,10 +755,12 @@ func competitionFinishHandler(c echo.Context) error {
 
 func competitionResultHandler(c echo.Context) error {
 	ctx := c.Request().Context()
-
-	if _, err := parseViewerMustOrganizer(c); err != nil {
-		return fmt.Errorf("error parseViewerMustOrganizer: %w", err)
+	if v, err := parseViewer(c); err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	} else if v.role == roleOrganizer {
+		return errNotPermitted
 	}
+
 	tenantDB, err := connectToTenantDBByHost(c)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDBByHost: %w", err)
@@ -880,10 +872,12 @@ type billingHandlerResult struct {
 
 func billingHandler(c echo.Context) error {
 	ctx := c.Request().Context()
-
-	if _, err := parseViewerMustOrganizer(c); err != nil {
-		return fmt.Errorf("error parseViewerMustOrganizer: %w", err)
+	if v, err := parseViewer(c); err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	} else if v.role == roleOrganizer {
+		return errNotPermitted
 	}
+
 	tenantDB, err := connectToTenantDBByHost(c)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDBByHost: %w", err)
@@ -1124,10 +1118,10 @@ type initializeHandlerResult struct {
 
 func initializeHandler(c echo.Context) error {
 	ctx := c.Request().Context()
-
-	if _, err := parseViewerMustAdmin(c); err != nil {
-		return fmt.Errorf("error parseViewerMustAdmin: %w", err)
-	}
+	if v, err := parseViewer(c); err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	} else if v.role != roleAdmin {
+		return errNotPermitted
 
 	// constに定義されたmax_idより大きいIDのtenantを削除
 	dtns := []string{}
