@@ -2,15 +2,14 @@ CREATE TABLE `competition` (
   `id` INTEGER NOT NULL PRIMARY KEY,
   `title` TEXT NOT NULL,
   `finished_at` DATETIME NULL,
-  `finished_id` INTEGER NULL,
   `created_at` DATETIME NOT NULL,
   `updated_at` DATETIME NOT NULL
 );
 
 CREATE TABLE `player` (
   `id` INTEGER PRIMARY KEY,
-  `identifier` TEXT NOT NULL UNIQUE,
-  `name` TEXT NOT NULL,
+  `name` TEXT NOT NULL UNIQUE,
+  `display_name` TEXT NOT NULL,
   `is_disqualified` INTEGER NOT NULL,
   `created_at` DATETIME NOT NULL,
   `updated_at` DATETIME NOT NULL
