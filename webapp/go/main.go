@@ -345,7 +345,6 @@ type competitionRow struct {
 	ID         int64
 	Title      string
 	FinishedAt sql.NullTime
-	FinishedID sql.NullInt64
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 }
@@ -453,8 +452,8 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competiton
 	}
 	billingMap := map[string]int64{}
 	for _, aal := range aals {
-		// competition.finished_idよりも大きいidの場合は、終了後にアクセスしたとみなしてアクセスしたとみなさない
-		if comp.FinishedID.Valid && comp.FinishedID.Int64 < aal.ID {
+		// competition.finished_atよりもあとの場合は、終了後にアクセスしたとみなしてアクセスしたとみなさない
+		if comp.FinishedAt.Valid && comp.FinishedAt.Time.Before(aal.UpdatedAt) {
 			continue
 		}
 		billingMap[aal.PlayerName] = 10
@@ -590,15 +589,15 @@ func playersAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error c.FormParams: %w", err)
 	}
-	names := params["name"]
+	displayNames := params["display_name"]
 
 	now := time.Now()
 	ttx, err := tenantDB.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("error tenantDB.BeginTxx: %w", err)
 	}
-	pds := make([]playerDetail, 0, len(names))
-	for _, name := range names {
+	pds := make([]playerDetail, 0, len(displayNames))
+	for _, displayName := range displayNames {
 		id, err := dispenseID(ctx)
 		if err != nil {
 			ttx.Rollback()
@@ -608,7 +607,7 @@ func playersAddHandler(c echo.Context) error {
 		if _, err := ttx.ExecContext(
 			ctx,
 			"INSERT INTO player (id, name, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-			id, id, name, false, now, now,
+			id, id, displayName, false, now, now,
 		); err != nil {
 			ttx.Rollback()
 			return fmt.Errorf("error Insert player at tenantDB: %w", err)
@@ -712,8 +711,8 @@ func competitionsAddHandler(c echo.Context) error {
 	}
 	if _, err := tenantDB.ExecContext(
 		ctx,
-		"INSERT INTO competition (id, title, finished_at, finished_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-		id, title, sql.NullTime{}, sql.NullInt64{}, now, now,
+		"INSERT INTO competition (id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+		id, title, sql.NullTime{}, now, now,
 	); err != nil {
 		return fmt.Errorf("error Insert competition: %w", err)
 	}
@@ -749,16 +748,11 @@ func competitionFinishHandler(c echo.Context) error {
 		return fmt.Errorf("error strconv.ParseUint: %w", err)
 	}
 
-	finishedID, err := dispenseID(ctx)
-	if err != nil {
-		return fmt.Errorf("error dispenseID: %w", err)
-	}
-
 	now := time.Now()
 	if _, err := tenantDB.ExecContext(
 		ctx,
-		"UPDATE competition SET finished_at = ?, finished_id = ?, updated_at = ? WHERE id = ?",
-		now, finishedID, now, id,
+		"UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?",
+		now, now, id,
 	); err != nil {
 		return fmt.Errorf("error Update competition: %w", err)
 	}

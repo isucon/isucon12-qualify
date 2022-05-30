@@ -2,7 +2,6 @@ CREATE TABLE `competition` (
   `id` INTEGER NOT NULL PRIMARY KEY,
   `title` TEXT NOT NULL,
   `finished_at` DATETIME NULL,
-  `finished_id` INTEGER NULL,
   `created_at` DATETIME NOT NULL,
   `updated_at` DATETIME NOT NULL
 );
