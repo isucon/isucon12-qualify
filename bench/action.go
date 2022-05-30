@@ -39,7 +39,7 @@ func GetRootAction(ctx context.Context, ag *agent.Agent) (*http.Response, error)
 	return ag.Do(ctx, req)
 }
 
-func PostTenantsAddAction(ctx context.Context, name string, ag *agent.Agent) (*http.Response, error) {
+func PostAdminTenantsAddAction(ctx context.Context, name string, ag *agent.Agent) (*http.Response, error) {
 	body, reset, err := newRequestBody(struct {
 		Name string `json:"name"`
 	}{
@@ -49,7 +49,7 @@ func PostTenantsAddAction(ctx context.Context, name string, ag *agent.Agent) (*h
 		return nil, err
 	}
 	defer reset()
-	req, err := ag.POST("/api/tenants/add", body)
+	req, err := ag.POST("/admin/api/tenants/add", body)
 	if err != nil {
 		return nil, err
 	}
@@ -57,8 +57,8 @@ func PostTenantsAddAction(ctx context.Context, name string, ag *agent.Agent) (*h
 	return ag.Do(ctx, req)
 }
 
-func GetTenantsBillingAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/api/tenants/billing")
+func GetAdminTenantsBillingAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.GET("/admin/api/tenants/billing")
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func GetTenantsBillingAction(ctx context.Context, ag *agent.Agent) (*http.Respon
 	return ag.Do(ctx, req)
 }
 
-func PostCompetititorsAddAction(ctx context.Context, name string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerPlayersAddAction(ctx context.Context, name string, ag *agent.Agent) (*http.Response, error) {
 	body, reset, err := newRequestBody(struct {
 		Name string `json:"name"`
 	}{
@@ -76,7 +76,7 @@ func PostCompetititorsAddAction(ctx context.Context, name string, ag *agent.Agen
 		return nil, err
 	}
 	defer reset()
-	req, err := ag.POST("/api/competitors/add", body)
+	req, err := ag.POST("/organizer/api/players/add", body)
 	if err != nil {
 		return nil, err
 	}
@@ -84,13 +84,13 @@ func PostCompetititorsAddAction(ctx context.Context, name string, ag *agent.Agen
 	return ag.Do(ctx, req)
 }
 
-func PostCompetitorDisqualifiedAction(ctx context.Context, competitor string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, player string, ag *agent.Agent) (*http.Response, error) {
 	body, reset, err := newRequestBody(struct{}{})
 	if err != nil {
 		return nil, err
 	}
 	defer reset()
-	req, err := ag.POST("/api/competitor/"+competitor+"/disqualified", body)
+	req, err := ag.POST("/organizer/api/player/"+player+"/disqualified", body)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func PostCompetitorDisqualifiedAction(ctx context.Context, competitor string, ag
 	return ag.Do(ctx, req)
 }
 
-func PostCompetitionsAddAction(ctx context.Context, title string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerCompetitonsAddAction(ctx context.Context, title string, ag *agent.Agent) (*http.Response, error) {
 	body, reset, err := newRequestBody(struct {
 		Title string `json:"title"`
 	}{
@@ -108,7 +108,7 @@ func PostCompetitionsAddAction(ctx context.Context, title string, ag *agent.Agen
 		return nil, err
 	}
 	defer reset()
-	req, err := ag.POST("/api/competitions/add", body)
+	req, err := ag.POST("/organizer/api/competitions/add", body)
 	if err != nil {
 		return nil, err
 	}
@@ -116,13 +116,13 @@ func PostCompetitionsAddAction(ctx context.Context, title string, ag *agent.Agen
 	return ag.Do(ctx, req)
 }
 
-func PostCompetitionFinishAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerCompetitionFinishAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
 	body, reset, err := newRequestBody(struct{}{})
 	if err != nil {
 		return nil, err
 	}
 	defer reset()
-	req, err := ag.POST("/api/competition/"+competition+"/finish", body)
+	req, err := ag.POST("/organizer/api/competition/"+competition+"/finish", body)
 	if err != nil {
 		return nil, err
 	}
@@ -130,14 +130,14 @@ func PostCompetitionFinishAction(ctx context.Context, competition string, ag *ag
 	return ag.Do(ctx, req)
 }
 
-func PostCompetitionResultAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerCompetitionResultAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
 	// multipart/form-dataをあとでいれる
 	body, reset, err := newRequestBody(struct{}{})
 	if err != nil {
 		return nil, err
 	}
 	defer reset()
-	req, err := ag.POST("/api/competition/"+competition+"/result", body)
+	req, err := ag.POST("/organizer/api/competition/"+competition+"/result", body)
 	if err != nil {
 		return nil, err
 	}
@@ -145,8 +145,8 @@ func PostCompetitionResultAction(ctx context.Context, competition string, ag *ag
 	return ag.Do(ctx, req)
 }
 
-func GetTenantBillingAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/api/tenant/billing")
+func GetOrganizerBillingAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.GET("/organizer/api/billing")
 	if err != nil {
 		return nil, err
 	}
@@ -154,8 +154,8 @@ func GetTenantBillingAction(ctx context.Context, ag *agent.Agent) (*http.Respons
 	return ag.Do(ctx, req)
 }
 
-func GetCompetitorAction(ctx context.Context, competitor string, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/api/competitor/" + competitor)
+func GetPlayerAction(ctx context.Context, player string, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.GET("/player/api/player/" + player)
 	if err != nil {
 		return nil, err
 	}
@@ -163,8 +163,8 @@ func GetCompetitorAction(ctx context.Context, competitor string, ag *agent.Agent
 	return ag.Do(ctx, req)
 }
 
-func GetCompetitionRankingAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/api/competiton/" + competition + "/ranking")
+func GetPlayerCompetitionRankingAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.GET("/player/api/competiton/" + competition + "/ranking")
 	if err != nil {
 		return nil, err
 	}
@@ -172,8 +172,8 @@ func GetCompetitionRankingAction(ctx context.Context, competition string, ag *ag
 	return ag.Do(ctx, req)
 }
 
-func GetCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/api/competitions/")
+func GetPlayerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.GET("/player/api/competitions")
 	if err != nil {
 		return nil, err
 	}

@@ -43,14 +43,14 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// SaaS管理API
 	{
-		res, err := PostTenantsAddAction(ctx, "name", adminAg)
-		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200, 500)) // TODO
+		res, err := PostAdminTenantsAddAction(ctx, "name", adminAg)
+		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200, 500))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := GetTenantsBillingAction(ctx, adminAg)
+		res, err := GetAdminTenantsBillingAction(ctx, adminAg)
 		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200, 500))
 		if !v.IsEmpty() {
 			return v
@@ -59,43 +59,43 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// 大会主催者API
 	{
-		res, err := PostCompetitionsAddAction(ctx, "title", orgAg)
-		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200))
+		res, err := PostOrganizerCompetitonsAddAction(ctx, "title", orgAg)
+		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200, 500))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := PostCompetititorsAddAction(ctx, "name", orgAg)
-		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200))
+		res, err := PostOrganizerPlayersAddAction(ctx, "name", orgAg)
+		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200, 500))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := PostCompetitorDisqualifiedAction(ctx, "competitor_id", orgAg)
-		v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200))
+		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, "competitor_id", orgAg)
+		v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200, 500))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := PostCompetitionResultAction(ctx, "competition_id", orgAg)
-		v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200))
+		res, err := PostOrganizerCompetitionResultAction(ctx, "competition_id", orgAg)
+		v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200, 500))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := PostCompetitionFinishAction(ctx, "competition_id", orgAg)
-		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200))
+		res, err := PostOrganizerCompetitionFinishAction(ctx, "competition_id", orgAg)
+		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200, 500))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := GetTenantBillingAction(ctx, orgAg)
-		v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200))
+		res, err := GetOrganizerBillingAction(ctx, orgAg)
+		v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200, 500))
 		if !v.IsEmpty() {
 			return v
 		}
@@ -103,22 +103,22 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// 大会参加者API
 	{
-		res, err := GetCompetitorAction(ctx, "competitor_id", compAg)
-		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200))
+		res, err := GetPlayerAction(ctx, "player", compAg)
+		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200, 500))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := GetCompetitionRankingAction(ctx, "competiton_id", compAg)
-		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200, 404)) // TODO
+		res, err := GetPlayerCompetitionRankingAction(ctx, "player", compAg)
+		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200, 500))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := GetCompetitionsAction(ctx, compAg)
-		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200, 404)) // TODO
+		res, err := GetPlayerCompetitionsAction(ctx, compAg)
+		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200, 500))
 		if !v.IsEmpty() {
 			return v
 		}
