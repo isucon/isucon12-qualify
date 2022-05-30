@@ -968,10 +968,10 @@ func playerHandler(c echo.Context) error {
 }
 
 type competitionRank struct {
-	Rank            int64  `json:"rank"`
-	Score           int64  `json:"score"`
-	PlayerName      string `json:"player_name"`
-	CompetitiorName string `json:"competitior_name"`
+	Rank              int64  `json:"rank"`
+	Score             int64  `json:"score"`
+	PlayerName        string `json:"player_name"`
+	PlayerDisplayName string `json:"player_display_name"`
 }
 
 type competitionRankingHandlerResult struct {
@@ -1054,10 +1054,10 @@ func competitionRankingHandler(c echo.Context) error {
 			continue
 		}
 		crs = append(crs, competitionRank{
-			Rank:            int64(i + 1),
-			Score:           ps.Score,
-			PlayerName:      co.Name,
-			CompetitiorName: co.DisplayName,
+			Rank:              int64(i + 1),
+			Score:             ps.Score,
+			PlayerName:        co.Name,
+			PlayerDisplayName: co.DisplayName,
 		})
 		if len(crs) >= 100 {
 			break
