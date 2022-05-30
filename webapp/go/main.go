@@ -1146,11 +1146,6 @@ type initializeHandlerResult struct {
 
 func initializeHandler(c echo.Context) error {
 	ctx := c.Request().Context()
-	if v, err := parseViewer(c); err != nil {
-		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role != roleAdmin {
-		return errNotPermitted
-	}
 
 	// constに定義されたmax_idより大きいIDのtenantを削除
 	dtns := []string{}
