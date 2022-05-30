@@ -230,14 +230,6 @@ type tenantRow struct {
 	UpdatedAt   time.Time
 }
 
-func retrieveTenantByName(ctx context.Context, name string) (*tenantRow, error) {
-	var t tenantRow
-	if err := centerDB.SelectContext(ctx, &t, "SELECT * FROM tenant WHERE name = ?", name); err != nil {
-		return nil, fmt.Errorf("error Select tenant: %w", err)
-	}
-	return &t, nil
-}
-
 type dbOrTx interface {
 	GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
 	SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
@@ -993,10 +985,11 @@ func competitionRankingHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error dispenseID: %w", err)
 	}
-	t, err := retrieveTenantByName(ctx, v.tenantName)
-	if err != nil {
-		return fmt.Errorf("error retrieveTenantByName: %w", err)
+	var t tenantRow
+	if err := centerDB.SelectContext(ctx, &t, "SELECT * FROM tenant WHERE name = ?", v.tenantName); err != nil {
+		return fmt.Errorf("error Select tenant: %w", err)
 	}
+
 	if _, err := centerDB.ExecContext(
 		ctx,
 		"INSERT INTO access_log (id, player_name, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE updated_at = VALUES(updated_at)",
