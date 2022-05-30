@@ -9,8 +9,8 @@ CREATE TABLE `competition` (
 
 CREATE TABLE `player` (
   `id` INTEGER PRIMARY KEY,
-  `identifier` TEXT NOT NULL UNIQUE,
-  `name` TEXT NOT NULL,
+  `name` TEXT NOT NULL UNIQUE,
+  `display_name` TEXT NOT NULL,
   `is_disqualified` INTEGER NOT NULL,
   `created_at` DATETIME NOT NULL,
   `updated_at` DATETIME NOT NULL
