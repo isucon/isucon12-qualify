@@ -1194,6 +1194,12 @@ func initializeHandler(c echo.Context) error {
 	); err != nil {
 		return fmt.Errorf("error Update id_generator: %w", err)
 	}
+	if _, err := centerDB.ExecContext(
+		ctx,
+		fmt.Sprintf("ALTER TABLE id_generator AUTO_INCREMENT = %d", initializeMaxID),
+	); err != nil {
+		return fmt.Errorf("error Update id_generator: %w", err)
+	}
 
 	// 残ったtenantのうち、max_idより大きいcompetition, player, player_scoreを削除
 	utns := []string{}
