@@ -1,4 +1,4 @@
-package main
+package isuports
 
 import (
 	"context"
@@ -91,7 +91,7 @@ func dispenseID(ctx context.Context) (int64, error) {
 
 var centerDB *sqlx.DB
 
-func main() {
+func Run() {
 	e := echo.New()
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
@@ -140,41 +140,41 @@ func main() {
 
 func errorResponseHandler(err error, c echo.Context) {
 	c.Logger().Errorf("error at %s: %s", c.Path(), err.Error())
-	c.JSON(http.StatusInternalServerError, failureResult{
+	c.JSON(http.StatusInternalServerError, FailureResult{
 		Success: false,
 		Message: err.Error(),
 	})
 }
 
-type successResult struct {
+type SuccessResult struct {
 	Success bool `json:"status"`
 	Data    any  `json:"data,omitempty"`
 }
 
-type failureResult struct {
+type FailureResult struct {
 	Success bool   `json:"status"`
 	Message string `json:"message"`
 }
 
-type role int
+type Role int
 
 const (
-	roleAdmin role = iota + 1
-	roleOrganizer
-	rolePlayer
+	RoleAdmin Role = iota + 1
+	RoleOrganizer
+	RolePlayer
 )
 
 var (
 	errNotPermitted = errors.New("this role is not permitted")
 )
 
-type viewer struct {
-	role       role
+type Viewer struct {
+	role       Role
 	playerName string
 	tenantName string
 }
 
-func parseViewer(c echo.Context) (*viewer, error) {
+func parseViewer(c echo.Context) (*Viewer, error) {
 	cookie, err := c.Request().Cookie(cookieName)
 	if err != nil {
 		return nil, fmt.Errorf("error c.Request().Cookie: %w", err)
@@ -191,18 +191,18 @@ func parseViewer(c echo.Context) (*viewer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error parseViewer: %w", err)
 	}
-	var r role
+	var r Role
 	tr, ok := token.Get("role")
 	if !ok {
 		return nil, fmt.Errorf("token is invalid, not have role field: %s", tokenStr)
 	}
 	switch tr {
 	case "admin":
-		r = roleAdmin
+		r = RoleAdmin
 	case "organizer":
-		r = roleOrganizer
+		r = RoleOrganizer
 	case "player":
-		r = rolePlayer
+		r = RolePlayer
 	default:
 		return nil, fmt.Errorf("token is invalid, unknown role: %s", tokenStr)
 	}
@@ -211,7 +211,7 @@ func parseViewer(c echo.Context) (*viewer, error) {
 		return nil, fmt.Errorf("token is invalid, aud field is few or too many: %s", tokenStr)
 	}
 
-	v := &viewer{
+	v := &Viewer{
 		role:       r,
 		playerName: token.Subject(),
 		tenantName: aud[0],
@@ -219,7 +219,7 @@ func parseViewer(c echo.Context) (*viewer, error) {
 	return v, nil
 }
 
-type tenantRow struct {
+type TenantRow struct {
 	ID          int64
 	Name        string
 	DisplayName string
@@ -233,7 +233,7 @@ type dbOrTx interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 }
 
-type accessLogRow struct {
+type AccessLogRow struct {
 	ID            int64
 	PlayerName    string
 	TenantID      int64
@@ -242,7 +242,7 @@ type accessLogRow struct {
 	UpdatedAt     time.Time
 }
 
-type playerRow struct {
+type PlayerRow struct {
 	ID             int64
 	Name           string
 	DisplayName    string
@@ -251,23 +251,23 @@ type playerRow struct {
 	UpdatedAt      time.Time
 }
 
-func retrievePlayerByName(ctx context.Context, tenantDB dbOrTx, name string) (*playerRow, error) {
-	var c playerRow
+func retrievePlayerByName(ctx context.Context, tenantDB dbOrTx, name string) (*PlayerRow, error) {
+	var c PlayerRow
 	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM player WHERE name = ?", name); err != nil {
 		return nil, fmt.Errorf("error Select player: %w", err)
 	}
 	return &c, nil
 }
 
-func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id int64) (*playerRow, error) {
-	var c playerRow
+func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id int64) (*PlayerRow, error) {
+	var c PlayerRow
 	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM player WHERE id = ?", id); err != nil {
 		return nil, fmt.Errorf("error Select player: %w", err)
 	}
 	return &c, nil
 }
 
-type competitionRow struct {
+type CompetitionRow struct {
 	ID         int64
 	Title      string
 	FinishedAt sql.NullTime
@@ -275,15 +275,15 @@ type competitionRow struct {
 	UpdatedAt  time.Time
 }
 
-func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id int64) (*competitionRow, error) {
-	var c competitionRow
+func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id int64) (*CompetitionRow, error) {
+	var c CompetitionRow
 	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM competition WHERE id = ?", id); err != nil {
 		return nil, fmt.Errorf("error Select competition: %w", err)
 	}
 	return &c, nil
 }
 
-type playerScoreRow struct {
+type PlayerScoreRow struct {
 	ID            int64
 	PlayerID      int64
 	CompetitionID int64
@@ -292,13 +292,13 @@ type playerScoreRow struct {
 	UpdatedAt     time.Time
 }
 
-type tenantDetail struct {
+type TenantDetail struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name"`
 }
 
-type tenantsAddHandlerResult struct {
-	Tenant tenantDetail `json:"tenant"`
+type TenantsAddHandlerResult struct {
+	Tenant TenantDetail `json:"tenant"`
 }
 
 func tenantsAddHandler(c echo.Context) error {
@@ -308,7 +308,7 @@ func tenantsAddHandler(c echo.Context) error {
 
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role != roleAdmin {
+	} else if v.role != RoleAdmin {
 		return errNotPermitted
 	}
 
@@ -348,32 +348,32 @@ func tenantsAddHandler(c echo.Context) error {
 		return fmt.Errorf("error tx.Commit: %w", err)
 	}
 
-	res := tenantsAddHandlerResult{
-		Tenant: tenantDetail{
+	res := TenantsAddHandlerResult{
+		Tenant: TenantDetail{
 			Name:        name,
 			DisplayName: displayName,
 		},
 	}
-	if err := c.JSON(http.StatusOK, successResult{Success: true, Data: res}); err != nil {
+	if err := c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res}); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 	return nil
 }
 
-type billingReport struct {
+type BillingReport struct {
 	CompetitionID    int64  `json:"competition_id"`
 	CompetitionTitle string `json:"competition_title"`
 	PlayerCount      int64  `json:"player_count"`
 	BillingYen       int64  `json:"billing_yen"`
 }
 
-func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competitonID int64) (*billingReport, error) {
+func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competitonID int64) (*BillingReport, error) {
 	comp, err := retrieveCompetition(ctx, tenantDB, competitonID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieveCompetition: %w", err)
 	}
 
-	als := []accessLogRow{}
+	als := []AccessLogRow{}
 	if err := centerDB.SelectContext(
 		ctx,
 		als,
@@ -391,7 +391,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competiton
 		billingMap[al.PlayerName] = 10
 	}
 
-	pss := []playerScoreRow{}
+	pss := []PlayerScoreRow{}
 	if err := tenantDB.SelectContext(
 		ctx,
 		&pss,
@@ -416,7 +416,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competiton
 	for _, v := range billingMap {
 		billingYen += v
 	}
-	return &billingReport{
+	return &BillingReport{
 		CompetitionID:    comp.ID,
 		CompetitionTitle: comp.Title,
 		PlayerCount:      int64(len(pss)),
@@ -424,14 +424,14 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competiton
 	}, nil
 }
 
-type tenantWithBilling struct {
+type TenantWithBilling struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name"`
 	BillingYen  int64  `json:"billing"`
 }
 
-type tenantsBillingHandlerResult struct {
-	Tenants []tenantWithBilling `json:"tenants"`
+type TenantsBillingHandlerResult struct {
+	Tenants []TenantWithBilling `json:"tenants"`
 }
 
 func tenantsBillingHandler(c echo.Context) error {
@@ -442,7 +442,7 @@ func tenantsBillingHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role != roleAdmin {
+	} else if v.role != RoleAdmin {
 		return errNotPermitted
 	}
 
@@ -454,16 +454,16 @@ func tenantsBillingHandler(c echo.Context) error {
 	//     scoreに登録されていないplayerでアクセスした人 * 10
 	//   を合計したものを
 	// テナントの課金とする
-	ts := []tenantRow{}
+	ts := []TenantRow{}
 	if err := centerDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY name ASC"); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
-	tenantBillings := make([]tenantWithBilling, 0, len(ts))
+	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	for _, t := range ts {
 		if before != "" && before > t.Name {
 			continue
 		}
-		tb := tenantWithBilling{
+		tb := TenantWithBilling{
 			Name:        t.Name,
 			DisplayName: t.DisplayName,
 		}
@@ -472,7 +472,7 @@ func tenantsBillingHandler(c echo.Context) error {
 			return fmt.Errorf("error connectToTenantDB: %w", err)
 		}
 		defer tenantDB.Close()
-		cs := []competitionRow{}
+		cs := []CompetitionRow{}
 		if err := tenantDB.SelectContext(
 			ctx,
 			&cs,
@@ -492,7 +492,7 @@ func tenantsBillingHandler(c echo.Context) error {
 			break
 		}
 	}
-	if err := c.JSON(http.StatusOK, successResult{
+	if err := c.JSON(http.StatusOK, SuccessResult{
 		Success: true,
 		Data:    tenantBillings,
 	}); err != nil {
@@ -501,21 +501,21 @@ func tenantsBillingHandler(c echo.Context) error {
 	return nil
 }
 
-type playerDetail struct {
+type PlayerDetail struct {
 	Name           string `json:"name"`
 	DisplayName    string `json:"display_name"`
 	IsDisqualified bool   `json:"is_disqualified"`
 }
 
-type playersAddHandlerResult struct {
-	Players []playerDetail `json:"players"`
+type PlayersAddHandlerResult struct {
+	Players []PlayerDetail `json:"players"`
 }
 
 func playersAddHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role == roleOrganizer {
+	} else if v.role == RoleOrganizer {
 		return errNotPermitted
 	}
 
@@ -540,7 +540,7 @@ func playersAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error tenantDB.BeginTxx: %w", err)
 	}
-	pds := make([]playerDetail, 0, len(displayNames))
+	pds := make([]PlayerDetail, 0, len(displayNames))
 	for _, displayName := range displayNames {
 		id, err := dispenseID(ctx)
 		if err != nil {
@@ -561,7 +561,7 @@ func playersAddHandler(c echo.Context) error {
 			ttx.Rollback()
 			return fmt.Errorf("error retrievePlayer: %w", err)
 		}
-		pds = append(pds, playerDetail{
+		pds = append(pds, PlayerDetail{
 			Name:           p.Name,
 			DisplayName:    p.DisplayName,
 			IsDisqualified: p.IsDisqualified,
@@ -571,24 +571,24 @@ func playersAddHandler(c echo.Context) error {
 		return fmt.Errorf("error ttx.Commit: %w", err)
 	}
 
-	res := playersAddHandlerResult{
+	res := PlayersAddHandlerResult{
 		Players: pds,
 	}
-	if err := c.JSON(http.StatusOK, successResult{Success: true, Data: res}); err != nil {
+	if err := c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res}); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 	return nil
 }
 
 type playerDisqualifiedHandlerResult struct {
-	Player playerDetail `json:"player"`
+	Player PlayerDetail `json:"player"`
 }
 
 func playerDisqualifiedHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role == roleOrganizer {
+	} else if v.role == RoleOrganizer {
 		return errNotPermitted
 	}
 
@@ -618,33 +618,33 @@ func playerDisqualifiedHandler(c echo.Context) error {
 	}
 
 	res := playerDisqualifiedHandlerResult{
-		Player: playerDetail{
+		Player: PlayerDetail{
 			Name:           p.Name,
 			DisplayName:    p.DisplayName,
 			IsDisqualified: p.IsDisqualified,
 		},
 	}
-	if err := c.JSON(http.StatusOK, successResult{Success: true, Data: res}); err != nil {
+	if err := c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res}); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 	return nil
 }
 
-type competitionDetail struct {
+type CompetitionDetail struct {
 	ID         int64  `json:"id"`
 	Title      string `json:"title"`
 	IsFinished bool   `json:"is_finished"`
 }
 
-type competitionsAddHandlerResult struct {
-	Competition competitionDetail `json:"competition"`
+type CompetitionsAddHandlerResult struct {
+	Competition CompetitionDetail `json:"competition"`
 }
 
 func competitionsAddHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role == roleOrganizer {
+	} else if v.role == RoleOrganizer {
 		return errNotPermitted
 	}
 
@@ -673,14 +673,14 @@ func competitionsAddHandler(c echo.Context) error {
 		return fmt.Errorf("error Insert competition: %w", err)
 	}
 
-	res := competitionsAddHandlerResult{
-		Competition: competitionDetail{
+	res := CompetitionsAddHandlerResult{
+		Competition: CompetitionDetail{
 			ID:         id,
 			Title:      title,
 			IsFinished: false,
 		},
 	}
-	if err := c.JSON(http.StatusOK, successResult{Success: true, Data: res}); err != nil {
+	if err := c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res}); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 	return nil
@@ -690,7 +690,7 @@ func competitionFinishHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role == roleOrganizer {
+	} else if v.role == RoleOrganizer {
 		return errNotPermitted
 	}
 
@@ -719,7 +719,7 @@ func competitionFinishHandler(c echo.Context) error {
 		return fmt.Errorf("error Update competition: %w", err)
 	}
 
-	if err := c.JSON(http.StatusOK, successResult{Success: true}); err != nil {
+	if err := c.JSON(http.StatusOK, SuccessResult{Success: true}); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 	return nil
@@ -729,7 +729,7 @@ func competitionResultHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role == roleOrganizer {
+	} else if v.role == RoleOrganizer {
 		return errNotPermitted
 	}
 
@@ -753,7 +753,7 @@ func competitionResultHandler(c echo.Context) error {
 		return fmt.Errorf("error retrieveCompetition: %w", err)
 	}
 	if comp.FinishedAt.Valid {
-		res := failureResult{
+		res := FailureResult{
 			Success: false,
 			Message: "competition is finished",
 		}
@@ -836,21 +836,21 @@ func competitionResultHandler(c echo.Context) error {
 		return fmt.Errorf("error txx.Commit: %w", err)
 	}
 
-	if err := c.JSON(http.StatusOK, successResult{Success: true}); err != nil {
+	if err := c.JSON(http.StatusOK, SuccessResult{Success: true}); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 	return nil
 }
 
-type billingHandlerResult struct {
-	Reports []billingReport `json:"reports"`
+type BillingHandlerResult struct {
+	Reports []BillingReport `json:"reports"`
 }
 
 func billingHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role == roleOrganizer {
+	} else if v.role == RoleOrganizer {
 		return errNotPermitted
 	}
 
@@ -864,7 +864,7 @@ func billingHandler(c echo.Context) error {
 	}
 	defer tenantDB.Close()
 
-	cs := []competitionRow{}
+	cs := []CompetitionRow{}
 	if err := tenantDB.SelectContext(
 		ctx,
 		&cs,
@@ -872,7 +872,7 @@ func billingHandler(c echo.Context) error {
 	); err != nil {
 		return fmt.Errorf("error Select competition: %w", err)
 	}
-	tbrs := make([]billingReport, 0, len(cs))
+	tbrs := make([]BillingReport, 0, len(cs))
 	for _, comp := range cs {
 		report, err := billingReportByCompetition(ctx, tenantDB, comp.ID)
 		if err != nil {
@@ -881,9 +881,9 @@ func billingHandler(c echo.Context) error {
 		tbrs = append(tbrs, *report)
 	}
 
-	res := successResult{
+	res := SuccessResult{
 		Success: true,
-		Data: billingHandlerResult{
+		Data: BillingHandlerResult{
 			Reports: tbrs,
 		},
 	}
@@ -900,7 +900,7 @@ type playerScoreDetail struct {
 }
 
 type playerHandlerResult struct {
-	Player playerDetail        `json:"player"`
+	Player PlayerDetail        `json:"player"`
 	Scores []playerScoreDetail `json:"scores"`
 }
 
@@ -936,7 +936,7 @@ func playerHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error retrievePlayerByName: %w", err)
 	}
-	pss := []playerScoreRow{}
+	pss := []PlayerScoreRow{}
 	if err := tenantDB.SelectContext(
 		ctx,
 		&pss,
@@ -957,10 +957,10 @@ func playerHandler(c echo.Context) error {
 		})
 	}
 
-	res := successResult{
+	res := SuccessResult{
 		Success: true,
 		Data: playerHandlerResult{
-			Player: playerDetail{
+			Player: PlayerDetail{
 				Name:           p.Name,
 				DisplayName:    p.DisplayName,
 				IsDisqualified: p.IsDisqualified,
@@ -975,15 +975,15 @@ func playerHandler(c echo.Context) error {
 	return nil
 }
 
-type competitionRank struct {
+type CompetitionRank struct {
 	Rank              int64  `json:"rank"`
 	Score             int64  `json:"score"`
 	PlayerName        string `json:"player_name"`
 	PlayerDisplayName string `json:"player_display_name"`
 }
 
-type competitionRankingHandlerResult struct {
-	Ranks []competitionRank `json:"ranks"`
+type CompetitionRankingHandlerResult struct {
+	Ranks []CompetitionRank `json:"ranks"`
 }
 
 func competitionRankingHandler(c echo.Context) error {
@@ -1022,7 +1022,7 @@ func competitionRankingHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error dispenseID: %w", err)
 	}
-	var t tenantRow
+	var t TenantRow
 	if err := centerDB.SelectContext(ctx, &t, "SELECT * FROM tenant WHERE name = ?", v.tenantName); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
@@ -1043,7 +1043,7 @@ func competitionRankingHandler(c echo.Context) error {
 		}
 	}
 
-	pss := []playerScoreRow{}
+	pss := []PlayerScoreRow{}
 	if err := tenantDB.SelectContext(
 		ctx,
 		&pss,
@@ -1052,7 +1052,7 @@ func competitionRankingHandler(c echo.Context) error {
 	); err != nil {
 		return fmt.Errorf("error Select player_score: %w", err)
 	}
-	crs := make([]competitionRank, 0, len(pss))
+	crs := make([]CompetitionRank, 0, len(pss))
 	for i, ps := range pss {
 		co, err := retrievePlayer(ctx, tenantDB, ps.PlayerID)
 		if err != nil {
@@ -1061,7 +1061,7 @@ func competitionRankingHandler(c echo.Context) error {
 		if int64(i) < rankAfter {
 			continue
 		}
-		crs = append(crs, competitionRank{
+		crs = append(crs, CompetitionRank{
 			Rank:              int64(i + 1),
 			Score:             ps.Score,
 			PlayerName:        co.Name,
@@ -1072,9 +1072,9 @@ func competitionRankingHandler(c echo.Context) error {
 		}
 	}
 
-	res := successResult{
+	res := SuccessResult{
 		Success: true,
-		Data: competitionRankingHandlerResult{
+		Data: CompetitionRankingHandlerResult{
 			Ranks: crs,
 		},
 	}
@@ -1086,7 +1086,7 @@ func competitionRankingHandler(c echo.Context) error {
 }
 
 type competitionsHandlerResult struct {
-	Competitions []competitionDetail
+	Competitions []CompetitionDetail
 }
 
 func competitionsHandler(c echo.Context) error {
@@ -1115,7 +1115,7 @@ func competitionsHandler(c echo.Context) error {
 		return errNotPermitted
 	}
 
-	cs := []competitionRow{}
+	cs := []CompetitionRow{}
 	if err := tenantDB.SelectContext(
 		ctx,
 		&cs,
@@ -1123,16 +1123,16 @@ func competitionsHandler(c echo.Context) error {
 	); err != nil {
 		return fmt.Errorf("error Select competition: %w", err)
 	}
-	cds := make([]competitionDetail, 0, len(cs))
+	cds := make([]CompetitionDetail, 0, len(cs))
 	for _, comp := range cs {
-		cds = append(cds, competitionDetail{
+		cds = append(cds, CompetitionDetail{
 			ID:         comp.ID,
 			Title:      comp.Title,
 			IsFinished: comp.FinishedAt.Valid,
 		})
 	}
 
-	res := successResult{
+	res := SuccessResult{
 		Success: true,
 		Data: competitionsHandlerResult{
 			Competitions: cds,
@@ -1147,7 +1147,7 @@ func competitionsHandler(c echo.Context) error {
 
 const initializeMaxID = 10000 // 仮
 
-type initializeHandlerResult struct {
+type InitializeHandlerResult struct {
 	Lang   string `json:"lang"`
 	Appeal string `json:"appeal"`
 }
@@ -1226,13 +1226,13 @@ func initializeHandler(c echo.Context) error {
 		}
 	}
 
-	res := initializeHandlerResult{
+	res := InitializeHandlerResult{
 		Lang: "go",
 		// 頑張ったポイントやこだわりポイントがあれば書いてください
 		// 競技中の最後に計測したものを参照して、講評記事などで使わせていただきます
 		Appeal: "",
 	}
-	if err := c.JSON(http.StatusOK, successResult{Success: true, Data: res}); err != nil {
+	if err := c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res}); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 
