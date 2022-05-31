@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	tenantDBSchemaFilePath = "../sql/20_schema_tenant.sql"
+	tenantDBSchemaFilePath = "../sql/tenant/10_schema.sql"
 	cookieName             = "isuports_session"
 )
 
