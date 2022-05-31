@@ -64,7 +64,7 @@ func connectToTenantDB(name string) (*sqlx.DB, error) {
 }
 
 func getTenantName(c echo.Context) (string, error) {
-	baseHost := getEnv("ISUCON_BASE_HOSTNAME", ".isuports.isucon.local")
+	baseHost := getEnv("ISUCON_BASE_HOSTNAME", ".t.isucon.dev")
 	host := c.Request().Host
 	if !strings.HasSuffix(host, baseHost) {
 		return "", fmt.Errorf("host is not contains %s: %s", baseHost, host)
@@ -435,7 +435,7 @@ type tenantsBillingHandlerResult struct {
 }
 
 func tenantsBillingHandler(c echo.Context) error {
-	if c.Request().Host != getEnv("ISUCON_ADMIN_HOSTNAME", "isuports-admin.isucon.local") {
+	if c.Request().Host != getEnv("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
 		return echo.ErrNotFound
 	}
 
