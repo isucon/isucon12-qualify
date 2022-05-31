@@ -21,7 +21,7 @@ CREATE TABLE `id_generator` (
 
 CREATE TABLE `access_log` (
   `id` BIGINT UNSIGNED NOT NULL,
-  `player_name` VARCHAR(256) UNSIGNED NOT NULL,
+  `player_name` VARCHAR(256) NOT NULL,
   `tenant_id` BIGINT UNSIGNED NOT NULL,
   `competition_id` BIGINT UNSIGNED NOT NULL,
   `created_at` DATETIME(6) NOT NULL,
