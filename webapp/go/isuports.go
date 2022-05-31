@@ -1,4 +1,4 @@
-package main
+package isuports
 
 import (
 	"context"
@@ -91,7 +91,7 @@ func dispenseID(ctx context.Context) (int64, error) {
 
 var centerDB *sqlx.DB
 
-func main() {
+func Run() {
 	e := echo.New()
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
