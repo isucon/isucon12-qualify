@@ -64,7 +64,7 @@ func connectToTenantDB(name string) (*sqlx.DB, error) {
 }
 
 func getTenantName(c echo.Context) (string, error) {
-	baseHost := getEnv("ISUCON_BASE_HOSTNAME", ".isuports.isucon.local")
+	baseHost := getEnv("ISUCON_BASE_HOSTNAME", ".t.isucon.dev")
 	host := c.Request().Host
 	if !strings.HasSuffix(host, baseHost) {
 		return "", fmt.Errorf("host is not contains %s: %s", baseHost, host)
@@ -302,6 +302,10 @@ type tenantsAddHandlerResult struct {
 }
 
 func tenantsAddHandler(c echo.Context) error {
+	if c.Request().Host != getEnv("ISUCON_ADMIN_HOSTNAME", "isuports-admin.isucon.local") {
+		return echo.ErrNotFound
+	}
+
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != roleAdmin {
@@ -324,7 +328,7 @@ func tenantsAddHandler(c echo.Context) error {
 		tx.Rollback()
 		return fmt.Errorf("error dispenseID: %w", err)
 	}
-	name := strconv.FormatInt(id, 10)
+	name := fmt.Sprintf("tenant-%06d", id)
 	now := time.Now()
 	_, err = tx.ExecContext(
 		ctx,
@@ -431,6 +435,10 @@ type tenantsBillingHandlerResult struct {
 }
 
 func tenantsBillingHandler(c echo.Context) error {
+	if c.Request().Host != getEnv("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
+		return echo.ErrNotFound
+	}
+
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
@@ -1183,6 +1191,12 @@ func initializeHandler(c echo.Context) error {
 		ctx,
 		"UPDATE id_generator SET id = ? WHERE stub = ?",
 		initializeMaxID, "a",
+	); err != nil {
+		return fmt.Errorf("error Update id_generator: %w", err)
+	}
+	if _, err := centerDB.ExecContext(
+		ctx,
+		fmt.Sprintf("ALTER TABLE id_generator AUTO_INCREMENT = %d", initializeMaxID),
 	); err != nil {
 		return fmt.Errorf("error Update id_generator: %w", err)
 	}
