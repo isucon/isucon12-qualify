@@ -2,8 +2,6 @@ package bench
 
 import (
 	"context"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"os"
 	"sync"
@@ -13,8 +11,6 @@ import (
 	"github.com/isucon/isucandar/failure"
 	"github.com/isucon/isucandar/score"
 	"github.com/isucon/isucandar/worker"
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
 var (
@@ -203,30 +199,4 @@ func getEnv(key string, defaultValue string) string {
 		return val
 	}
 	return defaultValue
-}
-
-func JWT() ([]byte, error) {
-
-	// using pem
-	// $ openssl genrsa 2048
-	pemkey := getEnv("ISUCON_JWT_KEY", "")
-
-	block, _ := pem.Decode([]byte(pemkey))
-	rawkey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("error x509.ParsePKCS1PrivateKey: %w", err)
-	}
-
-	token := jwt.New()
-	token.Set("iss", "isucon_bench")
-	token.Set("sub", "player_name")
-	token.Set("aud", "tenant_name")
-	token.Set("role", "admin")
-
-	signed, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, rawkey))
-	if err != nil {
-		return nil, fmt.Errorf("error jwt.Sign: %w", err)
-	}
-
-	return signed, nil
 }

@@ -1,53 +1,75 @@
 package bench
 
 import (
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
+	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt"
 	"github.com/isucon/isucandar/agent"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
-// TODO: ユーザーの挙動みたいなのがここに入る、たぶん
 const (
-	AccountRoleAdmin      = "admin"
-	AccountRoleOrganizer  = "organizer"
-	AccountRoleCompetitor = "competitor"
+	AccountRoleAdmin     = "admin"
+	AccountRoleOrganizer = "organizer"
+	AccountRolePlayer    = "player"
 )
 
 // TODO: 一旦何が必要かまだわからないのでAccount、いずれ分離したりするかも
 type Account struct {
-	mu    sync.RWMutex
-	Agent *agent.Agent
-	// Agent.httpClient.Jarにjwtが入るのでログイン叩くのは考えなくて大丈夫っぽ
-	// もしベンチマーカーで生成する話になったら考えるけどset-cookieすればよさそうだ
+	mu      sync.RWMutex
+	Agent   *agent.Agent
+	Option  Option // SetJWT時にGetAgentをしたいのでしぶしぶ含めた
 	Role    string
-	baseURL string // {admin,tenant} endpoint
+	BaseURL string // {admin,tenant} endpoint
 }
 
+// SetJWT Agentがなければ作って、JWTをcookieに入れる
 func (ac *Account) SetJWT(sub, aud string) error {
-	if ac.Agent == nil {
-		return fmt.Errorf("Account.Agent is nil")
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"iss": "isu",
-		"sub": sub,
-		"aud": aud,
-		"exp": time.Now().Add(time.Hour * 24),
-	})
-
-	// Sign and get the complete encoded token as a string using the secret
-	var hmacSampleSecret []byte
-	tokenString, err := token.SignedString(hmacSampleSecret)
+	ag, err := ac.GetAgent()
 	if err != nil {
-		return err
+		return fmt.Errorf("error Account.GetAgent: %w", err)
 	}
-	_ = tokenString // TODO: ac.Agentに埋める
+
+	pemkey := getEnv("ISUCON_JWT_KEY", "")
+
+	block, _ := pem.Decode([]byte(pemkey))
+	rawkey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("error x509.ParsePKCS1PrivateKey: %w", err)
+	}
+
+	token := jwt.New()
+	token.Set("iss", "isuports")
+	token.Set("aud", aud)
+	token.Set("sub", sub)
+	token.Set("role", ac.Role)
+	token.Set("exp", time.Now().Add(24*time.Hour).Unix())
+
+	signedToken, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, rawkey))
+	if err != nil {
+		return fmt.Errorf("error jwt.Sign: %w", err)
+	}
+
+	path, err := url.Parse(ac.BaseURL)
+	if err != nil {
+		return fmt.Errorf("error url.Parse(%s): %w", ac.BaseURL, err)
+	}
+	ag.HttpClient.Jar.SetCookies(path, []*http.Cookie{
+		&http.Cookie{
+			Name:  "isuports_session",
+			Value: string(signedToken),
+		},
+	})
 	return nil
 }
 
-func (ac *Account) GetAgent(opt Option) (*agent.Agent, error) {
+func (ac *Account) GetAgent() (*agent.Agent, error) {
 	ac.mu.RLock()
 	ag := ac.Agent
 	ac.mu.RUnlock()
@@ -58,7 +80,7 @@ func (ac *Account) GetAgent(opt Option) (*agent.Agent, error) {
 	ac.mu.Lock()
 	defer ac.mu.Unlock()
 
-	ag, err := opt.NewAgent(false)
+	ag, err := ac.Option.NewAgent(false)
 	if err != nil {
 		return nil, err
 	}
@@ -66,23 +88,12 @@ func (ac *Account) GetAgent(opt Option) (*agent.Agent, error) {
 	return ag, nil
 }
 
-type Tenant struct {
-	// `id` BIGINT UNSIGNED NOT NULL,
-	// `identifier` VARCHAR(191) NOT NULL,
-	// `name` VARCHAR(191) NOT NULL,
-	// `image` LONGBLOB NOT NULL,
-}
+// TODO ここはwebappのgoからもってこれそう
+type Tenant struct{}
 type Tenants []*Tenant
 
-type Competition struct {
-	// `id` INTEGER NOT NULL PRIMARY KEY,
-	// `title` TEXT NOT NULL,
-}
+type Competition struct{}
 type Competitions []*Competition
 
-type Competitor struct {
-	// `id` INTEGER PRIMARY KEY,
-	// `identifier` TEXT NOT NULL UNIQUE,
-	// `name` TEXT NOT NULL,
-}
+type Competitor struct{}
 type Competitors []*Competitor

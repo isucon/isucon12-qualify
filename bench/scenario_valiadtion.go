@@ -2,8 +2,6 @@ package bench
 
 import (
 	"context"
-	"net/http"
-	"net/url"
 
 	"github.com/isucon/isucandar"
 )
@@ -20,39 +18,40 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// SaaS管理者, 主催者, 参加者のagent作成
 	admin := Account{
-		Role: AccountRoleAdmin,
+		Role:    AccountRoleAdmin,
+		BaseURL: "http://localhost:3000/",
+		Option:  sc.Option,
 	}
-	adminAg, err := admin.GetAgent(sc.Option)
+	if err := admin.SetJWT("admin", "admin"); err != nil {
+		return err
+	}
+	adminAg, err := admin.GetAgent()
 	if err != nil {
 		return err
 	}
-	adminJWT, err := JWT()
-	if err != nil {
-		return err
-	}
-	path, err := url.Parse("http://localhost:3000/")
-	if err != nil {
-		return err
-	}
-	adminAg.HttpClient.Jar.SetCookies(path, []*http.Cookie{
-		&http.Cookie{
-			Name:  "isuports_session",
-			Value: string(adminJWT),
-		},
-	})
 
 	organizer := Account{
-		Role: AccountRoleOrganizer,
+		Role:    AccountRoleOrganizer,
+		BaseURL: "http://localhost:3000/",
+		Option:  sc.Option,
 	}
-	orgAg, err := organizer.GetAgent(sc.Option)
+	if err := organizer.SetJWT("_tenant_name_", "organizer"); err != nil {
+		return err
+	}
+	orgAg, err := organizer.GetAgent()
 	if err != nil {
 		return err
 	}
 
-	competitor := Account{
-		Role: AccountRoleCompetitor,
+	player := Account{
+		Role:    AccountRolePlayer,
+		BaseURL: "http://localhost:3000/",
+		Option:  sc.Option,
 	}
-	compAg, err := competitor.GetAgent(sc.Option)
+	if err := player.SetJWT("_tenantname_", "_playername_"); err != nil {
+		return err
+	}
+	playerAg, err := player.GetAgent()
 	if err != nil {
 		return err
 	}
@@ -119,21 +118,21 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// 大会参加者API
 	{
-		res, err := GetPlayerAction(ctx, "player", compAg)
+		res, err := GetPlayerAction(ctx, "player", playerAg)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, "player", compAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, "player", playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := GetPlayerCompetitionsAction(ctx, compAg)
+		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
 		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
