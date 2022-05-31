@@ -10,6 +10,7 @@ services:
       - "8080:80"
     links:
       - webapp
+      - blackauth
     restart: always
 
   blackauth:
