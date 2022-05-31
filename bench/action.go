@@ -41,9 +41,9 @@ func GetRootAction(ctx context.Context, ag *agent.Agent) (*http.Response, error)
 
 func PostAdminTenantsAddAction(ctx context.Context, name string, ag *agent.Agent) (*http.Response, error) {
 	body, reset, err := newRequestBody(struct {
-		Name string `json:"name"`
+		DisplayName string `json:"display_name"`
 	}{
-		Name: name,
+		DisplayName: name,
 	})
 	if err != nil {
 		return nil, err
