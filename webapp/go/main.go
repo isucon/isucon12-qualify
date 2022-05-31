@@ -373,22 +373,22 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competiton
 		return nil, fmt.Errorf("error retrieveCompetition: %w", err)
 	}
 
-	aals := []accessLogRow{}
+	als := []accessLogRow{}
 	if err := centerDB.SelectContext(
 		ctx,
-		aals,
+		als,
 		"SELECT * FROM access_log WHERE competition_id = ?",
 		comp.ID,
 	); err != nil {
 		return nil, fmt.Errorf("error Select access_log: %w", err)
 	}
 	billingMap := map[string]int64{}
-	for _, aal := range aals {
+	for _, al := range als {
 		// competition.finished_atよりもあとの場合は、終了後にアクセスしたとみなしてアクセスしたとみなさない
-		if comp.FinishedAt.Valid && comp.FinishedAt.Time.Before(aal.UpdatedAt) {
+		if comp.FinishedAt.Valid && comp.FinishedAt.Time.Before(al.CreatedAt) {
 			continue
 		}
-		billingMap[aal.PlayerName] = 10
+		billingMap[al.PlayerName] = 10
 	}
 
 	pss := []playerScoreRow{}
