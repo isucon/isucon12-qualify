@@ -35,7 +35,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		BaseURL: "http://localhost:3000/",
 		Option:  sc.Option,
 	}
-	if err := organizer.SetJWT("_tenant_name_", "organizer"); err != nil {
+	if err := organizer.SetJWT("validate_tenantname", "organizer"); err != nil {
 		return err
 	}
 	orgAg, err := organizer.GetAgent()
@@ -48,7 +48,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		BaseURL: "http://localhost:3000/",
 		Option:  sc.Option,
 	}
-	if err := player.SetJWT("_tenantname_", "_playername_"); err != nil {
+	if err := player.SetJWT("validate_tenantname", "validate_playername"); err != nil {
 		return err
 	}
 	playerAg, err := player.GetAgent()
@@ -58,7 +58,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// SaaS管理API
 	{
-		res, err := PostAdminTenantsAddAction(ctx, "tenant_name", adminAg)
+		res, err := PostAdminTenantsAddAction(ctx, "validate_tenantname", adminAg)
 		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
@@ -74,21 +74,21 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// 大会主催者API
 	{
-		res, err := PostOrganizerCompetitonsAddAction(ctx, "title", orgAg)
+		res, err := PostOrganizerCompetitonsAddAction(ctx, "validate_competition", "tenant-010001", orgAg)
 		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := PostOrganizerPlayersAddAction(ctx, "name", orgAg)
+		res, err := PostOrganizerPlayersAddAction(ctx, "validate_playername", "tenant-010001", orgAg)
 		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, "competitor_id", orgAg)
+		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, "validate_playername", "tenant-010001", orgAg)
 		v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
@@ -118,14 +118,14 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// 大会参加者API
 	{
-		res, err := GetPlayerAction(ctx, "player", playerAg)
+		res, err := GetPlayerAction(ctx, "validate_playername", playerAg)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, "player", playerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, "validate_playername", playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v

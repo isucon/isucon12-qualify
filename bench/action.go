@@ -1,31 +1,17 @@
 package bench
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/isucon/isucandar/agent"
 )
 
-var globalPool = sync.Pool{
-	New: func() interface{} {
-		return &bytes.Buffer{}
-	},
-}
-
 func PostInitializeAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
-	body, reset, err := newRequestBody(struct{}{})
-	if err != nil {
-		return nil, err
-	}
-	defer reset()
-	req, err := ag.POST("/initialize", body)
+	req, err := ag.POST("/initialize", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +31,6 @@ func GetRootAction(ctx context.Context, ag *agent.Agent) (*http.Response, error)
 func PostAdminTenantsAddAction(ctx context.Context, name string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
 	form.Set("display_name", name)
-
 	req, err := ag.POST("/admin/api/tenants/add", strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
@@ -64,63 +49,45 @@ func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantID int, ag *a
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerPlayersAddAction(ctx context.Context, name string, ag *agent.Agent) (*http.Response, error) {
-	body, reset, err := newRequestBody(struct {
-		Name string `json:"name"`
-	}{
-		Name: name,
-	})
+func PostOrganizerPlayersAddAction(ctx context.Context, playerName, tenantName string, ag *agent.Agent) (*http.Response, error) {
+	form := url.Values{}
+	form.Set("name", playerName) // TODO: bulk insertできるらしい
+	req, err := ag.POST("/organizer/api/players/add", strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
 	}
-	defer reset()
-	req, err := ag.POST("/organizer/api/players/add", body)
-	if err != nil {
-		return nil, err
-	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, player string, ag *agent.Agent) (*http.Response, error) {
-	body, reset, err := newRequestBody(struct{}{})
+func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, playerName, tenantName string, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.POST("/organizer/api/player/"+playerName+"/disqualified", nil)
 	if err != nil {
 		return nil, err
 	}
-	defer reset()
-	req, err := ag.POST("/organizer/api/player/"+player+"/disqualified", body)
-	if err != nil {
-		return nil, err
-	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerCompetitonsAddAction(ctx context.Context, title string, ag *agent.Agent) (*http.Response, error) {
-	body, reset, err := newRequestBody(struct {
-		Title string `json:"title"`
-	}{
-		Title: title,
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer reset()
-	req, err := ag.POST("/organizer/api/competitions/add", body)
+func PostOrganizerCompetitonsAddAction(ctx context.Context, title, tenantName string, ag *agent.Agent) (*http.Response, error) {
+	form := url.Values{}
+	form.Set("title", title)
+	req, err := ag.POST("/organizer/api/competitions/add", strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
 	}
 
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 	return ag.Do(ctx, req)
 }
 
 func PostOrganizerCompetitionFinishAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
-	body, reset, err := newRequestBody(struct{}{})
-	if err != nil {
-		return nil, err
-	}
-	defer reset()
-	req, err := ag.POST("/organizer/api/competition/"+competition+"/finish", body)
+	req, err := ag.POST("/organizer/api/competition/"+competition+"/finish", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -130,12 +97,7 @@ func PostOrganizerCompetitionFinishAction(ctx context.Context, competition strin
 
 func PostOrganizerCompetitionResultAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
 	// multipart/form-dataをあとでいれる
-	body, reset, err := newRequestBody(struct{}{})
-	if err != nil {
-		return nil, err
-	}
-	defer reset()
-	req, err := ag.POST("/organizer/api/competition/"+competition+"/result", body)
+	req, err := ag.POST("/organizer/api/competition/"+competition+"/result", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -177,17 +139,4 @@ func GetPlayerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Re
 	}
 
 	return ag.Do(ctx, req)
-}
-
-func newRequestBody(obj any) (*bytes.Buffer, func(), error) {
-	b := globalPool.Get().(*bytes.Buffer)
-	reset := func() {
-		b.Reset()
-		globalPool.Put(b)
-	}
-	if err := json.NewEncoder(b).Encode(obj); err != nil {
-		reset()
-		return nil, nil, err
-	}
-	return b, reset, nil
 }
