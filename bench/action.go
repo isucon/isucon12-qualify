@@ -5,6 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/isucon/isucandar/agent"
@@ -40,25 +43,20 @@ func GetRootAction(ctx context.Context, ag *agent.Agent) (*http.Response, error)
 }
 
 func PostAdminTenantsAddAction(ctx context.Context, name string, ag *agent.Agent) (*http.Response, error) {
-	body, reset, err := newRequestBody(struct {
-		DisplayName string `json:"display_name"`
-	}{
-		DisplayName: name,
-	})
+	form := url.Values{}
+	form.Set("display_name", name)
+
+	req, err := ag.POST("/admin/api/tenants/add", strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
 	}
-	defer reset()
-	req, err := ag.POST("/admin/api/tenants/add", body)
-	if err != nil {
-		return nil, err
-	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	return ag.Do(ctx, req)
 }
 
-func GetAdminTenantsBillingAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/admin/api/tenants/billing")
+func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantID int, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.GET("/admin/api/tenants/billing?before=" + strconv.Itoa(beforeTenantID))
 	if err != nil {
 		return nil, err
 	}

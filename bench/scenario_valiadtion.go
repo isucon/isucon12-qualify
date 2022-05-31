@@ -59,14 +59,14 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// SaaS管理API
 	{
-		res, err := PostAdminTenantsAddAction(ctx, "name", adminAg)
+		res, err := PostAdminTenantsAddAction(ctx, "tenant_name", adminAg)
 		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 	{
-		res, err := GetAdminTenantsBillingAction(ctx, adminAg)
+		res, err := GetAdminTenantsBillingAction(ctx, 111 /*tenant id*/, adminAg)
 		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200))
 		if !v.IsEmpty() {
 			return v
