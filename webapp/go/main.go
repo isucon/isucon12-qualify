@@ -302,6 +302,11 @@ type tenantsAddHandlerResult struct {
 }
 
 func tenantsAddHandler(c echo.Context) error {
+	if c.Request().Host != getEnv("ISUCON_ADMIN_HOSTNAME", "isuports-admin.isucon.local") {
+		http.NotFound(c.Response(), c.Request())
+		return nil
+	}
+
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != roleAdmin {
@@ -431,6 +436,11 @@ type tenantsBillingHandlerResult struct {
 }
 
 func tenantsBillingHandler(c echo.Context) error {
+	if c.Request().Host != getEnv("ISUCON_ADMIN_HOSTNAME", "isuports-admin.isucon.local") {
+		http.NotFound(c.Response(), c.Request())
+		return nil
+	}
+
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
