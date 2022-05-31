@@ -328,7 +328,7 @@ func tenantsAddHandler(c echo.Context) error {
 		tx.Rollback()
 		return fmt.Errorf("error dispenseID: %w", err)
 	}
-	name := strconv.FormatInt(id, 10)
+	name := fmt.Sprintf("tenant-%06d", id)
 	now := time.Now()
 	_, err = tx.ExecContext(
 		ctx,
