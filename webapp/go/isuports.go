@@ -2,8 +2,10 @@ package isuports
 
 import (
 	"context"
+	"crypto/x509"
 	"database/sql"
 	"encoding/csv"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -22,7 +24,6 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
 	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -182,9 +183,10 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 	tokenStr := cookie.Value
 
 	keysrc := getEnv("ISUCON_JWT_KEY", "")
-	key, err := jwk.ParseKey([]byte(keysrc))
+	block, _ := pem.Decode([]byte(keysrc))
+	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("error jwk.ParseKey: %w", err)
+		return nil, fmt.Errorf("error x509.ParsePKCS1PrivateKey: %w", err)
 	}
 
 	token, err := jwt.Parse([]byte(tokenStr), jwt.WithKey(jwa.RS256, key))
@@ -220,11 +222,11 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 }
 
 type TenantRow struct {
-	ID          int64
-	Name        string
-	DisplayName string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID          int64     `db:"id"`
+	Name        string    `db:"name"`
+	DisplayName string    `db:"display_name"`
+	CreatedAt   time.Time `db:"created_at"`
+	UpdatedAt   time.Time `db:"updated_at"`
 }
 
 type dbOrTx interface {
@@ -234,12 +236,12 @@ type dbOrTx interface {
 }
 
 type PlayerRow struct {
-	ID             int64
-	Name           string
-	DisplayName    string
-	IsDisqualified bool
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID             int64     `db:"id"`
+	Name           string    `db:"name"`
+	DisplayName    string    `db:"display_name"`
+	IsDisqualified bool      `db:"is_disqualified"`
+	CreatedAt      time.Time `db:"created_at"`
+	UpdatedAt      time.Time `db:"updated_at"`
 }
 
 func retrievePlayerByName(ctx context.Context, tenantDB dbOrTx, name string) (*PlayerRow, error) {
@@ -259,11 +261,11 @@ func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id int64) (*PlayerRow,
 }
 
 type CompetitionRow struct {
-	ID         int64
-	Title      string
-	FinishedAt sql.NullTime
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID         int64        `db:"id"`
+	Title      string       `db:"title"`
+	FinishedAt sql.NullTime `db:"finished_at"`
+	CreatedAt  time.Time    `db:"created_at"`
+	UpdatedAt  time.Time    `db:"updated_at"`
 }
 
 func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id int64) (*CompetitionRow, error) {
@@ -275,12 +277,12 @@ func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id int64) (*Compe
 }
 
 type PlayerScoreRow struct {
-	ID            int64
-	PlayerID      int64
-	CompetitionID int64
-	Score         int64
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID            int64     `db:"id"`
+	PlayerID      int64     `db:"player_id"`
+	CompetitionID int64     `db:"competition_id"`
+	Score         int64     `db:"score"`
+	CreatedAt     time.Time `db:"created_at"`
+	UpdatedAt     time.Time `db:"updated_at"`
 }
 
 type TenantDetail struct {
@@ -323,7 +325,7 @@ func tenantsAddHandler(c echo.Context) error {
 	now := time.Now()
 	_, err = tx.ExecContext(
 		ctx,
-		"INSERT INTO `tenant` (`id`, `name`, `display_name`, `created_at`, `updated_at`)",
+		"INSERT INTO `tenant` (`id`, `name`, `display_name`, `created_at`, `updated_at`) VALUES (?, ?, ?, ?, ?)",
 		id, name, displayName, now, now,
 	)
 	if err != nil {
@@ -359,8 +361,8 @@ type BillingReport struct {
 }
 
 type VisitHistoryRow struct {
-	PlayerName   string
-	MinCreatedAt time.Time
+	PlayerName   string    `db:"player_name"`
+	MinCreatedAt time.Time `db:"min_created_at"`
 }
 
 func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competitonID int64) (*BillingReport, error) {
