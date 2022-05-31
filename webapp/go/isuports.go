@@ -310,10 +310,6 @@ func tenantsAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error centerDB.BeginTxx: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, "LOCK TABLE `tenant` WRITE"); err != nil {
-		tx.Rollback()
-		return fmt.Errorf("error Lock table: %w", err)
-	}
 	id, err := dispenseID(ctx)
 	if err != nil {
 		tx.Rollback()
