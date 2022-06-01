@@ -1,1 +1,4 @@
 builder
+*.db
+*.sql
+*.tar.gz
