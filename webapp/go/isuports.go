@@ -319,7 +319,7 @@ func tenantsAddHandler(c echo.Context) error {
 		tx.Rollback()
 		return fmt.Errorf("error dispenseID: %w", err)
 	}
-	name := fmt.Sprintf("tenant-%06d", id)
+	name := fmt.Sprintf("tenant-%d", id)
 	now := time.Now()
 	_, err = tx.ExecContext(
 		ctx,
@@ -1147,8 +1147,9 @@ func competitionsHandler(c echo.Context) error {
 	return nil
 }
 
-const initializeMaxID = 10000                                                             // 仮
-var initializeMaxVisitHistoryCreatedAt = time.Date(2022, 06, 31, 23, 59, 59, 0, time.UTC) // 仮
+const initializeMaxID = 2678400000
+
+var initializeMaxVisitHistoryCreatedAt = time.Date(2022, 05, 31, 23, 59, 59, 0, time.UTC)
 
 type InitializeHandlerResult struct {
 	Lang   string `json:"lang"`

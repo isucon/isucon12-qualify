@@ -24,13 +24,13 @@ import (
 )
 
 var fake = faker.New()
-var now = time.Now()
 
-var epoch = time.Date(2022, 05, 01, 0, 0, 0, 0, time.UTC) // サービス開始時点(IDの起点)
-var playersNumByTenant = 1000                             // テナントごとのplayer数
-var competitionsNumByTenant = 100                         // テナントごとの大会数
-var disqualifiedRate = 10                                 // player失格確率
-var visitsByCompetition = 30                              // 1大会のplayerごとの訪問数
+var epoch = time.Date(2022, 05, 01, 0, 0, 0, 0, time.UTC)  // サービス開始時点(IDの起点)
+var now = time.Date(2022, 05, 31, 23, 59, 59, 0, time.UTC) // 初期データの終点
+var playersNumByTenant = 1000                              // テナントごとのplayer数
+var competitionsNumByTenant = 100                          // テナントごとの大会数
+var disqualifiedRate = 10                                  // player失格確率
+var visitsByCompetition = 30                               // 1大会のplayerごとの訪問数
 
 var tenantDBSchemaFilePath = "../webapp/sql/tenant/10_schema.sql"
 var adminDBSchemaFilePath = "../webapp/sql/admin/10_schema.sql"
@@ -134,8 +134,8 @@ func storeAdmin(db *sqlx.DB, tenant *isuports.TenantRow, visitHistories []*isupo
 			from = i
 		}
 	}
-
-	if _, err := tx.Exec(`REPLACE INTO id_generator (id, stub) VALUES (?, ?)`, genID(now), "a"); err != nil {
+	maxID := genID(now.Add(time.Second)) / 1000 * 1000
+	if _, err := tx.Exec(`REPLACE INTO id_generator (id, stub) VALUES (?, ?)`, maxID, "a"); err != nil {
 		return err
 	}
 
