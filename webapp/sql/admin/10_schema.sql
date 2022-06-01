@@ -1,3 +1,5 @@
+USE `isuports`;
+
 DROP TABLE IF EXISTS `tenant`;
 DROP TABLE IF EXISTS `id_generator`;
 DROP TABLE IF EXISTS `visit_history`;
