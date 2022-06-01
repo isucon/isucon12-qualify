@@ -372,7 +372,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competiton
 	vhs := []VisitHistoryRow{}
 	if err := centerDB.SelectContext(
 		ctx,
-		vhs,
+		&vhs,
 		"SELECT player_name, MIN(created_at) AS min_created_at FROM visit_history WHERE competition_id = ? GROUP BY player_name",
 		comp.ID,
 	); err != nil && err != sql.ErrNoRows {
