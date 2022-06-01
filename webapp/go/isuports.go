@@ -246,7 +246,7 @@ type PlayerRow struct {
 
 func retrievePlayerByName(ctx context.Context, tenantDB dbOrTx, name string) (*PlayerRow, error) {
 	var c PlayerRow
-	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM player WHERE name = ?", name); err != nil {
+	if err := tenantDB.GetContext(ctx, &c, "SELECT * FROM player WHERE name = ?", name); err != nil {
 		return nil, fmt.Errorf("error Select player: %w", err)
 	}
 	return &c, nil
@@ -254,7 +254,7 @@ func retrievePlayerByName(ctx context.Context, tenantDB dbOrTx, name string) (*P
 
 func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id int64) (*PlayerRow, error) {
 	var c PlayerRow
-	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM player WHERE id = ?", id); err != nil {
+	if err := tenantDB.GetContext(ctx, &c, "SELECT * FROM player WHERE id = ?", id); err != nil {
 		return nil, fmt.Errorf("error Select player: %w", err)
 	}
 	return &c, nil
@@ -270,7 +270,7 @@ type CompetitionRow struct {
 
 func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id int64) (*CompetitionRow, error) {
 	var c CompetitionRow
-	if err := tenantDB.SelectContext(ctx, &c, "SELECT * FROM competition WHERE id = ?", id); err != nil {
+	if err := tenantDB.GetContext(ctx, &c, "SELECT * FROM competition WHERE id = ?", id); err != nil {
 		return nil, fmt.Errorf("error Select competition: %w", err)
 	}
 	return &c, nil
@@ -509,7 +509,7 @@ func playersAddHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role == RoleOrganizer {
+	} else if v.role != RoleOrganizer {
 		return errNotPermitted
 	}
 
@@ -582,7 +582,7 @@ func playerDisqualifiedHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role == RoleOrganizer {
+	} else if v.role != RoleOrganizer {
 		return errNotPermitted
 	}
 
@@ -638,7 +638,7 @@ func competitionsAddHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role == RoleOrganizer {
+	} else if v.role != RoleOrganizer {
 		return errNotPermitted
 	}
 
@@ -684,7 +684,7 @@ func competitionFinishHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role == RoleOrganizer {
+	} else if v.role != RoleOrganizer {
 		return errNotPermitted
 	}
 
@@ -723,7 +723,7 @@ func competitionResultHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role == RoleOrganizer {
+	} else if v.role != RoleOrganizer {
 		return errNotPermitted
 	}
 
@@ -844,7 +844,7 @@ func billingHandler(c echo.Context) error {
 	ctx := c.Request().Context()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role == RoleOrganizer {
+	} else if v.role != RoleOrganizer {
 		return errNotPermitted
 	}
 
@@ -1013,7 +1013,7 @@ func competitionRankingHandler(c echo.Context) error {
 
 	now := time.Now()
 	var t TenantRow
-	if err := centerDB.SelectContext(ctx, &t, "SELECT * FROM tenant WHERE name = ?", v.tenantName); err != nil {
+	if err := centerDB.GetContext(ctx, &t, "SELECT * FROM tenant WHERE name = ?", v.tenantName); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
 
