@@ -24,19 +24,22 @@ import (
 )
 
 var fake = faker.New()
-var now = time.Now()
 
-var epoch = time.Date(2022, 05, 01, 0, 0, 0, 0, time.UTC) // サービス開始時点(IDの起点)
-var playersNumByTenant = 1000                             // テナントごとのplayer数
-var competitionsNumByTenant = 100                         // テナントごとの大会数
-var disqualifiedRate = 10                                 // player失格確率
-var visitsByCompetition = 30                              // 1大会のplayerごとの訪問数
+var epoch = time.Date(2022, 05, 01, 0, 0, 0, 0, time.UTC)  // サービス開始時点(IDの起点)
+var now = time.Date(2022, 05, 31, 23, 59, 59, 0, time.UTC) // 初期データの終点
+var playersNumByTenant = 1000                              // テナントごとのplayer数
+var competitionsNumByTenant = 100                          // テナントごとの大会数
+var disqualifiedRate = 10                                  // player失格確率
+var visitsByCompetition = 30                               // 1大会のplayerごとの訪問数
+var maxID int64                                            // webapp初期化時の起点ID
 
 var tenantDBSchemaFilePath = "../webapp/sql/tenant/10_schema.sql"
 var adminDBSchemaFilePath = "../webapp/sql/admin/10_schema.sql"
 
 func init() {
 	os.Setenv("TZ", "UTC")
+	diff := now.Add(time.Second).Sub(epoch)
+	maxID = int64(diff.Seconds()) * 1000
 }
 
 func main() {
@@ -71,25 +74,37 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	if err := storeMaxID(db); err != nil {
+		log.Fatal(err)
+	}
 }
 
 var mu sync.Mutex
 var idMap = map[int64]int64{}
+var generatedMaxID int64
 
 func genID(ts time.Time) int64 {
 	mu.Lock()
 	defer mu.Unlock()
 	diff := ts.Sub(epoch)
 	id := int64(diff.Seconds())
+	var newID int64
 	if _, exists := idMap[id]; !exists {
 		idMap[id] = fake.Int64Between(0, 99)
-		return id*1000 + idMap[id]
+		newID = id*1000 + idMap[id]
 	} else if idMap[id] < 999 {
 		idMap[id]++
-		return id*1000 + idMap[id]
+		newID = id*1000 + idMap[id]
+	} else {
+		log.Fatalf("too many id at %s", ts)
 	}
-	log.Fatalf("too many id at %s", ts)
-	return 0
+	if newID > generatedMaxID {
+		generatedMaxID = newID
+	}
+	if generatedMaxID >= maxID {
+		panic("generatedMaxID must be smaller than maxID")
+	}
+	return newID
 }
 
 func adminDB() (*sqlx.DB, error) {
@@ -134,12 +149,14 @@ func storeAdmin(db *sqlx.DB, tenant *isuports.TenantRow, visitHistories []*isupo
 			from = i
 		}
 	}
+	return tx.Commit()
+	return nil
+}
 
-	if _, err := tx.Exec(`REPLACE INTO id_generator (id, stub) VALUES (?, ?)`, genID(now), "a"); err != nil {
+func storeMaxID(db *sqlx.DB) error {
+	if _, err := db.Exec(`REPLACE INTO id_generator (id, stub) VALUES (?, ?)`, maxID, "a"); err != nil {
 		return err
 	}
-
-	return tx.Commit()
 	return nil
 }
 
