@@ -54,7 +54,7 @@ func connectCenterDB() (*sqlx.DB, error) {
 }
 
 func tenantDBPath(name string) string {
-	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "./tenants")
+	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "../tenant_db")
 	return filepath.Join(tenantDBDir, name+".db")
 }
 
