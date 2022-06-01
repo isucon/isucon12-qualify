@@ -3,6 +3,7 @@ package bench
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/isucon/isucandar"
 )
@@ -20,7 +21,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	// SaaS管理者, 主催者, 参加者のagent作成
 	admin := Account{
 		Role:    AccountRoleAdmin,
-		BaseURL: "http://localhost:3000/",
+		BaseURL: "http://localhost:3000/", // bench起動時のtarget urlかな
 		Option:  sc.Option,
 	}
 	if err := admin.SetJWT("admin", "admin"); err != nil {
@@ -31,12 +32,41 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		return err
 	}
 
+	// SaaS管理API
+	var tenantName string
+	{
+		res, err := PostAdminTenantsAddAction(ctx, "validate_tenantname", adminAg)
+		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
+				tenantName = r.Data.Tenant.Name
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+	log.Println(tenantName)
+	{
+		res, err := GetAdminTenantsBillingAction(ctx, tenantName, adminAg)
+		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
+				_ = r
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+
+	// 大会主催者API
 	organizer := Account{
 		Role:    AccountRoleOrganizer,
 		BaseURL: "http://localhost:3000/",
 		Option:  sc.Option,
 	}
-	if err := organizer.SetJWT("validate_tenantname", "organizer"); err != nil {
+	if err := organizer.SetJWT("organizer", tenantName); err != nil {
 		return err
 	}
 	orgAg, err := organizer.GetAgent()
@@ -44,25 +74,65 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		return err
 	}
 
-	player := Account{
-		Role:    AccountRolePlayer,
-		BaseURL: "http://localhost:3000/",
-		Option:  sc.Option,
-	}
-	if err := player.SetJWT("validate_tenantname", "validate_playername"); err != nil {
-		return err
-	}
-	playerAg, err := player.GetAgent()
-	if err != nil {
-		return err
-	}
-
-	// SaaS管理API
+	competitionName := "validate_competition"
+	var competitionId int64
 	{
-		res, err := PostAdminTenantsAddAction(ctx, "validate_tenantname", adminAg)
-		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
-				fmt.Printf("%+v", r)
+		res, err := PostOrganizerCompetitonsAddAction(ctx, competitionName, tenantName, orgAg)
+		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
+				competitionId = r.Data.Competition.ID
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+	playerDisplayNames := []string{"validate_player1", "validate_player2"}
+	var playerNames []string
+	{
+		res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, tenantName, orgAg)
+		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
+				fmt.Println(r.Data)
+				for _, pl := range r.Data.Players {
+					playerNames = append(playerNames, pl.Name)
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+	{
+		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerNames[1], tenantName, orgAg)
+		v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
+				_ = r
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+	// { // TODO まだできていない
+	// 	res, err := PostOrganizerCompetitionResultAction(ctx, competitionId, orgAg)
+	// 	v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
+	// 		WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+	// 			_ = r
+	// 			return nil
+	// 		}),
+	// 	)
+	// 	if !v.IsEmpty() {
+	// 		return v
+	// 	}
+	// }
+	{
+		res, err := PostOrganizerCompetitionFinishAction(ctx, competitionId, tenantName, orgAg)
+		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionRankinFinish) error {
 				_ = r
 				return nil
 			}),
@@ -72,75 +142,64 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 	{
-		res, err := GetAdminTenantsBillingAction(ctx, 111 /*tenant id*/, adminAg)
-		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200))
-		if !v.IsEmpty() {
-			return v
-		}
-	}
-
-	// 大会主催者API
-	{
-		res, err := PostOrganizerCompetitonsAddAction(ctx, "validate_competition", "tenant-010001", orgAg)
-		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200))
-		if !v.IsEmpty() {
-			return v
-		}
-	}
-	{
-		res, err := PostOrganizerPlayersAddAction(ctx, "validate_playername", "tenant-010001", orgAg)
-		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200))
-		if !v.IsEmpty() {
-			return v
-		}
-	}
-	{
-		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, "validate_playername", "tenant-010001", orgAg)
-		v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200))
-		if !v.IsEmpty() {
-			return v
-		}
-	}
-	{
-		res, err := PostOrganizerCompetitionResultAction(ctx, "competition_id", orgAg)
-		v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200))
-		if !v.IsEmpty() {
-			return v
-		}
-	}
-	{
-		res, err := PostOrganizerCompetitionFinishAction(ctx, "competition_id", orgAg)
-		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200))
-		if !v.IsEmpty() {
-			return v
-		}
-	}
-	{
-		res, err := GetOrganizerBillingAction(ctx, orgAg)
-		v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200))
+		res, err := GetOrganizerBillingAction(ctx, tenantName, orgAg)
+		v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIBilling) error {
+				_ = r
+				return nil
+			}),
+		)
 		if !v.IsEmpty() {
 			return v
 		}
 	}
 
 	// 大会参加者API
+	player := Account{
+		Role:    AccountRolePlayer,
+		BaseURL: "http://localhost:3000/",
+		Option:  sc.Option,
+	}
+	if err := player.SetJWT(playerNames[0], tenantName); err != nil {
+		return err
+	}
+	playerAg, err := player.GetAgent()
+	if err != nil {
+		return err
+	}
+
 	{
-		res, err := GetPlayerAction(ctx, "validate_playername", playerAg)
-		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200))
+		res, err := GetPlayerAction(ctx, playerNames[0], tenantName, playerAg)
+		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayer) error {
+				_ = r
+				return nil
+			}),
+		)
 		if !v.IsEmpty() {
 			return v
 		}
 	}
+	// { // TODO: csv入稿後
+	// 	res, err := GetPlayerCompetitionRankingAction(ctx, playerNames[0], tenantName, playerAg)
+	// 	v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
+	// 		WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+	// 			_ = r
+	// 			return nil
+	// 		}),
+	// 	)
+	// 	if !v.IsEmpty() {
+	// 		return v
+	// 	}
+	// }
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, "validate_playername", playerAg)
-		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200))
-		if !v.IsEmpty() {
-			return v
-		}
-	}
-	{
-		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
-		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200))
+		res, err := GetPlayerCompetitionsAction(ctx, tenantName, playerAg)
+		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitions) error {
+				_ = r
+				return nil
+			}),
+		)
 		if !v.IsEmpty() {
 			return v
 		}
