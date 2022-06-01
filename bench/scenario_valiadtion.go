@@ -3,6 +3,7 @@ package bench
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/isucon/isucandar"
 )
@@ -20,7 +21,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	// SaaS管理者, 主催者, 参加者のagent作成
 	admin := Account{
 		Role:    AccountRoleAdmin,
-		BaseURL: "http://localhost:3000/",
+		BaseURL: "http://localhost:3000/", // bench起動時のtarget urlかな
 		Option:  sc.Option,
 	}
 	if err := admin.SetJWT("admin", "admin"); err != nil {
@@ -58,12 +59,13 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	}
 
 	// SaaS管理API
+	var tenantName string
 	{
 		res, err := PostAdminTenantsAddAction(ctx, "validate_tenantname", adminAg)
 		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
-				fmt.Printf("%+v", r)
-				_ = r
+				fmt.Printf("%+v\n", r)
+				// tenantName = r.Data.Tenant.Name
 				return nil
 			}),
 		)
@@ -71,6 +73,10 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return v
 		}
 	}
+	log.Println(tenantName)
+	// var playersName []string
+	// var competitionId int
+	// var competitionName string
 	{
 		res, err := GetAdminTenantsBillingAction(ctx, 111 /*tenant id*/, adminAg)
 		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200))

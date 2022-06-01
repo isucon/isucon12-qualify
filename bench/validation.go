@@ -131,11 +131,7 @@ func (v ValidationError) Add(step *isucandar.BenchmarkStep) {
 }
 
 type ResponseAPIBase struct {
-	// isuports.SuccessResult
-	// isuports.FailureResult
-	// 統合されてほしいかも
 	Status  bool   `json:"status"`
-	Data    any    `json:"data,omitempty"`
 	Message string `json:"message,omitempty"`
 }
 
@@ -148,7 +144,11 @@ func (r ResponseAPIBase) ErrorMessage() string {
 }
 
 type ResponseAPI interface {
-	ResponseAPIBase | ResponseAPITenantsAdd
+	ResponseAPIBase |
+		ResponseAPITenantsAdd | ResponseAPITenantsBilling | ResponseAPIPlayersAdd |
+		ResponseAPIPlayerDisqualified | ResponseAPICompetitionsAdd | ResponseAPIBilling |
+		ResponseAPIPlayer | ResponseAPICompetitionRanking | ResponseAPICompetitions |
+		ResponseAPIInitialize
 	IsSuccess() bool
 	ErrorMessage() string
 }
@@ -215,5 +215,41 @@ func WithErrorResponse[T ResponseAPI]() ResponseValidator {
 
 type ResponseAPITenantsAdd struct {
 	ResponseAPIBase
-	isuports.TenantsAddHandlerResult
+	Data isuports.TenantsAddHandlerResult `json:"data"`
+}
+type ResponseAPITenantsBilling struct {
+	ResponseAPIBase
+	Data isuports.TenantsBillingHandlerResult `json:"data"`
+}
+type ResponseAPIPlayersAdd struct {
+	ResponseAPIBase
+	Data isuports.PlayersAddHandlerResult `json:"data"`
+}
+type ResponseAPIPlayerDisqualified struct {
+	ResponseAPIBase
+	Data isuports.PlayerDisqualifiedHandlerResult `json:"data"`
+}
+type ResponseAPICompetitionsAdd struct {
+	ResponseAPIBase
+	Data isuports.CompetitionsAddHandlerResult `json:"data"`
+}
+type ResponseAPIBilling struct {
+	ResponseAPIBase
+	Data isuports.BillingHandlerResult `json:"data"`
+}
+type ResponseAPIPlayer struct {
+	ResponseAPIBase
+	Data isuports.PlayerHandlerResult `json:"data"`
+}
+type ResponseAPICompetitionRanking struct {
+	ResponseAPIBase
+	Data isuports.CompetitionRankingHandlerResult `json:"data"`
+}
+type ResponseAPICompetitions struct {
+	ResponseAPIBase
+	Data isuports.CompetitionsHandlerResult `json:"data"`
+}
+type ResponseAPIInitialize struct {
+	ResponseAPIBase
+	Data isuports.InitializeHandlerResult `json:"data"`
 }
