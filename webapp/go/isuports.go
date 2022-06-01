@@ -2,10 +2,8 @@ package isuports
 
 import (
 	"context"
-	"crypto/x509"
 	"database/sql"
 	"encoding/csv"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +22,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
 	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -55,7 +54,7 @@ func connectCenterDB() (*sqlx.DB, error) {
 }
 
 func tenantDBPath(name string) string {
-	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "./tenants")
+	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "../tenant_db")
 	return filepath.Join(tenantDBDir, name+".db")
 }
 
@@ -106,7 +105,7 @@ func Run() {
 	// for tenant endpoint
 	// 参加者操作
 	e.POST("/organizer/api/players/add", playersAddHandler)
-	e.POST("/organizer/api/player/:competitior_id/disqualified", playerDisqualifiedHandler)
+	e.POST("/organizer/api/player/:player_name/disqualified", playerDisqualifiedHandler)
 	// 大会操作
 	e.POST("/organizer/api/competitions/add", competitionsAddHandler)
 	e.POST("/organizer/api/competition/:competition_id/finish", competitionFinishHandler)
@@ -182,16 +181,19 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 	}
 	tokenStr := cookie.Value
 
-	keysrc := getEnv("ISUCON_JWT_KEY", "")
-	block, _ := pem.Decode([]byte(keysrc))
-	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./public.pem")
+	keysrc, err := os.ReadFile(keyFilename)
 	if err != nil {
-		return nil, fmt.Errorf("error x509.ParsePKCS1PrivateKey: %w", err)
+		return nil, fmt.Errorf("error os.ReadFile: %w", err)
+	}
+	key, _, err := jwk.DecodePEM(keysrc)
+	if err != nil {
+		return nil, fmt.Errorf("error jwk.DecodePEM: %w", err)
 	}
 
 	token, err := jwt.Parse([]byte(tokenStr), jwt.WithKey(jwa.RS256, key))
 	if err != nil {
-		return nil, fmt.Errorf("error parseViewer: %w", err)
+		return nil, fmt.Errorf("error parse: %w", err)
 	}
 	var r Role
 	tr, ok := token.Get("role")
@@ -370,7 +372,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competiton
 	vhs := []VisitHistoryRow{}
 	if err := centerDB.SelectContext(
 		ctx,
-		vhs,
+		&vhs,
 		"SELECT player_name, MIN(created_at) AS min_created_at FROM visit_history WHERE competition_id = ? GROUP BY player_name",
 		comp.ID,
 	); err != nil && err != sql.ErrNoRows {
@@ -488,7 +490,9 @@ func tenantsBillingHandler(c echo.Context) error {
 	}
 	if err := c.JSON(http.StatusOK, SuccessResult{
 		Success: true,
-		Data:    tenantBillings,
+		Data: TenantsBillingHandlerResult{
+			Tenants: tenantBillings,
+		},
 	}); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
@@ -574,7 +578,7 @@ func playersAddHandler(c echo.Context) error {
 	return nil
 }
 
-type playerDisqualifiedHandlerResult struct {
+type PlayerDisqualifiedHandlerResult struct {
 	Player PlayerDetail `json:"player"`
 }
 
@@ -611,7 +615,7 @@ func playerDisqualifiedHandler(c echo.Context) error {
 		return fmt.Errorf("error retrievePlayerByName: %w", err)
 	}
 
-	res := playerDisqualifiedHandlerResult{
+	res := PlayerDisqualifiedHandlerResult{
 		Player: PlayerDetail{
 			Name:           p.Name,
 			DisplayName:    p.DisplayName,
@@ -888,14 +892,14 @@ func billingHandler(c echo.Context) error {
 	return nil
 }
 
-type playerScoreDetail struct {
+type PlayerScoreDetail struct {
 	CompetitionTitle string `json:"competition_title"`
 	Score            int64  `json:"score"`
 }
 
-type playerHandlerResult struct {
+type PlayerHandlerResult struct {
 	Player PlayerDetail        `json:"player"`
-	Scores []playerScoreDetail `json:"scores"`
+	Scores []PlayerScoreDetail `json:"scores"`
 }
 
 func playerHandler(c echo.Context) error {
@@ -939,13 +943,13 @@ func playerHandler(c echo.Context) error {
 	); err != nil {
 		return fmt.Errorf("error Select player_score: %w", err)
 	}
-	psds := make([]playerScoreDetail, 0, len(pss))
+	psds := make([]PlayerScoreDetail, 0, len(pss))
 	for _, ps := range pss {
 		comp, err := retrieveCompetition(ctx, tenantDB, ps.CompetitionID)
 		if err != nil {
 			return fmt.Errorf("error retrieveCompetition: %w", err)
 		}
-		psds = append(psds, playerScoreDetail{
+		psds = append(psds, PlayerScoreDetail{
 			CompetitionTitle: comp.Title,
 			Score:            ps.Score,
 		})
@@ -953,7 +957,7 @@ func playerHandler(c echo.Context) error {
 
 	res := SuccessResult{
 		Success: true,
-		Data: playerHandlerResult{
+		Data: PlayerHandlerResult{
 			Player: PlayerDetail{
 				Name:           p.Name,
 				DisplayName:    p.DisplayName,
@@ -1075,7 +1079,7 @@ func competitionRankingHandler(c echo.Context) error {
 	return nil
 }
 
-type competitionsHandlerResult struct {
+type CompetitionsHandlerResult struct {
 	Competitions []CompetitionDetail
 }
 
@@ -1124,7 +1128,7 @@ func competitionsHandler(c echo.Context) error {
 
 	res := SuccessResult{
 		Success: true,
-		Data: competitionsHandlerResult{
+		Data: CompetitionsHandlerResult{
 			Competitions: cds,
 		},
 	}
