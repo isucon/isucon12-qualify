@@ -930,7 +930,6 @@ func playerHandler(c echo.Context) error {
 
 	pn := c.Param("player_name")
 
-	println(pn)
 	p, err := retrievePlayerByName(ctx, tenantDB, pn)
 	if err != nil {
 		return fmt.Errorf("error retrievePlayerByName: %w", err)
