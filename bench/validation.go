@@ -1,9 +1,11 @@
 package bench
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -156,10 +158,15 @@ type ResponseAPI interface {
 func WithSuccessResponse[T ResponseAPI](validates ...func(res T) error) ResponseValidator {
 	return func(r *http.Response) error {
 		var v T
-		if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+		// TODO: debug json extract失敗したら生json出す
+		bbuf := new(bytes.Buffer)
+		abuf := io.TeeReader(r.Body, bbuf)
+		if err := json.NewDecoder(abuf).Decode(&v); err != nil {
 			if failure.Is(err, context.DeadlineExceeded) || failure.Is(err, context.Canceled) {
 				return nil
 			}
+			b, _ := io.ReadAll(bbuf)
+			fmt.Println(string(b))
 			return failure.NewError(
 				ErrInvalidJSON,
 				fmt.Errorf("JSONのdecodeに失敗しました %s %s %s status %d", err, r.Request.Method, r.Request.URL.Path, r.StatusCode),

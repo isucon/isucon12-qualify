@@ -40,8 +40,8 @@ func PostAdminTenantsAddAction(ctx context.Context, name string, ag *agent.Agent
 	return ag.Do(ctx, req)
 }
 
-func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantID int, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/admin/api/tenants/billing?before=" + strconv.Itoa(beforeTenantID))
+func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantName string, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.GET("/admin/api/tenants/billing?before=" + beforeTenantName)
 	if err != nil {
 		return nil, err
 	}
@@ -86,8 +86,8 @@ func PostOrganizerCompetitonsAddAction(ctx context.Context, title, tenantName st
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerCompetitionFinishAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.POST("/organizer/api/competition/"+competition+"/finish", nil)
+func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId int64, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.POST("/organizer/api/competition/"+strconv.FormatInt(competitionId, 10)+"/finish", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -95,9 +95,9 @@ func PostOrganizerCompetitionFinishAction(ctx context.Context, competition strin
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerCompetitionResultAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId int64, ag *agent.Agent) (*http.Response, error) {
 	// multipart/form-dataをあとでいれる
-	req, err := ag.POST("/organizer/api/competition/"+competition+"/result", nil)
+	req, err := ag.POST("/organizer/api/competition/"+strconv.FormatInt(competitionId, 10)+"/result", nil)
 	if err != nil {
 		return nil, err
 	}
