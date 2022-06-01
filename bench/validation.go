@@ -150,7 +150,7 @@ type ResponseAPI interface {
 		ResponseAPITenantsAdd | ResponseAPITenantsBilling | ResponseAPIPlayersAdd |
 		ResponseAPIPlayerDisqualified | ResponseAPICompetitionsAdd | ResponseAPIBilling |
 		ResponseAPIPlayer | ResponseAPICompetitionRanking | ResponseAPICompetitions |
-		ResponseAPIInitialize
+		ResponseAPIInitialize | ResponseAPICompetitionRankinFinish | ResponseAPICompetitionResult
 	IsSuccess() bool
 	ErrorMessage() string
 }
@@ -259,4 +259,10 @@ type ResponseAPICompetitions struct {
 type ResponseAPIInitialize struct {
 	ResponseAPIBase
 	Data isuports.InitializeHandlerResult `json:"data"`
+}
+type ResponseAPICompetitionRankinFinish struct {
+	ResponseAPIBase
+}
+type ResponseAPICompetitionResult struct {
+	ResponseAPIBase
 }

@@ -115,7 +115,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	{
 		res, err := PostOrganizerCompetitionResultAction(ctx, competitionId, orgAg)
 		v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPIBase) error { // TODO: あれ？
+			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
 				_ = r
 				return nil
 			}),
@@ -127,7 +127,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	{
 		res, err := PostOrganizerCompetitionFinishAction(ctx, competitionId, orgAg)
 		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPIBase) error { // TODO: あれ？
+			WithSuccessResponse(func(r ResponseAPICompetitionRankinFinish) error {
 				_ = r
 				return nil
 			}),
@@ -178,7 +178,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	{
 		res, err := GetPlayerCompetitionRankingAction(ctx, playerName, playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPIBase) error { // TODO: あれ？
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				_ = r
 				return nil
 			}),
@@ -190,7 +190,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	{
 		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
 		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPIBase) error { // TODO: あれ？
+			WithSuccessResponse(func(r ResponseAPICompetitions) error {
 				_ = r
 				return nil
 			}),
