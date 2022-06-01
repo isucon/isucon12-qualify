@@ -2,10 +2,8 @@ package isuports
 
 import (
 	"context"
-	"crypto/x509"
 	"database/sql"
 	"encoding/csv"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -24,6 +22,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
 	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -55,7 +54,7 @@ func connectCenterDB() (*sqlx.DB, error) {
 }
 
 func tenantDBPath(name string) string {
-	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "./tenants")
+	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "../tenant_db")
 	return filepath.Join(tenantDBDir, name+".db")
 }
 
@@ -182,16 +181,19 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 	}
 	tokenStr := cookie.Value
 
-	keysrc := getEnv("ISUCON_JWT_KEY", "")
-	block, _ := pem.Decode([]byte(keysrc))
-	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./public.pem")
+	keysrc, err := os.ReadFile(keyFilename)
 	if err != nil {
-		return nil, fmt.Errorf("error x509.ParsePKCS1PrivateKey: %w", err)
+		return nil, fmt.Errorf("error os.ReadFile: %w", err)
+	}
+	key, _, err := jwk.DecodePEM(keysrc)
+	if err != nil {
+		return nil, fmt.Errorf("error jwk.DecodePEM: %w", err)
 	}
 
 	token, err := jwt.Parse([]byte(tokenStr), jwt.WithKey(jwa.RS256, key))
 	if err != nil {
-		return nil, fmt.Errorf("error parseViewer: %w", err)
+		return nil, fmt.Errorf("error parse: %w", err)
 	}
 	var r Role
 	tr, ok := token.Get("role")
