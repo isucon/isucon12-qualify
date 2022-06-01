@@ -36,7 +36,7 @@ services:
     links:
       - mysql
     volumes:
-      - ./webapp/go:/home/isucon/webapp/go
+      - ./webapp:/home/isucon/webapp
       - gopkg:/home/isucon/go/pkg
       - sqlite:/home/isucon/webapp/tenant_db
     init: true
@@ -61,10 +61,12 @@ services:
     stdin_open: true
     tty: true
     environment:
+      ISUCON_JWT_KEY_FILE: ../isuports.pem
       ISUCON_BASE_HOSTNAME: .t.isucon.dev.localhost
     dns: 127.0.0.1
     volumes:
       - ./bench:/home/isucon/bench
+      - ./webapp/go:/home/isucon/webapp/go
       - gopkg_bench:/home/isucon/go/pkg
     network_mode: host
 
