@@ -7,3 +7,6 @@ build: builder
 
 clean:
 	rm -f *.db isuports.sql
+
+data.tar.gz: clean build
+	tar czf data.tar.gz *.db isuports.sql
