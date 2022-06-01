@@ -2,12 +2,14 @@ package main
 
 import (
 	"database/sql"
+	"flag"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
 	"os/exec"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -25,7 +27,6 @@ var epoch = time.Date(2022, 06, 01, 0, 0, 0, 0, time.UTC)
 var playersNumByTenant = 1000
 var competitionsNumByTenant = 100
 var disqualifiedRate = 10
-var totalTenants = int64(10)
 var idByTenant = map[int64]int64{}
 var tenantDBSchemaFilePath = "../webapp/sql/tenant/10_schema.sql"
 
@@ -34,7 +35,12 @@ func init() {
 }
 
 func main() {
-	for i := int64(0); i <= totalTenants; i++ {
+	flag.Parse()
+	tenantsNum, err := strconv.ParseInt(flag.Args()[0], 10, 64)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for i := int64(0); i <= tenantsNum; i++ {
 		log.Println("create tenant", i)
 		tenant := createTenant(i)
 		players := createPlayers(tenant)
@@ -60,9 +66,9 @@ func genID(ts time.Time) int64 {
 	} else if idMap[id] < 999 {
 		idMap[id]++
 		return id*1000 + idMap[id]
-	} else {
-		panic(fmt.Sprintf("too many id at %s", ts))
 	}
+	log.Fatalf("too many id at %s", ts)
+	return 0
 }
 
 func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, competitions []*isuports.CompetitionRow, pss []*isuports.PlayerScoreRow) error {
@@ -97,15 +103,17 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	); err != nil {
 		return err
 	}
+	var from int
 	for i, _ := range pss {
-		if i > 0 && i%100 == 0 {
+		if i > 0 && i%100 == 0 || i == len(pss)-1 {
 			if _, err := tx.NamedExec(
 				`INSERT INTO player_score (id, player_id, competition_id, score, created_at, updated_at)
 				VALUES(:id, :player_id, :competition_id, :score, :created_at, :updated_at)`,
-				pss[i-100:i],
+				pss[from:i],
 			); err != nil {
 				return err
 			}
+			from = i
 		}
 	}
 	return tx.Commit()
@@ -201,7 +209,7 @@ func createPlayerScores(tenant *isuports.TenantRow, players []*isuports.PlayerRo
 				ID:            genID(created),
 				PlayerID:      p.ID,
 				CompetitionID: c.ID,
-				Score:         fake.Int64Between(0, 1000000),
+				Score:         fake.Int64Between(0, 100) * fake.Int64Between(0, 100) * fake.Int64Between(0, 100),
 				CreatedAt:     created,
 				UpdatedAt:     fake.Time().TimeBetween(created, end),
 			})
