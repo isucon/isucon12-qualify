@@ -1,8 +1,9 @@
 builder: go.* *.go ../webapp/go/*
 	@go build -o builder .
 
-build: clean builder
+build: builder
 	@./builder 10
+	mysqldump -uisucon -pisucon isuports > isuports.sql
 
 clean:
-	rm -f builder *.db
+	rm -f *.db isuports.sql

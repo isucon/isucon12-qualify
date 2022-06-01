@@ -357,6 +357,14 @@ type BillingReport struct {
 }
 
 type VisitHistoryRow struct {
+	PlayerName    string    `db:"player_name"`
+	TenantID      int64     `db:"tenant_id"`
+	CompetitionID int64     `db:"competition_id"`
+	CreatedAt     time.Time `db:"created_at"`
+	UpdatedAt     time.Time `db:"updated_at"`
+}
+
+type VisitHistorySummaryRow struct {
 	PlayerName   string    `db:"player_name"`
 	MinCreatedAt time.Time `db:"min_created_at"`
 }
@@ -367,7 +375,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competiton
 		return nil, fmt.Errorf("error retrieveCompetition: %w", err)
 	}
 
-	vhs := []VisitHistoryRow{}
+	vhs := []VisitHistorySummaryRow{}
 	if err := centerDB.SelectContext(
 		ctx,
 		vhs,

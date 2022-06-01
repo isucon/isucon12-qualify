@@ -7,20 +7,21 @@ replace github.com/isucon/isucon12-qualify/webapp/go => ../webapp/go
 replace github.com/isucon/isucon12-qualify/bench => ../bench
 
 require (
+	github.com/go-sql-driver/mysql v1.6.0
 	github.com/isucon/isucon12-qualify/bench v0.0.0-00010101000000-000000000000
 	github.com/isucon/isucon12-qualify/webapp/go v0.0.0-00010101000000-000000000000
 	github.com/jaswdr/faker v1.10.2
+	github.com/jmoiron/sqlx v1.3.5
+	github.com/mattn/go-sqlite3 v1.14.13
 	github.com/samber/lo v1.21.0
 )
 
 require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
-	github.com/go-sql-driver/mysql v1.6.0 // indirect
 	github.com/goccy/go-json v0.9.7 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/isucon/isucandar v0.0.0-20220322062028-6dd56dc57d72 // indirect
-	github.com/jmoiron/sqlx v1.3.5 // indirect
 	github.com/labstack/echo/v4 v4.7.2 // indirect
 	github.com/labstack/gommon v0.3.1 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.1 // indirect
@@ -31,7 +32,6 @@ require (
 	github.com/lestrrat-go/option v1.0.0 // indirect
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
-	github.com/mattn/go-sqlite3 v1.14.13 // indirect
 	github.com/oklog/ulid/v2 v2.0.2 // indirect
 	github.com/pquerna/cachecontrol v0.1.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
