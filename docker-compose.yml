@@ -7,7 +7,7 @@ services:
       - ./nginx/conf.d:/etc/nginx/conf.d
       #- ./public:/public
     ports:
-      - "8080:80"
+      - "80:80"
     links:
       - webapp
       - blackauth
@@ -36,8 +36,8 @@ services:
     links:
       - mysql
     volumes:
-      # - ./public:/home/isucon/webapp/public
-      - gopkg:/usr/local/go/pkg
+      - ./webapp/go:/home/isucon/webapp/go
+      - gopkg:/home/isucon/go/pkg
       - sqlite:/home/isucon/webapp/tenant_db
     init: true
     restart: always
@@ -56,7 +56,20 @@ services:
       - 13306:3306
     restart: always
 
+  bench:
+    build: ./bench/
+    stdin_open: true
+    tty: true
+    environment:
+      ISUCON_BASE_HOSTNAME: .t.isucon.dev.localhost
+    dns: 127.0.0.1
+    volumes:
+      - ./bench:/home/isucon/bench
+      - gopkg_bench:/home/isucon/go/pkg
+    network_mode: host
+
 volumes:
   mysql:
   gopkg:
+  gopkg_bench:
   sqlite:
