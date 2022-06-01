@@ -9,6 +9,7 @@ import (
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/failure"
+	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 )
 
 // failure.NewError で用いるエラーコード定義
@@ -130,21 +131,24 @@ func (v ValidationError) Add(step *isucandar.BenchmarkStep) {
 }
 
 type ResponseAPIBase struct {
-	Result bool   `json:"result"`
-	Status int    `json:"status"`
-	Error  string `json:"error"`
+	// isuports.SuccessResult
+	// isuports.FailureResult
+	// 統合されてほしいかも
+	Status  bool   `json:"status"`
+	Data    any    `json:"data,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 func (r ResponseAPIBase) IsSuccess() bool {
-	return r.Result
+	return r.Status
 }
 
 func (r ResponseAPIBase) ErrorMessage() string {
-	return r.Error
+	return r.Message
 }
 
 type ResponseAPI interface {
-	ResponseAPIBase
+	ResponseAPIBase | ResponseAPITenantsAdd
 	IsSuccess() bool
 	ErrorMessage() string
 }
@@ -207,4 +211,9 @@ func WithErrorResponse[T ResponseAPI]() ResponseValidator {
 		}
 		return nil
 	}
+}
+
+type ResponseAPITenantsAdd struct {
+	ResponseAPIBase
+	isuports.TenantsAddHandlerResult
 }
