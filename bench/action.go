@@ -49,9 +49,11 @@ func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantName string, 
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerPlayersAddAction(ctx context.Context, playerName, tenantName string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerPlayersAddAction(ctx context.Context, playerNames []string, tenantName string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
-	form.Set("name", playerName) // TODO: bulk insertできるらしい
+	for _, name := range playerNames {
+		form.Add("display_name", name)
+	}
 	req, err := ag.POST("/organizer/api/players/add", strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
@@ -86,12 +88,13 @@ func PostOrganizerCompetitonsAddAction(ctx context.Context, title, tenantName st
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId int64, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId int64, tenantName string, ag *agent.Agent) (*http.Response, error) {
 	req, err := ag.POST("/organizer/api/competition/"+strconv.FormatInt(competitionId, 10)+"/finish", nil)
 	if err != nil {
 		return nil, err
 	}
 
+	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 	return ag.Do(ctx, req)
 }
 
@@ -105,38 +108,42 @@ func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId int
 	return ag.Do(ctx, req)
 }
 
-func GetOrganizerBillingAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+func GetOrganizerBillingAction(ctx context.Context, tenantName string, ag *agent.Agent) (*http.Response, error) {
 	req, err := ag.GET("/organizer/api/billing")
 	if err != nil {
 		return nil, err
 	}
 
+	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 	return ag.Do(ctx, req)
 }
 
-func GetPlayerAction(ctx context.Context, player string, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/player/api/player/" + player)
+func GetPlayerAction(ctx context.Context, playerName, tenantName string, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.GET("/player/api/player/" + playerName)
 	if err != nil {
 		return nil, err
 	}
 
+	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 	return ag.Do(ctx, req)
 }
 
-func GetPlayerCompetitionRankingAction(ctx context.Context, competition string, ag *agent.Agent) (*http.Response, error) {
+func GetPlayerCompetitionRankingAction(ctx context.Context, competition, tenantName string, ag *agent.Agent) (*http.Response, error) {
 	req, err := ag.GET("/player/api/competiton/" + competition + "/ranking")
 	if err != nil {
 		return nil, err
 	}
 
+	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 	return ag.Do(ctx, req)
 }
 
-func GetPlayerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+func GetPlayerCompetitionsAction(ctx context.Context, tenantName string, ag *agent.Agent) (*http.Response, error) {
 	req, err := ag.GET("/player/api/competitions")
 	if err != nil {
 		return nil, err
 	}
 
+	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 	return ag.Do(ctx, req)
 }

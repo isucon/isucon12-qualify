@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/isucon/isucandar"
@@ -65,7 +66,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		BaseURL: "http://localhost:3000/",
 		Option:  sc.Option,
 	}
-	if err := organizer.SetJWT(tenantName, "organizer"); err != nil {
+	if err := organizer.SetJWT("organizer", tenantName); err != nil {
 		return err
 	}
 	orgAg, err := organizer.GetAgent()
@@ -87,12 +88,16 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return v
 		}
 	}
-	playerName := "validate_playername"
+	playerDisplayNames := []string{"validate_player1", "validate_player2"}
+	var playerNames []string
 	{
-		res, err := PostOrganizerPlayersAddAction(ctx, playerName, tenantName, orgAg)
+		res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, tenantName, orgAg)
 		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
-				_ = r
+				fmt.Println(r.Data)
+				for _, pl := range r.Data.Players {
+					playerNames = append(playerNames, pl.Name)
+				}
 				return nil
 			}),
 		)
@@ -101,7 +106,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 	{
-		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerName, tenantName, orgAg)
+		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerNames[1], tenantName, orgAg)
 		v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
 				_ = r
@@ -112,20 +117,20 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return v
 		}
 	}
+	// { // TODO まだできていない
+	// 	res, err := PostOrganizerCompetitionResultAction(ctx, competitionId, orgAg)
+	// 	v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
+	// 		WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+	// 			_ = r
+	// 			return nil
+	// 		}),
+	// 	)
+	// 	if !v.IsEmpty() {
+	// 		return v
+	// 	}
+	// }
 	{
-		res, err := PostOrganizerCompetitionResultAction(ctx, competitionId, orgAg)
-		v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
-				_ = r
-				return nil
-			}),
-		)
-		if !v.IsEmpty() {
-			return v
-		}
-	}
-	{
-		res, err := PostOrganizerCompetitionFinishAction(ctx, competitionId, orgAg)
+		res, err := PostOrganizerCompetitionFinishAction(ctx, competitionId, tenantName, orgAg)
 		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRankinFinish) error {
 				_ = r
@@ -137,7 +142,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 	{
-		res, err := GetOrganizerBillingAction(ctx, orgAg)
+		res, err := GetOrganizerBillingAction(ctx, tenantName, orgAg)
 		v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIBilling) error {
 				_ = r
@@ -155,7 +160,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		BaseURL: "http://localhost:3000/",
 		Option:  sc.Option,
 	}
-	if err := player.SetJWT(tenantName, playerName); err != nil {
+	if err := player.SetJWT(playerNames[0], tenantName); err != nil {
 		return err
 	}
 	playerAg, err := player.GetAgent()
@@ -164,7 +169,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	}
 
 	{
-		res, err := GetPlayerAction(ctx, playerName, playerAg)
+		res, err := GetPlayerAction(ctx, playerNames[0], tenantName, playerAg)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				_ = r
@@ -175,20 +180,20 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return v
 		}
 	}
+	// { // TODO: csv入稿後
+	// 	res, err := GetPlayerCompetitionRankingAction(ctx, playerNames[0], tenantName, playerAg)
+	// 	v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
+	// 		WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+	// 			_ = r
+	// 			return nil
+	// 		}),
+	// 	)
+	// 	if !v.IsEmpty() {
+	// 		return v
+	// 	}
+	// }
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, playerName, playerAg)
-		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
-				_ = r
-				return nil
-			}),
-		)
-		if !v.IsEmpty() {
-			return v
-		}
-	}
-	{
-		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
+		res, err := GetPlayerCompetitionsAction(ctx, tenantName, playerAg)
 		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitions) error {
 				_ = r
