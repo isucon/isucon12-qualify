@@ -490,7 +490,9 @@ func tenantsBillingHandler(c echo.Context) error {
 	}
 	if err := c.JSON(http.StatusOK, SuccessResult{
 		Success: true,
-		Data:    tenantBillings,
+		Data: TenantsBillingHandlerResult{
+			Tenants: tenantBillings,
+		},
 	}); err != nil {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
