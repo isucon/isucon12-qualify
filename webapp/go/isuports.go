@@ -105,7 +105,7 @@ func Run() {
 	// for tenant endpoint
 	// 参加者操作
 	e.POST("/organizer/api/players/add", playersAddHandler)
-	e.POST("/organizer/api/player/:competitior_id/disqualified", playerDisqualifiedHandler)
+	e.POST("/organizer/api/player/:player_name/disqualified", playerDisqualifiedHandler)
 	// 大会操作
 	e.POST("/organizer/api/competitions/add", competitionsAddHandler)
 	e.POST("/organizer/api/competition/:competition_id/finish", competitionFinishHandler)
@@ -930,6 +930,7 @@ func playerHandler(c echo.Context) error {
 
 	pn := c.Param("player_name")
 
+	println(pn)
 	p, err := retrievePlayerByName(ctx, tenantDB, pn)
 	if err != nil {
 		return fmt.Errorf("error retrievePlayerByName: %w", err)
