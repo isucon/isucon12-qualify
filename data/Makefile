@@ -3,3 +3,6 @@ builder: go.* *.go ../webapp/go/*
 
 run: builder
 	@./builder
+
+clean:
+	rm -f builder *.db
