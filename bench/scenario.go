@@ -3,6 +3,7 @@ package bench
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -78,7 +79,11 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 	defer cancel()
 
 	// GET /initialize 用ユーザーエージェントの生成
-	ag, err := s.Option.NewAgent(true)
+	b, err := url.Parse(s.Option.TargetURL)
+	if err != nil {
+		return failure.NewError(ErrCannotNewAgent, err)
+	}
+	ag, err := s.Option.NewAgent(b.Scheme+"://admin."+b.Host, true)
 	if err != nil {
 		return failure.NewError(ErrCannotNewAgent, err)
 	}
