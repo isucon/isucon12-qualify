@@ -1,9 +1,11 @@
 package bench
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -131,11 +133,7 @@ func (v ValidationError) Add(step *isucandar.BenchmarkStep) {
 }
 
 type ResponseAPIBase struct {
-	// isuports.SuccessResult
-	// isuports.FailureResult
-	// 統合されてほしいかも
 	Status  bool   `json:"status"`
-	Data    any    `json:"data,omitempty"`
 	Message string `json:"message,omitempty"`
 }
 
@@ -148,7 +146,11 @@ func (r ResponseAPIBase) ErrorMessage() string {
 }
 
 type ResponseAPI interface {
-	ResponseAPIBase | ResponseAPITenantsAdd
+	ResponseAPIBase |
+		ResponseAPITenantsAdd | ResponseAPITenantsBilling | ResponseAPIPlayersAdd |
+		ResponseAPIPlayerDisqualified | ResponseAPICompetitionsAdd | ResponseAPIBilling |
+		ResponseAPIPlayer | ResponseAPICompetitionRanking | ResponseAPICompetitions |
+		ResponseAPIInitialize | ResponseAPICompetitionRankinFinish | ResponseAPICompetitionResult
 	IsSuccess() bool
 	ErrorMessage() string
 }
@@ -156,10 +158,15 @@ type ResponseAPI interface {
 func WithSuccessResponse[T ResponseAPI](validates ...func(res T) error) ResponseValidator {
 	return func(r *http.Response) error {
 		var v T
-		if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+		// TODO: debug json extract失敗したら生json出す
+		bbuf := new(bytes.Buffer)
+		abuf := io.TeeReader(r.Body, bbuf)
+		if err := json.NewDecoder(abuf).Decode(&v); err != nil {
 			if failure.Is(err, context.DeadlineExceeded) || failure.Is(err, context.Canceled) {
 				return nil
 			}
+			b, _ := io.ReadAll(bbuf)
+			fmt.Println(string(b))
 			return failure.NewError(
 				ErrInvalidJSON,
 				fmt.Errorf("JSONのdecodeに失敗しました %s %s %s status %d", err, r.Request.Method, r.Request.URL.Path, r.StatusCode),
@@ -215,5 +222,47 @@ func WithErrorResponse[T ResponseAPI]() ResponseValidator {
 
 type ResponseAPITenantsAdd struct {
 	ResponseAPIBase
-	isuports.TenantsAddHandlerResult
+	Data isuports.TenantsAddHandlerResult `json:"data"`
+}
+type ResponseAPITenantsBilling struct {
+	ResponseAPIBase
+	Data isuports.TenantsBillingHandlerResult `json:"data"`
+}
+type ResponseAPIPlayersAdd struct {
+	ResponseAPIBase
+	Data isuports.PlayersAddHandlerResult `json:"data"`
+}
+type ResponseAPIPlayerDisqualified struct {
+	ResponseAPIBase
+	Data isuports.PlayerDisqualifiedHandlerResult `json:"data"`
+}
+type ResponseAPICompetitionsAdd struct {
+	ResponseAPIBase
+	Data isuports.CompetitionsAddHandlerResult `json:"data"`
+}
+type ResponseAPIBilling struct {
+	ResponseAPIBase
+	Data isuports.BillingHandlerResult `json:"data"`
+}
+type ResponseAPIPlayer struct {
+	ResponseAPIBase
+	Data isuports.PlayerHandlerResult `json:"data"`
+}
+type ResponseAPICompetitionRanking struct {
+	ResponseAPIBase
+	Data isuports.CompetitionRankingHandlerResult `json:"data"`
+}
+type ResponseAPICompetitions struct {
+	ResponseAPIBase
+	Data isuports.CompetitionsHandlerResult `json:"data"`
+}
+type ResponseAPIInitialize struct {
+	ResponseAPIBase
+	Data isuports.InitializeHandlerResult `json:"data"`
+}
+type ResponseAPICompetitionRankinFinish struct {
+	ResponseAPIBase
+}
+type ResponseAPICompetitionResult struct {
+	ResponseAPIBase
 }
