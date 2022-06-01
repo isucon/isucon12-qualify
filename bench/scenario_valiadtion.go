@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/isucon/isucandar"
 )
@@ -59,7 +60,13 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	// SaaS管理API
 	{
 		res, err := PostAdminTenantsAddAction(ctx, "validate_tenantname", adminAg)
-		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200))
+		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
+				fmt.Printf("%+v", r)
+				_ = r
+				return nil
+			}),
+		)
 		if !v.IsEmpty() {
 			return v
 		}
