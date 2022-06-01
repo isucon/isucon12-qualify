@@ -65,6 +65,7 @@ services:
     dns: 127.0.0.1
     volumes:
       - ./bench:/home/isucon/bench
+      - ./webapp/go:/home/isucon/webapp/go
       - gopkg_bench:/home/isucon/go/pkg
     network_mode: host
 
