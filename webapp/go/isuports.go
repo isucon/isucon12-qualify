@@ -2,8 +2,10 @@ package isuports
 
 import (
 	"context"
+	"crypto/x509"
 	"database/sql"
 	"encoding/csv"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -22,13 +24,12 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
 	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
-	tenantDBSchemaFilePath = "../sql/20_schema_tenant.sql"
+	tenantDBSchemaFilePath = "../sql/tenant/10_schema.sql"
 	cookieName             = "isuports_session"
 )
 
@@ -182,9 +183,10 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 	tokenStr := cookie.Value
 
 	keysrc := getEnv("ISUCON_JWT_KEY", "")
-	key, err := jwk.ParseKey([]byte(keysrc))
+	block, _ := pem.Decode([]byte(keysrc))
+	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("error jwk.ParseKey: %w", err)
+		return nil, fmt.Errorf("error x509.ParsePKCS1PrivateKey: %w", err)
 	}
 
 	token, err := jwt.Parse([]byte(tokenStr), jwt.WithKey(jwa.RS256, key))
@@ -220,11 +222,11 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 }
 
 type TenantRow struct {
-	ID          int64
-	Name        string
-	DisplayName string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID          int64     `db:"id"`
+	Name        string    `db:"name"`
+	DisplayName string    `db:"display_name"`
+	CreatedAt   time.Time `db:"created_at"`
+	UpdatedAt   time.Time `db:"updated_at"`
 }
 
 type dbOrTx interface {
@@ -233,22 +235,13 @@ type dbOrTx interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 }
 
-type AccessLogRow struct {
-	ID            int64
-	PlayerName    string
-	TenantID      int64
-	CompetitionID int64
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-}
-
 type PlayerRow struct {
-	ID             int64
-	Name           string
-	DisplayName    string
-	IsDisqualified bool
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	ID             int64     `db:"id"`
+	Name           string    `db:"name"`
+	DisplayName    string    `db:"display_name"`
+	IsDisqualified bool      `db:"is_disqualified"`
+	CreatedAt      time.Time `db:"created_at"`
+	UpdatedAt      time.Time `db:"updated_at"`
 }
 
 func retrievePlayerByName(ctx context.Context, tenantDB dbOrTx, name string) (*PlayerRow, error) {
@@ -268,11 +261,11 @@ func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id int64) (*PlayerRow,
 }
 
 type CompetitionRow struct {
-	ID         int64
-	Title      string
-	FinishedAt sql.NullTime
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	ID         int64        `db:"id"`
+	Title      string       `db:"title"`
+	FinishedAt sql.NullTime `db:"finished_at"`
+	CreatedAt  time.Time    `db:"created_at"`
+	UpdatedAt  time.Time    `db:"updated_at"`
 }
 
 func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id int64) (*CompetitionRow, error) {
@@ -284,12 +277,12 @@ func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id int64) (*Compe
 }
 
 type PlayerScoreRow struct {
-	ID            int64
-	PlayerID      int64
-	CompetitionID int64
-	Score         int64
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
+	ID            int64     `db:"id"`
+	PlayerID      int64     `db:"player_id"`
+	CompetitionID int64     `db:"competition_id"`
+	Score         int64     `db:"score"`
+	CreatedAt     time.Time `db:"created_at"`
+	UpdatedAt     time.Time `db:"updated_at"`
 }
 
 type TenantDetail struct {
@@ -319,10 +312,6 @@ func tenantsAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error centerDB.BeginTxx: %w", err)
 	}
-	if _, err := tx.ExecContext(ctx, "LOCK TABLE `tenant` WRITE"); err != nil {
-		tx.Rollback()
-		return fmt.Errorf("error Lock table: %w", err)
-	}
 	id, err := dispenseID(ctx)
 	if err != nil {
 		tx.Rollback()
@@ -332,7 +321,7 @@ func tenantsAddHandler(c echo.Context) error {
 	now := time.Now()
 	_, err = tx.ExecContext(
 		ctx,
-		"INSERT INTO `tenant` (`id`, `name`, `display_name`, `created_at`, `updated_at`)",
+		"INSERT INTO `tenant` (`id`, `name`, `display_name`, `created_at`, `updated_at`) VALUES (?, ?, ?, ?, ?)",
 		id, name, displayName, now, now,
 	)
 	if err != nil {
@@ -367,28 +356,33 @@ type BillingReport struct {
 	BillingYen       int64  `json:"billing_yen"`
 }
 
+type VisitHistoryRow struct {
+	PlayerName   string    `db:"player_name"`
+	MinCreatedAt time.Time `db:"min_created_at"`
+}
+
 func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competitonID int64) (*BillingReport, error) {
 	comp, err := retrieveCompetition(ctx, tenantDB, competitonID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieveCompetition: %w", err)
 	}
 
-	als := []AccessLogRow{}
+	vhs := []VisitHistoryRow{}
 	if err := centerDB.SelectContext(
 		ctx,
-		als,
-		"SELECT * FROM access_log WHERE competition_id = ?",
+		vhs,
+		"SELECT player_name, MIN(created_at) AS min_created_at FROM visit_history WHERE competition_id = ? GROUP BY player_name",
 		comp.ID,
-	); err != nil {
-		return nil, fmt.Errorf("error Select access_log: %w", err)
+	); err != nil && err != sql.ErrNoRows {
+		return nil, fmt.Errorf("error Select visit_history: %w", err)
 	}
 	billingMap := map[string]int64{}
-	for _, al := range als {
-		// competition.finished_atよりもあとの場合は、終了後にアクセスしたとみなしてアクセスしたとみなさない
-		if comp.FinishedAt.Valid && comp.FinishedAt.Time.Before(al.CreatedAt) {
+	for _, vh := range vhs {
+		// competition.finished_atよりもあとの場合は、終了後に訪問したとみなして大会開催内アクセス済みとみなさない
+		if comp.FinishedAt.Valid && comp.FinishedAt.Time.Before(vh.MinCreatedAt) {
 			continue
 		}
-		billingMap[al.PlayerName] = 10
+		billingMap[vh.PlayerName] = 10
 	}
 
 	pss := []PlayerScoreRow{}
@@ -397,7 +391,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competiton
 		&pss,
 		"SELECT * FROM player_score WHERE competition_id = ?",
 		comp.ID,
-	); err != nil {
+	); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error Select count player_score: %w", err)
 	}
 	for _, ps := range pss {
@@ -1018,10 +1012,6 @@ func competitionRankingHandler(c echo.Context) error {
 	}
 
 	now := time.Now()
-	id, err := dispenseID(ctx)
-	if err != nil {
-		return fmt.Errorf("error dispenseID: %w", err)
-	}
 	var t TenantRow
 	if err := centerDB.SelectContext(ctx, &t, "SELECT * FROM tenant WHERE name = ?", v.tenantName); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
@@ -1029,10 +1019,10 @@ func competitionRankingHandler(c echo.Context) error {
 
 	if _, err := centerDB.ExecContext(
 		ctx,
-		"INSERT INTO access_log (id, player_name, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE updated_at = VALUES(updated_at)",
-		id, vp.Name, t.ID, competitionID, now, now,
+		"INSERT INTO visit_history (player_name, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+		vp.Name, t.ID, competitionID, now, now,
 	); err != nil {
-		return fmt.Errorf("error Insert access_log: %w", err)
+		return fmt.Errorf("error Insert visit_history: %w", err)
 	}
 
 	var rankAfter int64
@@ -1145,7 +1135,8 @@ func competitionsHandler(c echo.Context) error {
 	return nil
 }
 
-const initializeMaxID = 10000 // 仮
+const initializeMaxID = 10000                                                             // 仮
+var initializeMaxVisitHistoryCreatedAt = time.Date(2022, 06, 31, 23, 59, 59, 0, time.UTC) // 仮
 
 type InitializeHandlerResult struct {
 	Lang   string `json:"lang"`
@@ -1178,13 +1169,13 @@ func initializeHandler(c echo.Context) error {
 	); err != nil {
 		return fmt.Errorf("error Delete tenant: %w", err)
 	}
-	// constに定義されたmax_idより大きいIDのaccess_logを削除
+	// constに定義されたmax_visit_historyより大きいCreatedAtのvisit_historyを削除
 	if _, err := centerDB.ExecContext(
 		ctx,
-		"DELETE FROM access_log WHERE id > ?",
-		initializeMaxID,
+		"DELETE FROM visit_history WHERE created_at > ?",
+		initializeMaxVisitHistoryCreatedAt,
 	); err != nil {
-		return fmt.Errorf("error Delete access_log: %w", err)
+		return fmt.Errorf("error Delete visit_history: %w", err)
 	}
 	// constに定義されたmax_idにid_generatorを戻す
 	if _, err := centerDB.ExecContext(
