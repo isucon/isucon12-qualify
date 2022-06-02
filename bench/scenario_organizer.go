@@ -210,7 +210,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 		{
 			res, err := PostOrganizerCompetitionFinishAction(ctx, comp.ID, orgAg)
 			v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPICompetitionRankinFinish) error {
+				WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
 					_ = r
 					return nil
 				}),

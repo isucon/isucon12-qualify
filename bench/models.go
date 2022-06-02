@@ -161,3 +161,18 @@ func (idrs InitialDataRows) Choise() *InitialDataRow {
 	n := rand.Intn(len(idrs))
 	return idrs[n]
 }
+
+type ScoreRow struct {
+	PlayerName string
+	Score      int
+}
+
+type ScoreRows []*ScoreRow
+
+func (srs ScoreRows) CSV() string {
+	csv := fmt.Sprintf("player_name,score")
+	for _, row := range srs {
+		csv += fmt.Sprintf("\n%s,%d", row.PlayerName, row.Score)
+	}
+	return csv
+}
