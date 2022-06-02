@@ -12,6 +12,6 @@ data.tar.gz:
 	tar czf data.tar.gz *.db *.sql *.json
 
 install: clean build
-	mv cp.db ../webapp/tenant_db/
-	mv cp.sql ../webapp/sql/admin/
-	mv cp.json ../bench/
+	cp *.db ../webapp/tenant_db/
+	cp *.sql ../webapp/sql/admin/
+	cp *.json ../bench/
