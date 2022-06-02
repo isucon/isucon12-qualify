@@ -71,6 +71,8 @@ type Scenario struct {
 	// | +- Comeptitors // 大会参加者一覧
 	// | +- Disqualifieds // 失格済み参加者一覧
 	// +- Organizer // 主催者(1 tenantに1人)
+	// ひとまずTenantName, CompetitionID, PlayerNameが入ったデータ
+	InitialData InitialDataRows
 
 	lastPlaylistCreatedAt   time.Time
 	rateGetPopularPlaylists int32
@@ -112,6 +114,11 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 	}
 
 	// TODO: 初期データをロードする kayac/isucon2022/benchのLoad
+	s.InitialData, err = GetInitialData()
+	if err != nil {
+		return fmt.Errorf("初期データのロードに失敗しました %s", err)
+	}
+	fmt.Printf("%d, %v\n", len(s.InitialData), s.InitialData.Choise())
 
 	// 検証シナリオを1回まわす
 	if err := s.ValidationScenario(ctx, step); err != nil {
@@ -144,11 +151,16 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
-	// 一般参加者シナリオ
+	// 参加者シナリオ
+	playerCase, err := s.PlayerScenarioWorker(step, 1)
+	if err != nil {
+		return err
+	}
 
 	workers := []*worker.Worker{
 		AdminCase,
 		organizerCase,
+		playerCase,
 	}
 	for _, w := range workers {
 		wg.Add(1)
@@ -169,7 +181,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 
 // 並列数の調整
 func (s *Scenario) loadAdjustor(ctx context.Context, step *isucandar.BenchmarkStep, workers ...*worker.Worker) {
-	tk := time.NewTicker(time.Second * 15) // TODO: 適切な値にする
+	tk := time.NewTicker(time.Second * 10) // TODO: 適切な値にする
 	var prevErrors int64
 	for {
 		select {

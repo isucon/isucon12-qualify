@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"math/rand"
 	"os"
 	"time"
 
@@ -18,6 +19,8 @@ const (
 )
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
+
 	// ベンチマークオプションの生成
 	option := bench.Option{}
 
