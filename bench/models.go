@@ -148,10 +148,11 @@ func GetInitialData() (InitialDataRows, error) {
 }
 
 type InitialDataRow struct {
-	TenantName    string `json:"tenant_name"`
-	CompetitionID int64  `json:"competition_id"`
-	IsFinished    bool   `json:"is_finished"`
-	PlayerName    string `json:"player_name"`
+	TenantName     string `json:"tenant_name"`
+	CompetitionID  int64  `json:"competition_id"`
+	IsFinished     bool   `json:"is_finished"`
+	IsDisqualified bool   `json:"is_disqualified"`
+	PlayerName     string `json:"player_name"`
 }
 
 type InitialDataRows []*InitialDataRow

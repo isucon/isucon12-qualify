@@ -27,7 +27,11 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	defer report()
 
 	// 初期データから一人選ぶ
+	// 失格だとアクセスできないので省く
 	data := sc.InitialData.Choise()
+	if data.IsDisqualified {
+		return nil
+	}
 	player := Account{
 		Role:       AccountRolePlayer,
 		TenantName: data.TenantName,
