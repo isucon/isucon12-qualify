@@ -406,7 +406,7 @@ type VisitHistorySummaryRow struct {
 	MinCreatedAt time.Time `db:"min_created_at"`
 }
 
-func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competitonID int64) (*BillingReport, error) {
+func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, competitonID int64) (*BillingReport, error) {
 	comp, err := retrieveCompetition(ctx, tenantDB, competitonID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieveCompetition: %w", err)
@@ -416,7 +416,8 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competiton
 	if err := centerDB.SelectContext(
 		ctx,
 		&vhs,
-		"SELECT player_name, MIN(created_at) AS min_created_at FROM visit_history WHERE competition_id = ? GROUP BY player_name",
+		"SELECT player_name, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_name",
+		tenantID,
 		comp.ID,
 	); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error Select visit_history: %w", err)
@@ -520,7 +521,7 @@ func tenantsBillingHandler(c echo.Context) error {
 			return fmt.Errorf("error Select competition: %w", err)
 		}
 		for _, comp := range cs {
-			report, err := billingReportByCompetition(ctx, tenantDB, comp.ID)
+			report, err := billingReportByCompetition(ctx, tenantDB, t.ID, comp.ID)
 			if err != nil {
 				return fmt.Errorf("error billingReportByCompetition: %w", err)
 			}
@@ -905,6 +906,16 @@ func billingHandler(c echo.Context) error {
 	}
 	defer tenantDB.Close()
 
+	var t TenantRow
+	if err := centerDB.GetContext(
+		ctx,
+		&t,
+		"SELECT * FROM tenant WHERE name = ?",
+		tenantName,
+	); err != nil {
+		return fmt.Errorf("error Select tenant: %w", err)
+	}
+
 	cs := []CompetitionRow{}
 	if err := tenantDB.SelectContext(
 		ctx,
@@ -915,7 +926,7 @@ func billingHandler(c echo.Context) error {
 	}
 	tbrs := make([]BillingReport, 0, len(cs))
 	for _, comp := range cs {
-		report, err := billingReportByCompetition(ctx, tenantDB, comp.ID)
+		report, err := billingReportByCompetition(ctx, tenantDB, t.ID, comp.ID)
 		if err != nil {
 			return fmt.Errorf("error billingReportByCompetition: %w", err)
 		}
