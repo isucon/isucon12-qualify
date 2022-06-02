@@ -3,7 +3,6 @@ package bench
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/isucon/isucandar"
 )
@@ -20,11 +19,12 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// SaaS管理者, 主催者, 参加者のagent作成
 	admin := Account{
-		Role:    AccountRoleAdmin,
-		BaseURL: "http://localhost:3000/", // bench起動時のtarget urlかな
-		Option:  sc.Option,
+		Role:       AccountRoleAdmin,
+		TenantName: "admin",
+		PlayerName: "admin",
+		Option:     sc.Option,
 	}
-	if err := admin.SetJWT("admin", "admin"); err != nil {
+	if err := admin.SetJWT(); err != nil {
 		return err
 	}
 	adminAg, err := admin.GetAgent()
@@ -46,7 +46,6 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return v
 		}
 	}
-	log.Println(tenantName)
 	{
 		res, err := GetAdminTenantsBillingAction(ctx, tenantName, adminAg)
 		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
@@ -62,11 +61,12 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// 大会主催者API
 	organizer := Account{
-		Role:    AccountRoleOrganizer,
-		BaseURL: "http://localhost:3000/",
-		Option:  sc.Option,
+		Role:       AccountRoleOrganizer,
+		TenantName: tenantName,
+		PlayerName: "organizer",
+		Option:     sc.Option,
 	}
-	if err := organizer.SetJWT("organizer", tenantName); err != nil {
+	if err := organizer.SetJWT(); err != nil {
 		return err
 	}
 	orgAg, err := organizer.GetAgent()
@@ -156,11 +156,12 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// 大会参加者API
 	player := Account{
-		Role:    AccountRolePlayer,
-		BaseURL: "http://localhost:3000/",
-		Option:  sc.Option,
+		Role:       AccountRolePlayer,
+		TenantName: tenantName,
+		PlayerName: playerNames[0],
+		Option:     sc.Option,
 	}
-	if err := player.SetJWT(playerNames[0], tenantName); err != nil {
+	if err := player.SetJWT(); err != nil {
 		return err
 	}
 	playerAg, err := player.GetAgent()

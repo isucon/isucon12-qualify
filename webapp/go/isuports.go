@@ -319,7 +319,7 @@ func tenantsAddHandler(c echo.Context) error {
 		tx.Rollback()
 		return fmt.Errorf("error dispenseID: %w", err)
 	}
-	name := fmt.Sprintf("tenant-%06d", id)
+	name := fmt.Sprintf("tenant-%d", id)
 	now := time.Now()
 	_, err = tx.ExecContext(
 		ctx,
@@ -359,6 +359,14 @@ type BillingReport struct {
 }
 
 type VisitHistoryRow struct {
+	PlayerName    string    `db:"player_name"`
+	TenantID      int64     `db:"tenant_id"`
+	CompetitionID int64     `db:"competition_id"`
+	CreatedAt     time.Time `db:"created_at"`
+	UpdatedAt     time.Time `db:"updated_at"`
+}
+
+type VisitHistorySummaryRow struct {
 	PlayerName   string    `db:"player_name"`
 	MinCreatedAt time.Time `db:"min_created_at"`
 }
@@ -369,7 +377,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, competiton
 		return nil, fmt.Errorf("error retrieveCompetition: %w", err)
 	}
 
-	vhs := []VisitHistoryRow{}
+	vhs := []VisitHistorySummaryRow{}
 	if err := centerDB.SelectContext(
 		ctx,
 		&vhs,
@@ -1139,8 +1147,9 @@ func competitionsHandler(c echo.Context) error {
 	return nil
 }
 
-const initializeMaxID = 10000                                                             // 仮
-var initializeMaxVisitHistoryCreatedAt = time.Date(2022, 06, 31, 23, 59, 59, 0, time.UTC) // 仮
+const initializeMaxID = 2678400000
+
+var initializeMaxVisitHistoryCreatedAt = time.Date(2022, 05, 31, 23, 59, 59, 0, time.UTC)
 
 type InitializeHandlerResult struct {
 	Lang   string `json:"lang"`
