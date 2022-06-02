@@ -11,4 +11,4 @@ WORKDIR /home/isucon/bench
 ENV GOPATH /home/isucon/go
 ENV PATH /home/isucon/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-CMD ["bash", "-c", "sleep infinity"]
+CMD ["bash"]

@@ -67,6 +67,8 @@ services:
       - ./webapp:/home/isucon/webapp
       - gopkg_bench:/home/isucon/go/pkg
     network_mode: host
+    profiles:
+      - extra
 
 volumes:
   mysql:
