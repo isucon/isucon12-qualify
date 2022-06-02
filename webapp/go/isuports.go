@@ -82,11 +82,28 @@ func createTenantDB(name string) error {
 }
 
 func dispenseID(ctx context.Context) (int64, error) {
-	ret, err := centerDB.ExecContext(ctx, "REPLACE INTO `id_generator` (`stub`) VALUES (?);", "a")
-	if err != nil {
-		return 0, fmt.Errorf("error REPLACE INTO `id_generator`: %w", err)
+	var id int64
+	var lastErr error
+	for i := 0; i < 100; i++ {
+		var ret sql.Result
+		ret, err := centerDB.ExecContext(ctx, "REPLACE INTO `id_generator` (`stub`) VALUES (?);", "a")
+		if err != nil {
+			if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1213 { // deadlocK
+				lastErr = fmt.Errorf("error REPLACE INTO `id_generator`: %w", err)
+				continue
+			}
+			return 0, fmt.Errorf("error REPLACE INTO `id_generator`: %w", err)
+		}
+		id, err = ret.LastInsertId()
+		if err != nil {
+			return 0, fmt.Errorf("error ret.LastInsertId: %w", err)
+		}
+		break
 	}
-	return ret.LastInsertId()
+	if id != 0 {
+		return id, nil
+	}
+	return 0, lastErr
 }
 
 var centerDB *sqlx.DB

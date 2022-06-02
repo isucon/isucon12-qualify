@@ -4,6 +4,7 @@ set -xe
 useradd --groups sudo --create-home --shell /bin/bash isucon
 passwd -d isucon
 
+chmod 711 /home/isucon
 mkdir /home/isucon/.ssh
 chown isucon:isucon /home/isucon/.ssh
 chmod 700 /home/isucon/.ssh

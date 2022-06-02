@@ -41,7 +41,7 @@ source "amazon-ebs" "quarify" {
 
   source_ami    = "${data.amazon-ami.ubuntu-jammy.id}"
   region        = "ap-northeast-1"
-  instance_type = "t3.micro"
+  instance_type = "t3.medium"
 
   run_tags        = local.run_tags
   run_volume_tags = local.run_tags
@@ -59,6 +59,11 @@ build {
     source      = "./files.tar.gz"
   }
 
+  provisioner "file" {
+    destination = "/dev/shm/webapp.tar.gz"
+    source      = "./webapp.tar.gz"
+  }
+
   provisioner "shell" {
     inline = [
       # Write REVISION
@@ -67,13 +72,20 @@ build {
       # provisioning
       "cd /dev/shm && tar xvf files.tar.gz",
       "sudo /dev/shm/add_user.sh",
+      "cd /home/isucon && sudo tar xvf /dev/shm/webapp.tar.gz",
+      "sudo chown -R isucon:isucon /home/isucon/webapp",
       "sudo /dev/shm/provisioning.sh",
 
       # Install isuport-go.service
-      "sudo mv /dev/shm/isuport-go.service /etc/systemd/system/isuport-go.service",
-      "sudo chown root:root /etc/systemd/system/isuport-go.service",
+      "sudo mv /dev/shm/isuports-go.service /etc/systemd/system/isuports-go.service",
+      "sudo chown root:root /etc/systemd/system/isuports-go.service",
       "sudo systemctl daemon-reload",
-      "sudo systemctl enable isuport-go.service",
+      "sudo systemctl enable isuports-go.service",
+
+      # Configure nginx
+      "sudo mv /dev/shm/nginx.conf /etc/nginx/nginx.conf",
+      "sudo mv /dev/shm/isuports.conf /etc/nginx/conf.d/isuports.conf",
+      "sudo chown -R root:root /etc/nginx",
 
       # Configure SSH for isucon user
       "cat /dev/shm/sshd_config | sudo tee -a /etc/ssh/sshd_config",
