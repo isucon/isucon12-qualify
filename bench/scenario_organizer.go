@@ -101,7 +101,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 	}
 	for _, comp := range comps {
 		// 大会の作成
-		res, err := PostOrganizerCompetitonsAddAction(ctx, comp.Title, tenantName, orgAg)
+		res, err := PostOrganizerCompetitonsAddAction(ctx, comp.Title, orgAg)
 		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
 				comp.ID = r.Data.Competition.ID
@@ -130,7 +130,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 		}
 
 		{
-			res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, tenantName, orgAg)
+			res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
 			v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
 					if len(r.Data.Players) != len(playerDisplayNames) {
@@ -175,7 +175,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 		// 参加者を失格状態にする x N
 		{
 			for _, player := range players {
-				res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, player.Name, tenantName, orgAg)
+				res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, player.Name, orgAg)
 				v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200),
 					WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
 						_ = r
@@ -192,7 +192,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 
 		// テナント請求ダッシュボードの閲覧 x 1
 		{
-			res, err := GetOrganizerBillingAction(ctx, tenantName, orgAg)
+			res, err := GetOrganizerBillingAction(ctx, orgAg)
 			v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPIBilling) error {
 					_ = r
@@ -208,7 +208,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 
 		// 大会結果確定 x 1
 		{
-			res, err := PostOrganizerCompetitionFinishAction(ctx, comp.ID, tenantName, orgAg)
+			res, err := PostOrganizerCompetitionFinishAction(ctx, comp.ID, orgAg)
 			v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPICompetitionRankinFinish) error {
 					_ = r

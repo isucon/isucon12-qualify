@@ -51,7 +51,7 @@ func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantName string, 
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerPlayersAddAction(ctx context.Context, playerNames []string, tenantName string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerPlayersAddAction(ctx context.Context, playerNames []string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
 	for _, name := range playerNames {
 		form.Add("display_name", name)
@@ -65,7 +65,7 @@ func PostOrganizerPlayersAddAction(ctx context.Context, playerNames []string, te
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, playerName, tenantName string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, playerName string, ag *agent.Agent) (*http.Response, error) {
 	req, err := ag.POST("/organizer/api/player/"+playerName+"/disqualified", nil)
 	if err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, playerName, t
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerCompetitonsAddAction(ctx context.Context, title, tenantName string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerCompetitonsAddAction(ctx context.Context, title string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
 	form.Set("title", title)
 	req, err := ag.POST("/organizer/api/competitions/add", strings.NewReader(form.Encode()))
@@ -87,7 +87,7 @@ func PostOrganizerCompetitonsAddAction(ctx context.Context, title, tenantName st
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId int64, tenantName string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId int64, ag *agent.Agent) (*http.Response, error) {
 	req, err := ag.POST("/organizer/api/competition/"+strconv.FormatInt(competitionId, 10)+"/finish", nil)
 	if err != nil {
 		return nil, err
@@ -116,7 +116,7 @@ func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId int
 	return ag.Do(ctx, req)
 }
 
-func GetOrganizerBillingAction(ctx context.Context, tenantName string, ag *agent.Agent) (*http.Response, error) {
+func GetOrganizerBillingAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
 	req, err := ag.GET("/organizer/api/billing")
 	if err != nil {
 		return nil, err
@@ -125,7 +125,7 @@ func GetOrganizerBillingAction(ctx context.Context, tenantName string, ag *agent
 	return ag.Do(ctx, req)
 }
 
-func GetPlayerAction(ctx context.Context, playerName, tenantName string, ag *agent.Agent) (*http.Response, error) {
+func GetPlayerAction(ctx context.Context, playerName string, ag *agent.Agent) (*http.Response, error) {
 	req, err := ag.GET("/player/api/player/" + playerName)
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func GetPlayerAction(ctx context.Context, playerName, tenantName string, ag *age
 	return ag.Do(ctx, req)
 }
 
-func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID int64, tenantName string, ag *agent.Agent) (*http.Response, error) {
+func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID int64, ag *agent.Agent) (*http.Response, error) {
 	req, err := ag.GET("/player/api/competition/" + strconv.FormatInt(competitionID, 10) + "/ranking")
 	if err != nil {
 		return nil, err
@@ -143,7 +143,7 @@ func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID int64,
 	return ag.Do(ctx, req)
 }
 
-func GetPlayerCompetitionsAction(ctx context.Context, tenantName string, ag *agent.Agent) (*http.Response, error) {
+func GetPlayerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
 	req, err := ag.GET("/player/api/competitions")
 	if err != nil {
 		return nil, err

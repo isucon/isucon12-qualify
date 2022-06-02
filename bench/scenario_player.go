@@ -43,7 +43,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	}
 
 	{
-		res, err := GetPlayerAction(ctx, data.PlayerName, data.TenantName, playerAg)
+		res, err := GetPlayerAction(ctx, data.PlayerName, playerAg)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				_ = r
@@ -57,7 +57,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		}
 	}
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, data.CompetitionID, data.TenantName, playerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, data.CompetitionID, playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				_ = r
@@ -71,7 +71,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		}
 	}
 	{
-		res, err := GetPlayerCompetitionsAction(ctx, data.TenantName, playerAg)
+		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
 		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitions) error {
 				_ = r
