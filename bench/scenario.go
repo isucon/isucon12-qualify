@@ -30,19 +30,21 @@ const (
 	ScoreGETRoot score.ScoreTag = "GET /"
 
 	// for admin endpoint
-	ScorePOSTTenantsAdd    score.ScoreTag = "GET /api/tenants/add"
-	ScoreGETTenantsBilling score.ScoreTag = "GET /api/tenants/billing"
+	ScorePOSTTenantsAdd    score.ScoreTag = "GET /admin/api/tenants/add"
+	ScoreGETTenantsBilling score.ScoreTag = "GET /admin/api/tenants/billing"
 
-	// for tenant endpoint
+	// for organizer endpoint
 	// 参加者操作
-	ScorePOSTCompetititorsAdd       score.ScoreTag = "POST /api/competitors/add"
-	ScorePOSTCompetitorDisqualified score.ScoreTag = "POST /api/competitor/:competitior_id/disqualified"
+	ScorePOSTCompetititorsAdd       score.ScoreTag = "POST /organizer/api/competitors/add"
+	ScorePOSTCompetitorDisqualified score.ScoreTag = "POST /organizer/api/competitor/:competitior_id/disqualified"
 	// 大会操作
-	ScorePOSTCompetitionsAdd   score.ScoreTag = "POST /api/competitions/add"
-	ScorePOSTCompetitionFinish score.ScoreTag = "POST /api/competition/:competition_id/finish"
-	ScorePOSTCompetitionResult score.ScoreTag = "POST /api/competition/:competition_id/result"
+	ScorePOSTCompetitionsAdd   score.ScoreTag = "POST /organizer/api/competitions/add"
+	ScorePOSTCompetitionFinish score.ScoreTag = "POST /organizer/api/competition/:competition_id/finish"
+	ScorePOSTCompetitionResult score.ScoreTag = "POST /organizer/api/competition/:competition_id/result"
 	// テナント操作
-	ScoreGETTenantBilling score.ScoreTag = "GET /api/tenant/billing"
+	ScoreGETTenantBilling score.ScoreTag = "GET /organizer/api/billing"
+
+	// for player
 	// 参加者からの閲覧
 	ScoreGETCompetitor         score.ScoreTag = "GET /api/competitor/:competitor_id"
 	ScoreGETCompetitionRanking score.ScoreTag = "GET /api/competition/:competition_id/ranking"
@@ -132,16 +134,21 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	defer ContestantLogger.Println("負荷テストを終了します")
 	wg := &sync.WaitGroup{}
 
+	// SaaS管理者ユーザーシナリオ
+	AdminCase, err := s.AdminScenarioWorker(step, 1)
+	if err != nil {
+		return err
+	}
 	// 主催者(テナントオーナー)シナリオ
-	ownerCase, err := s.OwnerScenarioWorker(step, 1)
+	organizerCase, err := s.OrganizerScenarioWorker(step, 1)
 	if err != nil {
 		return err
 	}
 	// 一般参加者シナリオ
-	// SaaS管理者ユーザーシナリオ
 
 	workers := []*worker.Worker{
-		ownerCase,
+		AdminCase,
+		organizerCase,
 	}
 	for _, w := range workers {
 		wg.Add(1)
@@ -154,15 +161,15 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		s.loadAdjustor(ctx, step, ownerCase)
+		s.loadAdjustor(ctx, step, organizerCase, AdminCase)
 	}()
 	wg.Wait()
 	return nil
 }
 
-// TODO: これなに
+// 並列数の調整
 func (s *Scenario) loadAdjustor(ctx context.Context, step *isucandar.BenchmarkStep, workers ...*worker.Worker) {
-	tk := time.NewTicker(time.Second * 5)
+	tk := time.NewTicker(time.Second * 15) // TODO: 適切な値にする
 	var prevErrors int64
 	for {
 		select {
@@ -183,7 +190,7 @@ func (s *Scenario) loadAdjustor(ctx context.Context, step *isucandar.BenchmarkSt
 		if diff := total - prevErrors; diff > 0 {
 			ContestantLogger.Printf("エラーが%d件増えました(現在%d件)", diff, total)
 		} else {
-			ContestantLogger.Println("ユーザーが増えます")
+			ContestantLogger.Println("並列数を1追加します")
 			addParallels = 1
 		}
 		for _, w := range workers {

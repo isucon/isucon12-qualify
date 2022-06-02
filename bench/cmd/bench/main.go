@@ -102,6 +102,17 @@ func SumScore(result *isucandar.BenchmarkResult) (int64, int64, int64) {
 	score := result.Score
 	// 各タグに倍率を設定
 	score.Set(bench.ScoreGETRoot, 1)
+	score.Set(bench.ScorePOSTTenantsAdd, 1)
+	score.Set(bench.ScoreGETTenantsBilling, 1)
+	score.Set(bench.ScorePOSTCompetititorsAdd, 1)
+	score.Set(bench.ScorePOSTCompetitorDisqualified, 1)
+	score.Set(bench.ScorePOSTCompetitionsAdd, 1)
+	score.Set(bench.ScorePOSTCompetitionFinish, 1)
+	score.Set(bench.ScorePOSTCompetitionResult, 1)
+	score.Set(bench.ScoreGETTenantBilling, 1)
+	score.Set(bench.ScoreGETCompetitor, 1)
+	score.Set(bench.ScoreGETCompetitionRanking, 1)
+	score.Set(bench.ScoreGETCometitions, 1)
 
 	// 加点分の合算
 	addition := score.Sum()
