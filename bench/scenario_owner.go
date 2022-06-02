@@ -12,7 +12,7 @@ func (sc *Scenario) OwnerScenarioWorker(step *isucandar.BenchmarkStep, p int32) 
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		sc.OwnerScenario(ctx, step)
 	},
-		// 無限回繰り返す
+		// // 無限回繰り返す
 		worker.WithInfinityLoop(),
 		worker.WithUnlimitedParallelism(),
 	)
