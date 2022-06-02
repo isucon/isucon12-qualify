@@ -1,3 +1,7 @@
+DROP TABLE IF EXISTS `competition`;
+DROP TABLE IF EXISTS `player`;
+DROP TABLE IF EXISTS `player_score`;
+
 CREATE TABLE `competition` (
   `id` INTEGER NOT NULL PRIMARY KEY,
   `title` TEXT NOT NULL,
