@@ -97,7 +97,6 @@ func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId int
 }
 
 func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId int64, csv []byte, ag *agent.Agent) (*http.Response, error) {
-	// TODO: multipart/form-dataをあとでいれる
 	body := &bytes.Buffer{}
 	mw := multipart.NewWriter(body)
 	fw, err := mw.CreateFormFile("scores", "nandemoii")
