@@ -53,7 +53,7 @@ func (ac *Account) SetJWT() error {
 	if err != nil {
 		return fmt.Errorf("error GetAgent: %w", err)
 	}
-	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "../isuports.pem")
+	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./isuports.pem")
 	keysrc, err := os.ReadFile(keyFilename)
 	if err != nil {
 		return fmt.Errorf("error os.ReadFile: %w", err)
