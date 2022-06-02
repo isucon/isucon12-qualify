@@ -118,7 +118,6 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 	if err != nil {
 		return fmt.Errorf("初期データのロードに失敗しました %s", err)
 	}
-	fmt.Printf("%d, %v\n", len(s.InitialData), s.InitialData.Choise())
 
 	// 検証シナリオを1回まわす
 	if err := s.ValidationScenario(ctx, step); err != nil {

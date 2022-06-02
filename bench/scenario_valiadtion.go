@@ -182,7 +182,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, playerNames[0], tenantName, playerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, competitionId, tenantName, playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				_ = r

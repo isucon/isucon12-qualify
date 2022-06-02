@@ -29,7 +29,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	// 初期データから一人選ぶ
 	data := sc.InitialData.Choise()
 	player := Account{
-		Role:       AccountRoleAdmin,
+		Role:       AccountRolePlayer,
 		TenantName: data.TenantName,
 		PlayerName: data.PlayerName,
 		Option:     sc.Option,
@@ -57,7 +57,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		}
 	}
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, data.PlayerName, data.TenantName, playerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, data.CompetitionID, data.TenantName, playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				_ = r

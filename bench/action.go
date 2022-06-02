@@ -134,8 +134,8 @@ func GetPlayerAction(ctx context.Context, playerName, tenantName string, ag *age
 	return ag.Do(ctx, req)
 }
 
-func GetPlayerCompetitionRankingAction(ctx context.Context, competition, tenantName string, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/player/api/competition/" + competition + "/ranking")
+func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID int64, tenantName string, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.GET("/player/api/competition/" + strconv.FormatInt(competitionID, 10) + "/ranking")
 	if err != nil {
 		return nil, err
 	}
