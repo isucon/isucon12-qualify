@@ -78,7 +78,10 @@ func createTenantDB(name string) error {
 	p := tenantDBPath(name)
 
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("sqlite3 %s < %s", p, tenantDBSchemaFilePath))
-	return cmd.Run()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("error exec sqlite3 %s < %s, out=%s: %w", p, tenantDBSchemaFilePath, string(out), err)
+	}
+	return nil
 }
 
 func dispenseID(ctx context.Context) (int64, error) {
