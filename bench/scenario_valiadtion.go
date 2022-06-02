@@ -154,6 +154,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 
+	fmt.Println(playerNames)
 	// 大会参加者API
 	player := Account{
 		Role:       AccountRolePlayer,

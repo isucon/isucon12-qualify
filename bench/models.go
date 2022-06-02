@@ -26,9 +26,9 @@ type Account struct {
 	mu         sync.RWMutex
 	Agent      *agent.Agent
 	Option     Option // SetJWT時にGetAgentをしたいのでしぶしぶ含めた
-	Role       string // JWTのsubに入る
-	TenantName string // adminの場合は空（あるいは無視）
-	PlayerName string // JWTのaudience
+	Role       string
+	TenantName string // JWTのaudience adminの場合は空（あるいは無視）
+	PlayerName string // JWTのsubject
 
 	// Option.TargetURL: http://t.isucon.dev Role: adminなら
 	// GetRequestURLは http://admin.t.isucon.dev
@@ -70,8 +70,8 @@ func (ac *Account) SetJWT() error {
 
 	token := jwt.New()
 	token.Set("iss", "isuports")
-	token.Set("aud", ac.PlayerName)
-	token.Set("sub", ac.TenantName)
+	token.Set("sub", ac.PlayerName)
+	token.Set("aud", ac.TenantName)
 	token.Set("role", ac.Role)
 	token.Set("exp", time.Now().Add(24*time.Hour).Unix())
 
