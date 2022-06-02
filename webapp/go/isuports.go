@@ -157,6 +157,21 @@ func Run() {
 
 func errorResponseHandler(err error, c echo.Context) {
 	c.Logger().Errorf("error at %s: %s", c.Path(), err.Error())
+	if errors.Is(err, errNotPermitted) {
+		c.JSON(http.StatusForbidden, FailureResult{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
+	var he *echo.HTTPError
+	if errors.As(err, &he) {
+		c.JSON(he.Code, FailureResult{
+			Success: false,
+			Message: err.Error(),
+		})
+		return
+	}
 	c.JSON(http.StatusInternalServerError, FailureResult{
 		Success: false,
 		Message: err.Error(),
