@@ -117,18 +117,19 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return v
 		}
 	}
-	// { // TODO まだできていない
-	// 	res, err := PostOrganizerCompetitionResultAction(ctx, competitionId, orgAg)
-	// 	v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
-	// 		WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
-	// 			_ = r
-	// 			return nil
-	// 		}),
-	// 	)
-	// 	if !v.IsEmpty() {
-	// 		return v
-	// 	}
-	// }
+	{
+		csv := fmt.Sprintf("player_name,score\n%s,100", playerNames[0])
+		res, err := PostOrganizerCompetitionResultAction(ctx, competitionId, []byte(csv), orgAg)
+		v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+				_ = r
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
 	{
 		res, err := PostOrganizerCompetitionFinishAction(ctx, competitionId, tenantName, orgAg)
 		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),

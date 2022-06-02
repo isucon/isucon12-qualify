@@ -1,8 +1,10 @@
 package bench
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -95,13 +97,24 @@ func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId int
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId int64, ag *agent.Agent) (*http.Response, error) {
-	// multipart/form-dataをあとでいれる
-	req, err := ag.POST("/organizer/api/competition/"+strconv.FormatInt(competitionId, 10)+"/result", nil)
+func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId int64, csv []byte, ag *agent.Agent) (*http.Response, error) {
+	// TODO: multipart/form-dataをあとでいれる
+	body := &bytes.Buffer{}
+	mw := multipart.NewWriter(body)
+	fw, err := mw.CreateFormFile("scores", "nandemoii")
+	if err != nil {
+		mw.Close()
+		return nil, err
+	}
+	fw.Write(csv)
+
+	mw.Close()
+
+	req, err := ag.POST("/organizer/api/competition/"+strconv.FormatInt(competitionId, 10)+"/result", body)
 	if err != nil {
 		return nil, err
 	}
-
+	req.Header.Set("Content-Type", mw.FormDataContentType())
 	return ag.Do(ctx, req)
 }
 
