@@ -7,7 +7,7 @@ services:
       - ./nginx/conf.d:/etc/nginx/conf.d
       #- ./public:/public
     ports:
-      - "8080:80"
+      - "80:80"
     links:
       - webapp
       - blackauth
@@ -16,8 +16,8 @@ services:
   blackauth:
     build: ./blackauth/
     environment:
-      ISUCON_BASE_HOSTNAME: .t.isucon.dev.localhost
-      ISUCON_ADMIN_HOSTNAME: admin.t.isucon.dev.localhost
+      ISUCON_BASE_HOSTNAME: .t.isucon.dev
+      ISUCON_ADMIN_HOSTNAME: admin.t.isucon.dev
     init: true
     restart: always
 
@@ -31,14 +31,13 @@ services:
       ISUCON_DB_USER: isucon
       ISUCON_DB_PASSWORD: isucon
       ISUCON_DB_NAME: isuports
-      ISUCON_BASE_HOSTNAME: .t.isucon.dev.localhost
-      ISUCON_ADMIN_HOSTNAME: admin.t.isucon.dev.localhost
+      ISUCON_BASE_HOSTNAME: .t.isucon.dev
+      ISUCON_ADMIN_HOSTNAME: admin.t.isucon.dev
     links:
       - mysql
     volumes:
-      # - ./public:/home/isucon/webapp/public
-      - gopkg:/usr/local/go/pkg
-      - sqlite:/home/isucon/webapp/tenant_db
+      - ./webapp:/home/isucon/webapp
+      - gopkg:/home/isucon/go/pkg
     init: true
     restart: always
 
@@ -56,7 +55,20 @@ services:
       - 13306:3306
     restart: always
 
+  bench:
+    build: ./bench/
+    stdin_open: true
+    tty: true
+    environment:
+      ISUCON_JWT_KEY_FILE: ./isuports.pem
+      ISUCON_BASE_HOSTNAME: .t.isucon.dev
+    volumes:
+      - ./bench:/home/isucon/bench
+      - ./webapp:/home/isucon/webapp
+      - gopkg_bench:/home/isucon/go/pkg
+    network_mode: host
+
 volumes:
   mysql:
   gopkg:
-  sqlite:
+  gopkg_bench:

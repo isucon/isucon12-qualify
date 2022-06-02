@@ -1,7 +1,9 @@
 package bench
 
 import (
+	"bytes"
 	"context"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -59,7 +61,6 @@ func PostOrganizerPlayersAddAction(ctx context.Context, playerNames []string, te
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 
 	return ag.Do(ctx, req)
 }
@@ -70,7 +71,6 @@ func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, playerName, t
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 
 	return ag.Do(ctx, req)
 }
@@ -84,7 +84,6 @@ func PostOrganizerCompetitonsAddAction(ctx context.Context, title, tenantName st
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 	return ag.Do(ctx, req)
 }
 
@@ -94,17 +93,27 @@ func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId int
 		return nil, err
 	}
 
-	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId int64, ag *agent.Agent) (*http.Response, error) {
-	// multipart/form-dataをあとでいれる
-	req, err := ag.POST("/organizer/api/competition/"+strconv.FormatInt(competitionId, 10)+"/result", nil)
+func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId int64, csv []byte, ag *agent.Agent) (*http.Response, error) {
+	// TODO: multipart/form-dataをあとでいれる
+	body := &bytes.Buffer{}
+	mw := multipart.NewWriter(body)
+	fw, err := mw.CreateFormFile("scores", "nandemoii")
+	if err != nil {
+		mw.Close()
+		return nil, err
+	}
+	fw.Write(csv)
+
+	mw.Close()
+
+	req, err := ag.POST("/organizer/api/competition/"+strconv.FormatInt(competitionId, 10)+"/result", body)
 	if err != nil {
 		return nil, err
 	}
-
+	req.Header.Set("Content-Type", mw.FormDataContentType())
 	return ag.Do(ctx, req)
 }
 
@@ -114,7 +123,6 @@ func GetOrganizerBillingAction(ctx context.Context, tenantName string, ag *agent
 		return nil, err
 	}
 
-	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 	return ag.Do(ctx, req)
 }
 
@@ -124,17 +132,15 @@ func GetPlayerAction(ctx context.Context, playerName, tenantName string, ag *age
 		return nil, err
 	}
 
-	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 	return ag.Do(ctx, req)
 }
 
 func GetPlayerCompetitionRankingAction(ctx context.Context, competition, tenantName string, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/player/api/competiton/" + competition + "/ranking")
+	req, err := ag.GET("/player/api/competition/" + competition + "/ranking")
 	if err != nil {
 		return nil, err
 	}
 
-	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 	return ag.Do(ctx, req)
 }
 
@@ -144,6 +150,5 @@ func GetPlayerCompetitionsAction(ctx context.Context, tenantName string, ag *age
 		return nil, err
 	}
 
-	req.Host = tenantName + "." + ag.BaseURL.Host // 無理やり tenant-010001.localhost:3000みたいなものを生成する
 	return ag.Do(ctx, req)
 }

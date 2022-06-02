@@ -22,9 +22,9 @@ func (o Option) String() string {
 	return "TargetURL: " + o.TargetURL + ", RequestTimeout: " + o.RequestTimeout.String() + ", InitializeRequestTimeout: " + o.InitializeRequestTimeout.String()
 }
 
-func (o Option) NewAgent(forInitialize bool) (*agent.Agent, error) {
+func (o Option) NewAgent(targetURL string, forInitialize bool) (*agent.Agent, error) {
 	agentOptions := []agent.AgentOption{
-		agent.WithBaseURL(o.TargetURL),
+		agent.WithBaseURL(targetURL),
 		agent.WithCloneTransport(agent.DefaultTransport),
 	}
 
