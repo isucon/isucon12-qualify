@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -18,7 +19,7 @@ import (
 	"github.com/jaswdr/faker"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
-	_ "github.com/samber/lo"
+	"github.com/samber/lo"
 
 	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 )
@@ -35,6 +36,13 @@ var maxID int64                                            // webapp初期化時
 
 var tenantDBSchemaFilePath = "../webapp/sql/tenant/10_schema.sql"
 var adminDBSchemaFilePath = "../webapp/sql/admin/10_schema.sql"
+
+type benchmarkerSource struct {
+	TenantName    string `json:"tenant_name"`
+	CompetitionID int64  `json:"competition_id"`
+	IsFinished    bool   `json:"is_finished"`
+	PlayerName    string `json:"player_name"`
+}
 
 func init() {
 	os.Setenv("TZ", "UTC")
@@ -61,21 +69,29 @@ func main() {
 		log.Fatal(err)
 	}
 	defer db.Close()
+	benchSrcs := make([]*benchmarkerSource, 0)
 	for i := 0; i < tenantsNum; i++ {
 		log.Println("create tenant")
 		tenant := createTenant()
 		players := createPlayers(tenant)
 		competitions := createCompetitions(tenant)
-		playerScores, visitHistroies := createPlayerData(tenant, players, competitions)
+		playerScores, visitHistroies, b := createPlayerData(tenant, players, competitions)
 		if err := storeTenant(tenant, players, competitions, playerScores); err != nil {
 			log.Fatal(err)
 		}
 		if err := storeAdmin(db, tenant, visitHistroies); err != nil {
 			log.Fatal(err)
 		}
+		benchSrcs = append(benchSrcs, lo.Samples(b, 1000)...)
 	}
 	if err := storeMaxID(db); err != nil {
 		log.Fatal(err)
+	}
+	if f, err := os.Create("benchmarker.json"); err != nil {
+		log.Fatal(err)
+	} else {
+		json.NewEncoder(f).Encode(benchSrcs)
+		f.Close()
 	}
 }
 
@@ -284,9 +300,10 @@ func createPlayerData(
 	tenant *isuports.TenantRow,
 	players []*isuports.PlayerRow,
 	competitions []*isuports.CompetitionRow,
-) ([]*isuports.PlayerScoreRow, []*isuports.VisitHistoryRow) {
+) ([]*isuports.PlayerScoreRow, []*isuports.VisitHistoryRow, []*benchmarkerSource) {
 	scores := make([]*isuports.PlayerScoreRow, 0, len(players)*len(competitions))
 	visits := make([]*isuports.VisitHistoryRow, 0, len(players)*len(competitions)*visitsByCompetition)
+	bench := make([]*benchmarkerSource, 0, len(players)*len(competitions))
 	for _, c := range competitions {
 		for _, p := range players {
 			if c.FinishedAt.Valid && p.CreatedAt.After(c.FinishedAt.Time) {
@@ -319,7 +336,13 @@ func createPlayerData(
 				CreatedAt:     created,
 				UpdatedAt:     created,
 			})
+			bench = append(bench, &benchmarkerSource{
+				TenantName:    tenant.Name,
+				CompetitionID: c.ID,
+				PlayerName:    p.Name,
+				IsFinished:    c.FinishedAt.Valid,
+			})
 		}
 	}
-	return scores, visits
+	return scores, visits, bench
 }

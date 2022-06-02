@@ -6,11 +6,12 @@ build: builder
 	mysqldump -uisucon -pisucon -B isuports --no-tablespaces > 90_data.sql
 
 clean:
-	rm -f *.db *.sql
+	rm -f *.db *.sql *.json
 
-data.tar.gz: clean build
-	tar czf data.tar.gz *.db *.sql
+data.tar.gz:
+	tar czf data.tar.gz *.db *.sql *.json
 
 install: clean build
-	mv *.db ../webapp/tenant_db/
-	mv *.sql ../webapp/sql/admin/
+	mv cp.db ../webapp/tenant_db/
+	mv cp.sql ../webapp/sql/admin/
+	mv cp.json ../bench/
