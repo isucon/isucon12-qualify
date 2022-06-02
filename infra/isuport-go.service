@@ -1,0 +1,14 @@
+[Unit]
+Description=isucon12 qualify go
+After=network.target
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=simple
+User=isucon
+Group=isucon
+WorkingDirectory=/home/isucon/webapp/go
+ExecStart=/usr/local/go/bin/go run /home/isucon/webapp/go/main.go
+Restart=always
