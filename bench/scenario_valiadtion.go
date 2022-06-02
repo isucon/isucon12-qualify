@@ -94,7 +94,6 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, tenantName, orgAg)
 		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
-				fmt.Println(r.Data)
 				for _, pl := range r.Data.Players {
 					playerNames = append(playerNames, pl.Name)
 				}
@@ -155,7 +154,6 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 
-	fmt.Println(playerNames)
 	// 大会参加者API
 	player := Account{
 		Role:       AccountRolePlayer,
@@ -183,18 +181,18 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return v
 		}
 	}
-	// { // TODO: csv入稿後
-	// 	res, err := GetPlayerCompetitionRankingAction(ctx, playerNames[0], tenantName, playerAg)
-	// 	v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
-	// 		WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
-	// 			_ = r
-	// 			return nil
-	// 		}),
-	// 	)
-	// 	if !v.IsEmpty() {
-	// 		return v
-	// 	}
-	// }
+	{
+		res, err := GetPlayerCompetitionRankingAction(ctx, playerNames[0], tenantName, playerAg)
+		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				_ = r
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
 	{
 		res, err := GetPlayerCompetitionsAction(ctx, tenantName, playerAg)
 		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),

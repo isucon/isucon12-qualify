@@ -3,7 +3,6 @@ package bench
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -128,7 +127,6 @@ func GetOrganizerBillingAction(ctx context.Context, tenantName string, ag *agent
 }
 
 func GetPlayerAction(ctx context.Context, playerName, tenantName string, ag *agent.Agent) (*http.Response, error) {
-	fmt.Println(playerName)
 	req, err := ag.GET("/player/api/player/" + playerName)
 	if err != nil {
 		return nil, err
@@ -138,7 +136,7 @@ func GetPlayerAction(ctx context.Context, playerName, tenantName string, ag *age
 }
 
 func GetPlayerCompetitionRankingAction(ctx context.Context, competition, tenantName string, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/player/api/competiton/" + competition + "/ranking")
+	req, err := ag.GET("/player/api/competition/" + competition + "/ranking")
 	if err != nil {
 		return nil, err
 	}
