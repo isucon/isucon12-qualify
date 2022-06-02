@@ -17,6 +17,9 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	ContestantLogger.Println("[ValidationScenario] 整合性チェックを開始します")
 	defer ContestantLogger.Printf("[ValidationScenario] 整合性チェックを終了します")
 
+	// 検証で作成する参加者数 結果のScoreも同数作成する
+	playerNum := 300
+
 	// SaaS管理者, 主催者, 参加者のagent作成
 	admin := Account{
 		Role:       AccountRoleAdmin,
@@ -97,7 +100,6 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return v
 		}
 	}
-	playerNum := 10
 	var playerDisplayNames []string
 	for i := 0; i < playerNum; i++ {
 		playerDisplayNames = append(playerDisplayNames, fmt.Sprintf("validate_player%d", i))
@@ -221,9 +223,8 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		res, err := GetPlayerCompetitionRankingAction(ctx, competitionId, playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
-				// TODO: 100件の考慮をしてないので追加
-				if len(score) != len(r.Data.Ranks) {
-					return fmt.Errorf("大会のランキングの結果の数が違います (want: %d, got: %d)", len(score), len(r.Data.Ranks))
+				if len(score) != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
+					return fmt.Errorf("大会のランキングの結果の数が違います(最大100件) (want: %d, got: %d)", len(score), len(r.Data.Ranks))
 				}
 				return nil
 			}),
