@@ -2,8 +2,11 @@ package bench
 
 import (
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -113,12 +116,47 @@ func (ac *Account) GetAgent() (*agent.Agent, error) {
 	return ag, nil
 }
 
-// TODO ここはwebappのgoからもってこれそう
-type Tenant struct{}
-type Tenants []*Tenant
+type Model interface {
+	InitialDataRow
+}
 
-type Competition struct{}
-type Competitions []*Competition
+func LoadFromJSONFile[T Model](jsonFile string) ([]*T, error) {
+	// 引数に渡されたファイルを開く
+	file, err := os.Open(jsonFile)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
 
-type Competitor struct{}
-type Competitors []*Competitor
+	objects := make([]*T, 0, 10000) // 大きく確保しておく
+	// JSON 形式としてデコード
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&objects); err != nil {
+		if err != io.EOF {
+			return nil, fmt.Errorf("failed to decode json: %w", err)
+		}
+	}
+	return objects, nil
+}
+
+func GetInitialData() (InitialDataRows, error) {
+	data, err := LoadFromJSONFile[InitialDataRow]("./benchmarker.json")
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
+type InitialDataRow struct {
+	TenantName    string `json:"tenant_name"`
+	CompetitionID int64  `json:"competition_id"`
+	IsFinished    bool   `json:"is_finished"`
+	PlayerName    string `json:"player_name"`
+}
+
+type InitialDataRows []*InitialDataRow
+
+func (idrs InitialDataRows) Choise() *InitialDataRow {
+	n := rand.Intn(len(idrs))
+	return idrs[n]
+}
