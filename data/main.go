@@ -38,10 +38,11 @@ var tenantDBSchemaFilePath = "../webapp/sql/tenant/10_schema.sql"
 var adminDBSchemaFilePath = "../webapp/sql/admin/10_schema.sql"
 
 type benchmarkerSource struct {
-	TenantName    string `json:"tenant_name"`
-	CompetitionID int64  `json:"competition_id"`
-	IsFinished    bool   `json:"is_finished"`
-	PlayerName    string `json:"player_name"`
+	TenantName     string `json:"tenant_name"`
+	CompetitionID  int64  `json:"competition_id"`
+	IsFinished     bool   `json:"is_finished"`
+	PlayerName     string `json:"player_name"`
+	IsDisqualified bool   `json:"is_disqualified"`
 }
 
 func init() {
@@ -337,10 +338,11 @@ func createPlayerData(
 				UpdatedAt:     created,
 			})
 			bench = append(bench, &benchmarkerSource{
-				TenantName:    tenant.Name,
-				CompetitionID: c.ID,
-				PlayerName:    p.Name,
-				IsFinished:    c.FinishedAt.Valid,
+				TenantName:     tenant.Name,
+				CompetitionID:  c.ID,
+				PlayerName:     p.Name,
+				IsFinished:     c.FinishedAt.Valid,
+				IsDisqualified: p.IsDisqualified,
 			})
 		}
 	}

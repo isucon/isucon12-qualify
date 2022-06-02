@@ -2,3 +2,4 @@ builder
 *.db
 *.sql
 *.tar.gz
+*.json
