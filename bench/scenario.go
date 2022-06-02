@@ -49,6 +49,11 @@ const (
 	ScoreGETCometitions        score.ScoreTag = "GET /api/competitions"
 )
 
+type TenantData struct {
+	DisplayName string
+	Name        string
+}
+
 // オプションと全データを持つシナリオ構造体
 type Scenario struct {
 	mu sync.RWMutex
@@ -104,6 +109,8 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 		return fmt.Errorf("初期化リクエストに失敗しました %v", v)
 	}
 
+	// TODO: 初期データをロードする kayac/isucon2022/benchのLoad
+
 	// 検証シナリオを1回まわす
 	if err := s.ValidationScenario(ctx, step); err != nil {
 		fmt.Println(err)
@@ -155,7 +162,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 
 // TODO: これなに
 func (s *Scenario) loadAdjustor(ctx context.Context, step *isucandar.BenchmarkStep, workers ...*worker.Worker) {
-	tk := time.NewTicker(time.Second)
+	tk := time.NewTicker(time.Second * 5)
 	var prevErrors int64
 	for {
 		select {
