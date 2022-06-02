@@ -60,6 +60,7 @@ services:
     stdin_open: true
     tty: true
     environment:
+      ISUCON_JWT_KEY_FILE: ../isuports.pem
       ISUCON_BASE_HOSTNAME: .t.isucon.dev
     volumes:
       - ./bench:/home/isucon/bench
