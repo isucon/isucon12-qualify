@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -114,6 +115,7 @@ func GetOrganizerBillingAction(ctx context.Context, tenantName string, ag *agent
 }
 
 func GetPlayerAction(ctx context.Context, playerName, tenantName string, ag *agent.Agent) (*http.Response, error) {
+	fmt.Println(playerName)
 	req, err := ag.GET("/player/api/player/" + playerName)
 	if err != nil {
 		return nil, err
