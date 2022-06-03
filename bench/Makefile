@@ -4,9 +4,6 @@ export HASH := $(shell git rev-parse HEAD)
 bench: *.go go.* cmd/bench/*.go
 	go build -o bench cmd/bench/main.go
 
-httpd: *.go go.* cmd/httpd/*.go
-	go build -o httpd cmd/httpd/main.go
-
 run: bench
 	./bench
 
@@ -19,5 +16,4 @@ prepare: bench
 
 .PHONY: clean
 clean:
-	rm -f bench httpd
-	git checkout data/
+	rm -f bench

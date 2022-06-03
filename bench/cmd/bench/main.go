@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	DefaultTargetURL                = "http://localhost"
+	DefaultTargetURL                = "http://t.isucon.dev"
 	DefaultRequestTimeout           = time.Second * 15
 	DefaultInitializeRequestTimeout = time.Second * 30
 	DefaultDuration                 = time.Minute
@@ -26,6 +26,7 @@ func main() {
 
 	// 各フラグとベンチマークオプションのフィールドを紐付ける
 	flag.StringVar(&option.TargetURL, "target-url", DefaultTargetURL, "Benchmark target URL")
+	flag.StringVar(&option.TargetAddr, "target-addr", "", "Benchmark target address e.g. host:port")
 	flag.DurationVar(&option.RequestTimeout, "request-timeout", DefaultRequestTimeout, "Default request timeout")
 	flag.DurationVar(&option.InitializeRequestTimeout, "initialize-request-timeout", DefaultInitializeRequestTimeout, "Initialize request timeout")
 	flag.DurationVar(&option.Duration, "duration", DefaultDuration, "Benchmark duration")
