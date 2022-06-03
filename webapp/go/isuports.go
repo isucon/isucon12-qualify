@@ -332,7 +332,7 @@ type TenantsAddHandlerResult struct {
 }
 
 func tenantsAddHandler(c echo.Context) error {
-	if c.Request().Host != getEnv("ISUCON_ADMIN_HOSTNAME", "isuports-admin.isucon.local") {
+	if c.Request().Host != getEnv("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
 		return echo.ErrNotFound
 	}
 
