@@ -1,6 +1,10 @@
 package bench
 
 import (
+	"context"
+	"fmt"
+	"net"
+	"net/http"
 	"time"
 
 	"github.com/isucon/isucandar/agent"
@@ -8,6 +12,7 @@ import (
 
 type Option struct {
 	TargetURL                string
+	TargetAddr               string
 	RequestTimeout           time.Duration
 	InitializeRequestTimeout time.Duration
 	ExitErrorOnFail          bool
@@ -19,13 +24,37 @@ type Option struct {
 }
 
 func (o Option) String() string {
-	return "TargetURL: " + o.TargetURL + ", RequestTimeout: " + o.RequestTimeout.String() + ", InitializeRequestTimeout: " + o.InitializeRequestTimeout.String()
+	return fmt.Sprintf(
+		"TargetURL: %s, TargetAddr: %s, InitializeRequestTimeout: %s, InitializeRequestTimeout: %s",
+		o.TargetURL,
+		o.TargetAddr,
+		o.RequestTimeout.String(),
+		o.InitializeRequestTimeout.String(),
+	)
+}
+
+func (o Option) NewTransport() *http.Transport {
+	if o.TargetAddr == "" {
+		return agent.DefaultTransport
+	}
+	dialContextFunc := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		d := net.Dialer{}
+		return d.DialContext(ctx, network, o.TargetAddr)
+	}
+	dialFunc := func(network, addr string) (net.Conn, error) {
+		return dialContextFunc(context.Background(), network, addr)
+	}
+	trs := agent.DefaultTransport.Clone()
+	trs.DialContext = dialContextFunc
+	trs.Dial = dialFunc
+	return trs
 }
 
 func (o Option) NewAgent(targetURL string, forInitialize bool) (*agent.Agent, error) {
+	trs := o.NewTransport()
 	agentOptions := []agent.AgentOption{
 		agent.WithBaseURL(targetURL),
-		agent.WithCloneTransport(agent.DefaultTransport),
+		agent.WithTransport(trs),
 	}
 
 	// initialize 用の agent.Agent はタイムアウト時間が違うのでオプションを調整
