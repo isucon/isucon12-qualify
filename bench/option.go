@@ -37,7 +37,7 @@ func (o Option) NewTransport() *http.Transport {
 	if o.TargetAddr == "" {
 		return agent.DefaultTransport.Clone()
 	}
-	dialContextFunc := func(ctx context.Context, network, addr string) (net.Conn, error) {
+	dialContextFunc := func(ctx context.Context, network, _ string) (net.Conn, error) {
 		d := net.Dialer{}
 		return d.DialContext(ctx, network, o.TargetAddr)
 	}
