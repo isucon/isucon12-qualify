@@ -190,7 +190,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 		s.loadAdjustor(ctx, step,
 			newTenantCase,
 			organizerCase,
-			// playerCase, // 回りすぎるので一旦増やさない
+			playerCase, // 回りすぎるので一旦増やさない
 		)
 	}()
 	wg.Wait()
