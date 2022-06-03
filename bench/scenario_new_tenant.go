@@ -83,8 +83,9 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	// 複数作ったうちの1つに負荷をかける
+	var tenantName string
 	if tenant, ok := tenants[displayNames[0]]; ok {
-		var tenantName string = tenant.Name
+		tenantName = tenant.Name
 	} else {
 		return fmt.Errorf("error: tenants[%s] not exist", displayNames[0])
 	}
