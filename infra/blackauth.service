@@ -1,0 +1,14 @@
+[Unit]
+Description=isucon12 qualify auth server
+After=network.target
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=simple
+User=isucon
+Group=isucon
+WorkingDirectory=/home/isucon/blackauth
+ExecStart=/usr/local/go/bin/go run /home/isucon/blackauth/main.go
+Restart=always
