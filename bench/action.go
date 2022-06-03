@@ -3,6 +3,7 @@ package bench
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -134,8 +135,12 @@ func GetPlayerAction(ctx context.Context, playerName string, ag *agent.Agent) (*
 	return ag.Do(ctx, req)
 }
 
-func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID int64, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/player/api/competition/" + strconv.FormatInt(competitionID, 10) + "/ranking")
+func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID int64, rankAfter int, ag *agent.Agent) (*http.Response, error) {
+	path := fmt.Sprintf("/player/api/competition/%s/ranking", strconv.FormatInt(competitionID, 10))
+	if rankAfter > 1 {
+		path += fmt.Sprintf("?rank_after=%d", rankAfter)
+	}
+	req, err := ag.GET(path)
 	if err != nil {
 		return nil, err
 	}

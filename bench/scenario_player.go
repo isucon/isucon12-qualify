@@ -61,7 +61,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		}
 	}
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, data.CompetitionID, playerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, data.CompetitionID, 1, playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				_ = r

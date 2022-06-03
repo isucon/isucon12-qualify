@@ -220,11 +220,26 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, competitionId, playerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, competitionId, 1, playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if len(score) != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
 					return fmt.Errorf("大会のランキングの結果の数が違います(最大100件) (want: %d, got: %d)", len(score), len(r.Data.Ranks))
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+	{
+		// rank_afterで最後の一軒だけを取るように指定する
+		res, err := GetPlayerCompetitionRankingAction(ctx, competitionId, len(score)-1, playerAg)
+		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				if 1 != len(r.Data.Ranks) {
+					return fmt.Errorf("rank_after指定時の大会のランキングの結果の数が違います (want: %d, got: %d)", 1, len(r.Data.Ranks))
 				}
 				return nil
 			}),
