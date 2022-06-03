@@ -60,7 +60,7 @@ func main() {
 	log.Println("tenantsNum", tenantsNum)
 	log.Println("epoch", epoch)
 
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("mysql -uisucon -pisucon isuports < %s", adminDBSchemaFilePath))
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("mysql -uisucon -pisucon --host 127.0.0.1 isuports < %s", adminDBSchemaFilePath))
 	if err := cmd.Run(); err != nil {
 		log.Fatal(err)
 	}

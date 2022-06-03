@@ -64,6 +64,11 @@ build {
     source      = "./webapp.tar.gz"
   }
 
+  provisioner "file" {
+    destination = "/dev/shm/bench.tar.gz"
+    source      = "./bench.tar.gz"
+  }
+
   provisioner "shell" {
     inline = [
       # Write REVISION
@@ -73,7 +78,8 @@ build {
       "cd /dev/shm && tar xvf files.tar.gz",
       "sudo /dev/shm/add_user.sh",
       "cd /home/isucon && sudo tar xvf /dev/shm/webapp.tar.gz",
-      "sudo chown -R isucon:isucon /home/isucon/webapp",
+      "cd /home/isucon && sudo tar xvf /dev/shm/bench.tar.gz",
+      "sudo chown -R isucon:isucon /home/isucon/webapp /home/isucon/bench",
       "sudo /dev/shm/provisioning.sh",
 
       # Install isuport-go.service
