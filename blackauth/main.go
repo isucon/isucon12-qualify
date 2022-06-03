@@ -60,6 +60,7 @@ func loginPlayerHandler(w http.ResponseWriter, r *http.Request) {
 	cookie := &http.Cookie{
 		Name:  cookieName,
 		Value: fmt.Sprintf("%s", signed),
+		Path:  "/",
 	}
 	http.SetCookie(w, cookie)
 	w.WriteHeader(http.StatusOK)
@@ -84,6 +85,7 @@ func loginOrganizerHandler(w http.ResponseWriter, r *http.Request) {
 	cookie := &http.Cookie{
 		Name:  cookieName,
 		Value: fmt.Sprintf("%s", signed),
+		Path:  "/",
 	}
 	http.SetCookie(w, cookie)
 	w.WriteHeader(http.StatusOK)
@@ -106,6 +108,7 @@ func loginAdminHandler(w http.ResponseWriter, r *http.Request) {
 	cookie := &http.Cookie{
 		Name:  cookieName,
 		Value: fmt.Sprintf("%s", signed),
+		Path:  "/",
 	}
 	http.SetCookie(w, cookie)
 	w.WriteHeader(http.StatusOK)
