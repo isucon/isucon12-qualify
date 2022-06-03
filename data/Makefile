@@ -3,7 +3,7 @@ builder: go.* *.go ../webapp/go/*
 
 build: builder
 	@./builder 10
-	mysqldump -uisucon -pisucon -B isuports --no-tablespaces > 90_data.sql
+	mysqldump -uisucon -pisucon --host 127.0.0.1 -B isuports --no-tablespaces > 90_data.sql
 
 clean:
 	rm -f *.db *.sql *.json
@@ -11,7 +11,7 @@ clean:
 data.tar.gz:
 	tar czf data.tar.gz *.db *.sql *.json
 
-install: clean build
+install:
 	cp *.db ../webapp/tenant_db/
 	cp *.sql ../webapp/sql/admin/
 	cp *.json ../bench/
