@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
@@ -27,7 +28,6 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	defer report()
 
 	// 初期データから一人選ぶ
-	// 失格だとアクセスできないので省く
 	data := sc.InitialData.Choise()
 	player := Account{
 		Role:       AccountRolePlayer,
@@ -35,7 +35,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		PlayerName: data.PlayerName,
 		Option:     sc.Option,
 	}
-	if err := player.SetJWT(); err != nil {
+	if err := player.SetJWT(sc.RawKey); err != nil {
 		return err
 	}
 	playerAg, err := player.GetAgent()
@@ -98,5 +98,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		}
 	}
 
+	// 300ms待つ
+	time.Sleep(time.Millisecond * 300)
 	return nil
 }

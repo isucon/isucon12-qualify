@@ -52,7 +52,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 		PlayerName: "admin",
 		Option:     sc.Option,
 	}
-	if err := admin.SetJWT(); err != nil {
+	if err := admin.SetJWT(sc.RawKey); err != nil {
 		return err
 	}
 	adminAg, err := admin.GetAgent()
@@ -81,7 +81,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 		Option:     sc.Option,
 	}
 
-	if err := organizer.SetJWT(); err != nil {
+	if err := organizer.SetJWT(sc.RawKey); err != nil {
 		return err
 	}
 	orgAg, err := organizer.GetAgent()

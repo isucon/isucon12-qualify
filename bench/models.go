@@ -1,9 +1,8 @@
 package bench
 
 import (
-	"crypto/x509"
+	"crypto/rsa"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"math/rand"
@@ -51,24 +50,10 @@ func (ac *Account) GetRequestURL() string {
 }
 
 // SetJWT Agentがなければ作って、JWTをcookieに入れる
-func (ac *Account) SetJWT() error {
+func (ac *Account) SetJWT(rawkey *rsa.PrivateKey) error {
 	ag, err := ac.GetAgent()
 	if err != nil {
 		return fmt.Errorf("error GetAgent: %w", err)
-	}
-	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./isuports.pem")
-	keysrc, err := os.ReadFile(keyFilename)
-	if err != nil {
-		return fmt.Errorf("error os.ReadFile: %w", err)
-	}
-
-	block, _ := pem.Decode([]byte(keysrc))
-	if block == nil {
-		return fmt.Errorf("error pem.Decode: block is nil")
-	}
-	rawkey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return fmt.Errorf("error x509.ParsePKCS1PrivateKey: %w", err)
 	}
 
 	token := jwt.New()

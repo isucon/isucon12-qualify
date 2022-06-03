@@ -27,7 +27,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		PlayerName: "admin",
 		Option:     sc.Option,
 	}
-	if err := admin.SetJWT(); err != nil {
+	if err := admin.SetJWT(sc.RawKey); err != nil {
 		return err
 	}
 	adminAg, err := admin.GetAgent()
@@ -75,7 +75,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		PlayerName: "organizer",
 		Option:     sc.Option,
 	}
-	if err := organizer.SetJWT(); err != nil {
+	if err := organizer.SetJWT(sc.RawKey); err != nil {
 		return err
 	}
 	orgAg, err := organizer.GetAgent()
@@ -194,7 +194,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		PlayerName: playerNames[0],
 		Option:     sc.Option,
 	}
-	if err := player.SetJWT(); err != nil {
+	if err := player.SetJWT(sc.RawKey); err != nil {
 		return err
 	}
 	playerAg, err := player.GetAgent()
