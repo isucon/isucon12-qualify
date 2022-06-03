@@ -27,6 +27,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	defer report()
 
 	// 初期データから一人選ぶ
+	// 失格だとアクセスできないので省く
 	data := sc.InitialData.Choise()
 	player := Account{
 		Role:       AccountRolePlayer,
@@ -42,6 +43,18 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		return err
 	}
 
+	// 失格の参加者は403 forbidden
+	if data.IsDisqualified {
+		res, err := GetPlayerAction(ctx, data.PlayerName, playerAg)
+		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(403))
+		if v.IsEmpty() {
+			step.AddScore(ScoreGETPlayerDetails)
+		} else {
+			return v
+		}
+		return nil
+	}
+
 	{
 		res, err := GetPlayerAction(ctx, data.PlayerName, playerAg)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
@@ -51,13 +64,13 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			}),
 		)
 		if v.IsEmpty() {
-			step.AddScore(ScoreGETCompetitor)
+			step.AddScore(ScoreGETPlayerDetails)
 		} else {
 			return v
 		}
 	}
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, data.CompetitionID, playerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, data.CompetitionID, 1, playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				_ = r
@@ -65,7 +78,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			}),
 		)
 		if v.IsEmpty() {
-			step.AddScore(ScoreGETCompetitionRanking)
+			step.AddScore(ScoreGETPlayerRanking)
 		} else {
 			return v
 		}
@@ -79,7 +92,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			}),
 		)
 		if v.IsEmpty() {
-			step.AddScore(ScoreGETCometitions)
+			step.AddScore(ScoreGETPlayerCompetitions)
 		} else {
 			return v
 		}

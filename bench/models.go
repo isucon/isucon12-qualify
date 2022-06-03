@@ -148,10 +148,11 @@ func GetInitialData() (InitialDataRows, error) {
 }
 
 type InitialDataRow struct {
-	TenantName    string `json:"tenant_name"`
-	CompetitionID int64  `json:"competition_id"`
-	IsFinished    bool   `json:"is_finished"`
-	PlayerName    string `json:"player_name"`
+	TenantName     string `json:"tenant_name"`
+	CompetitionID  int64  `json:"competition_id"`
+	IsFinished     bool   `json:"is_finished"`
+	IsDisqualified bool   `json:"is_disqualified"`
+	PlayerName     string `json:"player_name"`
 }
 
 type InitialDataRows []*InitialDataRow
@@ -159,4 +160,19 @@ type InitialDataRows []*InitialDataRow
 func (idrs InitialDataRows) Choise() *InitialDataRow {
 	n := rand.Intn(len(idrs))
 	return idrs[n]
+}
+
+type ScoreRow struct {
+	PlayerName string
+	Score      int
+}
+
+type ScoreRows []*ScoreRow
+
+func (srs ScoreRows) CSV() string {
+	csv := fmt.Sprintf("player_name,score")
+	for _, row := range srs {
+		csv += fmt.Sprintf("\n%s,%d", row.PlayerName, row.Score)
+	}
+	return csv
 }

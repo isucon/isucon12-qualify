@@ -33,7 +33,7 @@ type PlayerData struct {
 }
 
 func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
-	report := timeReporter("主催者シナリオ")
+	report := timeReporter("新規追加: 主催者シナリオ")
 	defer report()
 
 	// 各テナント
@@ -109,7 +109,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 			}),
 		)
 		if v.IsEmpty() {
-			step.AddScore(ScorePOSTCompetitionsAdd)
+			step.AddScore(ScorePOSTOrganizerCompetitionsAdd)
 		} else {
 			return v
 		}
@@ -146,7 +146,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 				}),
 			)
 			if v.IsEmpty() {
-				step.AddScore(ScorePOSTCompetitionsAdd)
+				step.AddScore(ScorePOSTOrganizerPlayersAdd)
 			} else {
 				return v
 			}
@@ -166,7 +166,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 				}),
 			)
 			if v.IsEmpty() {
-				step.AddScore(ScorePOSTCompetitionResult)
+				step.AddScore(ScorePOSTOrganizerCompetitionResult)
 			} else {
 				return v
 			}
@@ -174,7 +174,13 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 
 		// 参加者を失格状態にする x N
 		{
+			index := 0
 			for _, player := range players {
+				// 5%の人は失格
+				index++
+				if index%100 > 5 {
+					continue
+				}
 				res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, player.Name, orgAg)
 				v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200),
 					WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
@@ -183,7 +189,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 					}),
 				)
 				if v.IsEmpty() {
-					step.AddScore(ScorePOSTCompetitorDisqualified)
+					step.AddScore(ScorePOSTOrganizerPlayerDisqualified)
 				} else {
 					return v
 				}
@@ -200,7 +206,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 				}),
 			)
 			if v.IsEmpty() {
-				step.AddScore(ScoreGETTenantBilling)
+				step.AddScore(ScoreGETOrganizerBilling)
 			} else {
 				return v
 			}
@@ -210,13 +216,13 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 		{
 			res, err := PostOrganizerCompetitionFinishAction(ctx, comp.ID, orgAg)
 			v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPICompetitionRankinFinish) error {
+				WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
 					_ = r
 					return nil
 				}),
 			)
 			if v.IsEmpty() {
-				step.AddScore(ScorePOSTCompetitionFinish)
+				step.AddScore(ScorePOSTOrganizerCompetitionFinish)
 			} else {
 				return v
 			}

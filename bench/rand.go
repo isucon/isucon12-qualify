@@ -22,10 +22,6 @@ func init() {
 	entropy = ulid.Monotonic(rand.New(rand.NewSource(s)), 0)
 }
 
-func newULID() ulid.ULID {
-	return ulid.MustNew(ulid.Timestamp(time.Now()), entropy)
-}
-
 func RandomString(n int) string {
 	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
 
