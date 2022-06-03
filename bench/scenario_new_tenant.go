@@ -13,7 +13,7 @@ func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		sc.NewTenantScenario(ctx, step)
 	},
-		// // 無限回繰り返す
+		// 無限回繰り返す
 		worker.WithInfinityLoop(),
 		worker.WithUnlimitedParallelism(),
 	)
@@ -28,15 +28,15 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	report := timeReporter("新規テナント: SaaS管理者シナリオ")
 	defer report()
 
-	playerNum := 100 // 1テナント当たりの作成する参加者数
+	playerNum := 10 // 1テナント当たりの作成する参加者数
 
-	admin := Account{
+	admin := &Account{
 		Role:       AccountRoleAdmin,
 		TenantName: "admin",
 		PlayerName: "admin",
 		Option:     sc.Option,
 	}
-	if err := admin.SetJWT(); err != nil {
+	if err := admin.SetJWT(sc.RawKey); err != nil {
 		return err
 	}
 	adminAg, err := admin.GetAgent()
@@ -97,7 +97,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		Option:     sc.Option,
 	}
 
-	if err := organizer.SetJWT(); err != nil {
+	if err := organizer.SetJWT(sc.RawKey); err != nil {
 		return err
 	}
 	orgAg, err := organizer.GetAgent()
@@ -178,31 +178,6 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 				return v
 			}
 		}
-
-		// 参加者を失格状態にする x N
-		{
-			index := 0
-			for _, player := range players {
-				// 5%の人は失格
-				index++
-				if index%100 > 5 {
-					continue
-				}
-				res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, player.Name, orgAg)
-				v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200),
-					WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
-						_ = r
-						return nil
-					}),
-				)
-				if v.IsEmpty() {
-					step.AddScore(ScorePOSTOrganizerPlayerDisqualified)
-				} else {
-					return v
-				}
-			}
-		}
-
 		// 大会結果確定 x 1
 		{
 			res, err := PostOrganizerCompetitionFinishAction(ctx, comp.ID, orgAg)
@@ -218,22 +193,47 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 				return v
 			}
 		}
-		// TODO 結果確認
+	}
 
-		// テナント請求ダッシュボードの閲覧 x 1
-		{
-			res, err := GetOrganizerBillingAction(ctx, orgAg)
-			v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPIBilling) error {
+	// 参加者を失格状態にする x N
+	{
+		index := 0
+		for _, player := range players {
+			// 5%の人は失格
+			index++
+			if index%100 > 5 {
+				continue
+			}
+			res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, player.Name, orgAg)
+			v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200),
+				WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
 					_ = r
 					return nil
 				}),
 			)
 			if v.IsEmpty() {
-				step.AddScore(ScoreGETOrganizerBilling)
+				step.AddScore(ScorePOSTOrganizerPlayerDisqualified)
 			} else {
 				return v
 			}
+		}
+	}
+
+	// TODO 結果確認
+
+	// テナント請求ダッシュボードの閲覧 x 1
+	{
+		res, err := GetOrganizerBillingAction(ctx, orgAg)
+		v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIBilling) error {
+				_ = r
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			step.AddScore(ScoreGETOrganizerBilling)
+		} else {
+			return v
 		}
 	}
 

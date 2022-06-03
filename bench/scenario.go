@@ -2,6 +2,9 @@ package bench
 
 import (
 	"context"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"net/url"
 	"os"
@@ -66,6 +69,7 @@ type Scenario struct {
 
 	lastPlaylistCreatedAt   time.Time
 	rateGetPopularPlaylists int32
+	RawKey                  *rsa.PrivateKey
 
 	Errors failure.Errors
 }
@@ -96,6 +100,21 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 		Debug = debug
 	}()
 	Debug = true // prepareは常にデバッグログを出す
+
+	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./isuports.pem")
+	keysrc, err := os.ReadFile(keyFilename)
+	if err != nil {
+		return fmt.Errorf("error os.ReadFile: %w", err)
+	}
+
+	block, _ := pem.Decode([]byte(keysrc))
+	if block == nil {
+		return fmt.Errorf("error pem.Decode: block is nil")
+	}
+	s.RawKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("error x509.ParsePKCS1PrivateKey: %w", err)
+	}
 
 	// POST /initialize へ初期化リクエスト実行
 	res, err := PostInitializeAction(ctx, ag)
@@ -145,11 +164,17 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
+	// admin billingを見るシナリオ
+	adminBillingCase, err := s.AdminBillingScenarioWorker(step, 1)
+	if err != nil {
+		return err
+	}
 
 	workers := []*worker.Worker{
 		newTenantCase,
 		organizerCase,
 		playerCase,
+		adminBillingCase,
 	}
 	for _, w := range workers {
 		wg.Add(1)
@@ -162,7 +187,11 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		s.loadAdjustor(ctx, step, playerCase, organizerCase, newTenantCase)
+		s.loadAdjustor(ctx, step,
+			newTenantCase,
+			organizerCase,
+			// playerCase, // 回りすぎるので一旦増やさない
+		)
 	}()
 	wg.Wait()
 	return nil
@@ -170,7 +199,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 
 // 並列数の調整
 func (s *Scenario) loadAdjustor(ctx context.Context, step *isucandar.BenchmarkStep, workers ...*worker.Worker) {
-	tk := time.NewTicker(time.Second * 5) // TODO: 適切な値にする
+	tk := time.NewTicker(time.Second * 10) // TODO: 適切な値にする
 	var prevErrors int64
 	for {
 		select {

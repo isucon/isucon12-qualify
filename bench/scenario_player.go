@@ -35,7 +35,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		PlayerName: data.PlayerName,
 		Option:     sc.Option,
 	}
-	if err := player.SetJWT(); err != nil {
+	if err := player.SetJWT(sc.RawKey); err != nil {
 		return err
 	}
 	playerAg, err := player.GetAgent()
