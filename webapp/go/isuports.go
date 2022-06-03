@@ -1264,18 +1264,25 @@ func initializeHandler(c echo.Context) error {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
 	for _, tn := range utns {
-		tenantDB, err := connectToTenantDB(tn)
+		err := func() error {
+			tenantDB, err := connectToTenantDB(tn)
+			if err != nil {
+				return fmt.Errorf("error connectToTenantDB: %w", err)
+			}
+			defer tenantDB.Close()
+			if _, err := tenantDB.ExecContext(ctx, "DELETE FROM competition WHERE id > ?", initializeMaxID); err != nil {
+				return fmt.Errorf("error Delete competition: tenant=%s %w", tn, err)
+			}
+			if _, err := tenantDB.ExecContext(ctx, "DELETE FROM player WHERE id > ?", initializeMaxID); err != nil {
+				return fmt.Errorf("error Delete player: tenant=%s %w", tn, err)
+			}
+			if _, err := tenantDB.ExecContext(ctx, "DELETE FROM player_score WHERE id > ?", initializeMaxID); err != nil {
+				return fmt.Errorf("error Delete player: tenant=%s %w", tn, err)
+			}
+			return nil
+		}()
 		if err != nil {
-			return fmt.Errorf("error connectToTenantDB: %w", err)
-		}
-		if _, err := tenantDB.ExecContext(ctx, "DELETE FROM competition WHERE id > ?", initializeMaxID); err != nil {
-			return fmt.Errorf("error Delete competition: tenant=%s %w", tn, err)
-		}
-		if _, err := tenantDB.ExecContext(ctx, "DELETE FROM player WHERE id > ?", initializeMaxID); err != nil {
-			return fmt.Errorf("error Delete player: tenant=%s %w", tn, err)
-		}
-		if _, err := tenantDB.ExecContext(ctx, "DELETE FROM player_score WHERE id > ?", initializeMaxID); err != nil {
-			return fmt.Errorf("error Delete player: tenant=%s %w", tn, err)
+			return err
 		}
 	}
 
