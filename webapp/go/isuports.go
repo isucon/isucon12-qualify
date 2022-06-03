@@ -428,6 +428,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, 
 		if comp.FinishedAt.Valid && comp.FinishedAt.Time.Before(vh.MinCreatedAt) {
 			continue
 		}
+		// scoreに登録されていないplayerでアクセスした人 * 10
 		billingMap[vh.PlayerName] = 10
 	}
 
@@ -446,8 +447,10 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, 
 			return nil, fmt.Errorf("error retrievePlayer: %w", err)
 		}
 		if _, ok := billingMap[player.Name]; ok {
+			// scoreに登録されているplayerでアクセスした人 * 100
 			billingMap[player.Name] = 100
 		} else {
+			// scoreに登録されているplayerでアクセスしていない人 * 50
 			billingMap[player.Name] = 50
 		}
 	}

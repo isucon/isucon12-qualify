@@ -69,6 +69,11 @@ build {
     source      = "./bench.tar.gz"
   }
 
+  provisioner "file" {
+    destination = "/dev/shm/blackauth.tar.gz"
+    source      = "./blackauth.tar.gz"
+  }
+
   provisioner "shell" {
     inline = [
       # Write REVISION
@@ -79,14 +84,18 @@ build {
       "sudo /dev/shm/add_user.sh",
       "cd /home/isucon && sudo tar xvf /dev/shm/webapp.tar.gz",
       "cd /home/isucon && sudo tar xvf /dev/shm/bench.tar.gz",
+      "cd /home/isucon && sudo tar xvf /dev/shm/blackauth.tar.gz",
       "sudo chown -R isucon:isucon /home/isucon/webapp /home/isucon/bench",
       "sudo /dev/shm/provisioning.sh",
 
       # Install isuport-go.service
-      "sudo mv /dev/shm/isuports-go.service /etc/systemd/system/isuports-go.service",
-      "sudo chown root:root /etc/systemd/system/isuports-go.service",
+      "sudo mv /dev/shm/*.service /etc/systemd/system/",
+      "sudo chown root:root /etc/systemd/system/*.service",
+      "sudo chown root:root /etc/systemd/system/blackauth.service",
+
       "sudo systemctl daemon-reload",
       "sudo systemctl enable isuports-go.service",
+      "sudo systemctl enable blackauth.service",
 
       # Configure nginx
       "sudo mv /dev/shm/nginx.conf /etc/nginx/nginx.conf",

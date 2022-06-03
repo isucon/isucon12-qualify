@@ -6,7 +6,7 @@ export GOOS = linux
 build: files.tar.gz webapp.tar.gz bench.tar.gz isucon-admin.pub
 	packer build -on-error=ask qualify.pkr.hcl
 
-files.tar.gz: sshd_config *.sh *.service *.pub *.conf isuports.conf
+files.tar.gz: sshd_config *.sh *.service *.pub *.conf
 	tar cvzf files.tar.gz $^
 
 isuports.conf:
@@ -20,6 +20,9 @@ webapp.tar.gz:
 bench.tar.gz:
 	cd ../bench && make clean bench
 	cd .. && tar czvf infra/bench.tar.gz bench
+
+blackauth.tar.gz:
+	cd .. && tar czf infra/blackauth.tar.gz blackauth
 
 clean:
 	rm -f isucon-admin *.tar.gz
