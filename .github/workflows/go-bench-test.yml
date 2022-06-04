@@ -19,13 +19,13 @@ jobs:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v3
 
-    - name: [bench] Get dependencies
+    - name: "[bench] Get dependencies"
       working-directory: ./bench
       env:
         TZ: Asia/Tokyo
       run: |
         go get -v -t -d ./...
-    - name: [bench] Test
+    - name: "[bench] Test"
       working-directory: ./bench
       env:
         TZ: Asia/Tokyo

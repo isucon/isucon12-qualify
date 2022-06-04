@@ -19,13 +19,13 @@ jobs:
     - name: Check out code into the Go module directory
       uses: actions/checkout@v3
 
-    - name: [webapp] Get dependencies
+    - name: "[webapp] Get dependencies"
       working-directory: ./webapp/go
       env:
         TZ: Asia/Tokyo
       run: |
         go get -v -t -d ./...
-    - name: [webapp] Test
+    - name: "[webapp] Test"
       working-directory: ./webapp/go
       env:
         TZ: Asia/Tokyo
