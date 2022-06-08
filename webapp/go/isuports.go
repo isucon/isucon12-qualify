@@ -349,6 +349,16 @@ type PlayerScoreRow struct {
 	UpdatedAt     time.Time `db:"updated_at"`
 }
 
+type PlayerScoreRowWithName struct {
+	ID            int64     `db:"id"`
+	PlayerID      int64     `db:"player_id"`
+	PlayerName    string    `db:"player_name"`
+	CompetitionID int64     `db:"competition_id"`
+	Score         int64     `db:"score"`
+	CreatedAt     time.Time `db:"created_at"`
+	UpdatedAt     time.Time `db:"updated_at"`
+}
+
 type TenantDetail struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name"`
@@ -483,26 +493,22 @@ func billingReportByCompetitionInternal(ctx context.Context, tenantDB, centerDB 
 		billingMap[vh.PlayerName] = 10
 	}
 
-	pss := []PlayerScoreRow{}
+	pss := []PlayerScoreRowWithName{}
 	if err := tenantDB.SelectContext(
 		ctx,
 		&pss,
-		"SELECT * FROM player_score WHERE competition_id = ?",
+		"SELECT ps.*, p.name AS player_name FROM player_score ps JOIN player p ON (ps.player_id=p.id) WHERE competition_id = ?",
 		comp.ID,
 	); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error Select count player_score: %w", err)
 	}
 	for _, ps := range pss {
-		player, err := retrievePlayer(ctx, tenantDB, ps.PlayerID)
-		if err != nil {
-			return nil, fmt.Errorf("error retrievePlayer: %w", err)
-		}
-		if _, ok := billingMap[player.Name]; ok {
+		if _, ok := billingMap[ps.PlayerName]; ok {
 			// scoreに登録されているplayerでアクセスした人 * 100
-			billingMap[player.Name] = 100
+			billingMap[ps.PlayerName] = 100
 		} else {
 			// scoreに登録されているplayerでアクセスしていない人 * 50
-			billingMap[player.Name] = 50
+			billingMap[ps.PlayerName] = 50
 		}
 	}
 
