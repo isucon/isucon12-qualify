@@ -849,6 +849,7 @@ func competitionResultHandler(c echo.Context) error {
 	); err != nil {
 		return fmt.Errorf("error Delete player_score: %w", err)
 	}
+	playerScoreRows := make([]*PlayerScoreRow, 0, 100)
 	for {
 		row, err := r.Read()
 		if err != nil {
@@ -868,23 +869,32 @@ func competitionResultHandler(c echo.Context) error {
 			ttx.Rollback()
 			return fmt.Errorf("error retrievePlayerByName: %w", err)
 		}
+
+		id, _ := dispenseID(ctx)
 		var score int64
 		if score, err = strconv.ParseInt(scoreStr, 10, 64); err != nil {
 			ttx.Rollback()
 			return fmt.Errorf("error strconv.ParseUint: %w", err)
 		}
-		id, err := dispenseID(ctx)
-		if err != nil {
-			ttx.Rollback()
-			return fmt.Errorf("error dispenseID: %w", err)
-		}
-		if _, err := ttx.ExecContext(
+
+		playerScoreRows = append(playerScoreRows, &PlayerScoreRow{
+			ID:            id,
+			PlayerID:      c.ID,
+			CompetitionID: competitionID,
+			Score:         score,
+			CreatedAt:     now,
+			UpdatedAt:     now,
+		})
+	}
+	if len(playerScoreRows) > 0 {
+		if _, err := ttx.NamedExecContext(
 			ctx,
-			"REPLACE INTO player_score (id, player_id, competition_id, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-			id, c.ID, competitionID, score, now, now,
+			`INSERT INTO player_score (id, player_id, competition_id, score, created_at, updated_at)
+			VALUES (:id, :player_id, :competition_id, :score, :created_at, :updated_at)`,
+			playerScoreRows,
 		); err != nil {
 			ttx.Rollback()
-			return fmt.Errorf("error Update competition: %w", err)
+			return fmt.Errorf("error BULK INSERT player_score: %w", err)
 		}
 	}
 
