@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -77,10 +76,39 @@ func getTenantName(c echo.Context) (string, error) {
 
 func createTenantDB(name string) error {
 	p := tenantDBPath(name)
-
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("sqlite3 %s < %s", p, tenantDBSchemaFilePath))
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("error exec sqlite3 %s < %s, out=%s: %w", p, tenantDBSchemaFilePath, string(out), err)
+	db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rwc", p))
+	if err != nil {
+		return err
+	}
+	for _, query := range []string{
+		`CREATE TABLE "competition" (
+			"id" INTEGER NOT NULL PRIMARY KEY,
+			"title" TEXT NOT NULL,
+			"finished_at" DATETIME NULL,
+			"created_at" DATETIME NOT NULL,
+			"updated_at" DATETIME NOT NULL
+		)`,
+		`CREATE TABLE player (
+			id INTEGER PRIMARY KEY,
+			name TEXT NOT NULL UNIQUE,
+			display_name TEXT NOT NULL,
+			is_disqualified INTEGER NOT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL
+		)`,
+		`CREATE TABLE player_score (
+			id INTEGER PRIMARY KEY,
+			player_id INTEGER NOT NULL,
+			competition_id INTEGER NOT NULL,
+			score INTEGER NOT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			UNIQUE (player_id, competition_id)
+		)`,
+	} {
+		if _, err = db.ExecContext(context.Background(), query); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -1057,7 +1085,7 @@ func competitionRankingHandler(c echo.Context) error {
 
 	now := time.Now()
 	var t TenantRow
-	if err := centerDB.GetContext(ctx, &t, "SELECT * FROM tenant WHERE name = ?", v.tenantName); err != nil {
+	if err := centerDB.GetContext(ctx, &t, "SELECT id, name FROM tenant WHERE name = ?", v.tenantName); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
 
