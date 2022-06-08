@@ -71,7 +71,7 @@ func connectToTenantDB(name string) (*sqlx.DB, error) {
 	if db, ok := tenantDBCache[p]; ok {
 		return db, nil
 	}
-	if db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rw", p)); err != nil {
+	if db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rw&_journal_mode=MEMORY", p)); err != nil {
 		return nil, err
 	} else {
 		tenantDBCache[p] = db
