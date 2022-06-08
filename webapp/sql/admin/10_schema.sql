@@ -29,3 +29,11 @@ CREATE TABLE `visit_history` (
   `updated_at` DATETIME(6) NOT NULL,
   INDEX `tenant_id_idx` (`tenant_id`, `competition_id`, `created_at`),
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;
+
+CREATE TABLE `visit_history_s` (
+  `player_name` varchar(256) NOT NULL,
+  `tenant_id` bigint unsigned NOT NULL,
+  `competition_id` bigint unsigned NOT NULL,
+  `min_created_at` datetime(6) DEFAULT NULL,
+  PRIMARY KEY (`tenant_id`,`competition_id`,`player_name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4;
