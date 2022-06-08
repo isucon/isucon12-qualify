@@ -96,8 +96,8 @@ var centerDB *sqlx.DB
 
 func Run() {
 	e := echo.New()
-	e.Debug = true
-	e.Logger.SetLevel(log.DEBUG)
+	e.Debug = false
+	e.Logger.SetLevel(log.WARN)
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
