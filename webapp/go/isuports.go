@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -58,9 +59,25 @@ func tenantDBPath(name string) string {
 	return filepath.Join(tenantDBDir, name+".db")
 }
 
+var tenantDBCache = make(map[string]*sqlx.DB, 1000)
+var mu sync.Mutex
+
 func connectToTenantDB(name string) (*sqlx.DB, error) {
 	p := tenantDBPath(name)
-	return sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rw", p))
+	mu.Lock()
+	defer mu.Unlock()
+	if db, ok := tenantDBCache[p]; ok {
+		log.Info("tenant db cache hit for", p)
+		return db, nil
+	}
+	log.Info("tenant db cache miss for", p)
+	if db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rw", p)); err != nil {
+		return nil, err
+	} else {
+		log.Info("tenant db cache put for", p)
+		tenantDBCache[p] = db
+		return db, nil
+	}
 }
 
 func getTenantName(c echo.Context) (string, error) {
@@ -525,7 +542,7 @@ func tenantsBillingHandler(c echo.Context) error {
 		if err != nil {
 			return fmt.Errorf("error connectToTenantDB: %w", err)
 		}
-		defer tenantDB.Close()
+
 		cs := []CompetitionRow{}
 		if err := tenantDB.SelectContext(
 			ctx,
@@ -583,7 +600,6 @@ func playersAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
-	defer tenantDB.Close()
 
 	params, err := c.FormParams()
 	if err != nil {
@@ -656,7 +672,6 @@ func playerDisqualifiedHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
-	defer tenantDB.Close()
 
 	name := c.Param("player_name")
 
@@ -712,7 +727,6 @@ func competitionsAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
-	defer tenantDB.Close()
 
 	title := c.FormValue("title")
 
@@ -758,7 +772,6 @@ func competitionFinishHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
-	defer tenantDB.Close()
 
 	idStr := c.Param("competition_id")
 	var id int64
@@ -797,7 +810,6 @@ func competitionResultHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
-	defer tenantDB.Close()
 
 	competitionIDStr := c.Param("competition_id")
 	var competitionID int64
@@ -935,7 +947,6 @@ func billingHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
-	defer tenantDB.Close()
 
 	var t TenantRow
 	if err := centerDB.GetContext(
@@ -1003,7 +1014,6 @@ func playerHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
-	defer tenantDB.Close()
 
 	vp, err := retrievePlayerByName(c.Request().Context(), tenantDB, v.playerName)
 	if err != nil {
@@ -1090,7 +1100,6 @@ func competitionRankingHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
-	defer tenantDB.Close()
 
 	vp, err := retrievePlayerByName(c.Request().Context(), tenantDB, v.playerName)
 	if err != nil {
@@ -1198,7 +1207,6 @@ func competitionsHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
-	defer tenantDB.Close()
 
 	vp, err := retrievePlayerByName(c.Request().Context(), tenantDB, v.playerName)
 	if err != nil {
@@ -1311,7 +1319,6 @@ func initializeHandler(c echo.Context) error {
 			if err != nil {
 				return fmt.Errorf("error connectToTenantDB: %w", err)
 			}
-			defer tenantDB.Close()
 			if _, err := tenantDB.ExecContext(ctx, "DELETE FROM competition WHERE id > ?", initializeMaxID); err != nil {
 				return fmt.Errorf("error Delete competition: tenant=%s %w", tn, err)
 			}
