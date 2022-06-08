@@ -121,12 +121,6 @@ func createTenantDB(name string) error {
 			updated_at DATETIME NOT NULL,
 			UNIQUE (player_id, competition_id)
 		)`,
-		`CREATE TABLE IF NOT EXISTS billing_report (
-			competition_id INTEGER NOT NULL PRIMARY KEY,
-			competition_title TEXT NOT NULL,
-			player_count INTEGER NOT NULL,
-			billing_yen INTEGER NOT NULL
-		)`,
 	} {
 		if _, err = db.ExecContext(context.Background(), query); err != nil {
 			return err
@@ -420,6 +414,7 @@ func tenantsAddHandler(c echo.Context) error {
 }
 
 type BillingReport struct {
+	TenantID         int64  `json:"-" db:"tenant_id"`
 	CompetitionID    int64  `json:"competition_id" db:"competition_id"`
 	CompetitionTitle string `json:"competition_title" db:"competition_title"`
 	PlayerCount      int64  `json:"player_count" db:"player_count"`
@@ -441,10 +436,10 @@ type VisitHistorySummaryRow struct {
 
 var billingGroup = singleflight.Group{}
 
-func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, competitonID int64) (*BillingReport, error) {
+func billingReportByCompetition(ctx context.Context, tenantDB, centerDB dbOrTx, tenantID, competitonID int64) (*BillingReport, error) {
 	key := strconv.FormatInt(competitonID, 10)
 	_r, err, _ := billingGroup.Do(key, func() (interface{}, error) {
-		return billingReportByCompetitionInternal(ctx, tenantDB, tenantID, competitonID)
+		return billingReportByCompetitionInternal(ctx, tenantDB, centerDB, tenantID, competitonID)
 	})
 	if err != nil {
 		return nil, err
@@ -453,14 +448,14 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, 
 	return _r.(*BillingReport), nil
 }
 
-func billingReportByCompetitionInternal(ctx context.Context, tenantDB dbOrTx, tenantID, competitonID int64) (*BillingReport, error) {
+func billingReportByCompetitionInternal(ctx context.Context, tenantDB, centerDB dbOrTx, tenantID, competitonID int64) (*BillingReport, error) {
 	comp, err := retrieveCompetition(ctx, tenantDB, competitonID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieveCompetition: %w", err)
 	}
 	// 確定済みならテーブルから返せる
 	var report BillingReport
-	err = tenantDB.GetContext(ctx, &report, `SELECT * FROM billing_report WHERE competition_id=?`, competitonID)
+	err = centerDB.GetContext(ctx, &report, `SELECT * FROM billing_report WHERE tenant_id=? AND competition_id=?`, tenantID, competitonID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error billingReportByCompetitionID: %w", err)
 	}
@@ -522,9 +517,9 @@ func billingReportByCompetitionInternal(ctx context.Context, tenantDB dbOrTx, te
 		BillingYen:       billingYen,
 	}
 
-	if _, err := tenantDB.ExecContext(ctx,
-		`REPLACE INTO billing_report (competition_id, competition_title, player_count, billing_yen) VALUES (?, ?, ?, ?)`,
-		r.CompetitionID, r.CompetitionTitle, r.PlayerCount, r.BillingYen,
+	if _, err := centerDB.ExecContext(ctx,
+		`REPLACE INTO billing_report (tenant_id, competition_id, competition_title, player_count, billing_yen) VALUES (?, ?, ?, ?, ?)`,
+		tenantID, r.CompetitionID, r.CompetitionTitle, r.PlayerCount, r.BillingYen,
 	); err != nil {
 		return nil, err
 	}
@@ -563,7 +558,7 @@ func tenantsBillingHandler(c echo.Context) error {
 	//   を合計したものを
 	// テナントの課金とする
 	ts := []TenantRow{}
-	if err := centerDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY name ASC"); err != nil {
+	if err := centerDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY name ASC LIMIT 200"); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
@@ -589,7 +584,7 @@ func tenantsBillingHandler(c echo.Context) error {
 			return fmt.Errorf("error Select competition: %w", err)
 		}
 		for _, comp := range cs {
-			report, err := billingReportByCompetition(ctx, tenantDB, t.ID, comp.ID)
+			report, err := billingReportByCompetition(ctx, tenantDB, centerDB, t.ID, comp.ID)
 			if err != nil {
 				return fmt.Errorf("error billingReportByCompetition: %w", err)
 			}
@@ -1005,7 +1000,7 @@ func billingHandler(c echo.Context) error {
 	}
 	tbrs := make([]BillingReport, 0, len(cs))
 	for _, comp := range cs {
-		report, err := billingReportByCompetition(ctx, tenantDB, t.ID, comp.ID)
+		report, err := billingReportByCompetition(ctx, tenantDB, centerDB, t.ID, comp.ID)
 		if err != nil {
 			return fmt.Errorf("error billingReportByCompetition: %w", err)
 		}
@@ -1340,6 +1335,13 @@ func initializeHandler(c echo.Context) error {
 	); err != nil {
 		return fmt.Errorf("error Update id_generator: %w", err)
 	}
+	// billing_report 削除
+	if _, err := centerDB.ExecContext(
+		ctx,
+		"TRUNCATE billing_report",
+	); err != nil {
+		return fmt.Errorf("error truncate billing_report: %w", err)
+	}
 
 	// 残ったtenantのうち、max_idより大きいcompetition, player, player_scoreを削除
 	utns := []string{}
@@ -1364,16 +1366,6 @@ func initializeHandler(c echo.Context) error {
 			}
 			if _, err := tenantDB.ExecContext(ctx, "DELETE FROM player_score WHERE id > ?", initializeMaxID); err != nil {
 				return fmt.Errorf("error Delete player: tenant=%s %w", tn, err)
-			}
-			// billing確定テーブルを作る
-			if _, err := tenantDB.ExecContext(ctx, `
-				CREATE TABLE IF NOT EXISTS billing_report (
-					competition_id INTEGER NOT NULL PRIMARY KEY,
-					competition_title TEXT NOT NULL,
-					player_count INTEGER NOT NULL,
-					billing_yen INTEGER NOT NULL
-				)`); err != nil {
-				return fmt.Errorf("error Create billing_report: tenant=%s %w", tn, err)
 			}
 			return nil
 		}()

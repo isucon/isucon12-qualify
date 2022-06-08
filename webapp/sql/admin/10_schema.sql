@@ -36,4 +36,13 @@ CREATE TABLE `visit_history_s` (
   `competition_id` bigint unsigned NOT NULL,
   `min_created_at` datetime(6) DEFAULT NULL,
   PRIMARY KEY (`tenant_id`,`competition_id`,`player_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS billing_report (
+  tenant_id bigint unsigned NOT NULL,
+  competition_id bigint unsigned NOT NULL,
+  competition_title TEXT NOT NULL,
+  player_count bigint unsigned NOT NULL,
+  billing_yen bigint unsigned NOT NULL,
+  PRIMARY KEY (tenant_id, competition_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

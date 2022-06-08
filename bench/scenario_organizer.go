@@ -62,7 +62,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 
 	var tenantName string // TODO: 初期データから持ってくる scenario.Prepare()の中で入れる
 	{
-		res, err := PostAdminTenantsAddAction(ctx, "first", adminAg)
+		res, err := PostAdminTenantsAddAction(ctx, RandomString(32), adminAg)
 		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
 				tenantName = r.Data.Tenant.Name
