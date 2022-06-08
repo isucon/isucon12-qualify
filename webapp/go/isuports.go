@@ -49,6 +49,7 @@ func connectCenterDB() (*sqlx.DB, error) {
 	config.Passwd = getEnv("ISUCON_DB_PASSWORD", "isucon")
 	config.DBName = getEnv("ISUCON_DB_NAME", "isuports")
 	config.ParseTime = true
+	config.InterpolateParams = true
 
 	dsn := config.FormatDSN()
 	return sqlx.Open("mysql", dsn)
@@ -67,14 +68,11 @@ func connectToTenantDB(name string) (*sqlx.DB, error) {
 	mu.Lock()
 	defer mu.Unlock()
 	if db, ok := tenantDBCache[p]; ok {
-		log.Info("tenant db cache hit for", p)
 		return db, nil
 	}
-	log.Info("tenant db cache miss for", p)
 	if db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rw", p)); err != nil {
 		return nil, err
 	} else {
-		log.Info("tenant db cache put for", p)
 		tenantDBCache[p] = db
 		return db, nil
 	}
@@ -142,8 +140,8 @@ var centerDB *sqlx.DB
 func Run() {
 	e := echo.New()
 	e.Debug = false
-	e.Logger.SetLevel(log.WARN)
-
+	e.Logger.SetLevel(log.ERROR)
+	e.Logger.SetOutput(io.Discard)
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
