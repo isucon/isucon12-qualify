@@ -10,6 +10,7 @@ require (
 	github.com/labstack/gommon v0.3.1
 	github.com/lestrrat-go/jwx/v2 v2.0.2
 	github.com/mattn/go-sqlite3 v1.14.13
+	golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
 )
 
 require (

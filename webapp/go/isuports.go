@@ -26,6 +26,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	_ "github.com/mattn/go-sqlite3"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -119,6 +120,12 @@ func createTenantDB(name string) error {
 			created_at DATETIME NOT NULL,
 			updated_at DATETIME NOT NULL,
 			UNIQUE (player_id, competition_id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS billing_report (
+			competition_id INTEGER NOT NULL PRIMARY KEY,
+			competition_title TEXT NOT NULL,
+			player_count INTEGER NOT NULL,
+			billing_yen INTEGER NOT NULL
 		)`,
 	} {
 		if _, err = db.ExecContext(context.Background(), query); err != nil {
@@ -413,10 +420,10 @@ func tenantsAddHandler(c echo.Context) error {
 }
 
 type BillingReport struct {
-	CompetitionID    int64  `json:"competition_id"`
-	CompetitionTitle string `json:"competition_title"`
-	PlayerCount      int64  `json:"player_count"`
-	BillingYen       int64  `json:"billing_yen"`
+	CompetitionID    int64  `json:"competition_id" db:"competition_id"`
+	CompetitionTitle string `json:"competition_title" db:"competition_title"`
+	PlayerCount      int64  `json:"player_count" db:"player_count"`
+	BillingYen       int64  `json:"billing_yen" db:"billing_yen"`
 }
 
 type VisitHistoryRow struct {
@@ -432,10 +439,33 @@ type VisitHistorySummaryRow struct {
 	MinCreatedAt time.Time `db:"min_created_at"`
 }
 
+var billingGroup = singleflight.Group{}
+
 func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, competitonID int64) (*BillingReport, error) {
+	key := strconv.FormatInt(competitonID, 10)
+	_r, err, _ := billingGroup.Do(key, func() (interface{}, error) {
+		return billingReportByCompetitionInternal(ctx, tenantDB, tenantID, competitonID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	// log.Infof("billingReportByCompetition: competitionID=%s shared=%v", competitonID, shared)
+	return _r.(*BillingReport), nil
+}
+
+func billingReportByCompetitionInternal(ctx context.Context, tenantDB dbOrTx, tenantID, competitonID int64) (*BillingReport, error) {
 	comp, err := retrieveCompetition(ctx, tenantDB, competitonID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieveCompetition: %w", err)
+	}
+	// 確定済みならテーブルから返せる
+	var report BillingReport
+	err = tenantDB.GetContext(ctx, &report, `SELECT * FROM billing_report WHERE competition_id=?`, competitonID)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, fmt.Errorf("error billingReportByCompetitionID: %w", err)
+	}
+	if report.CompetitionID != 0 {
+		return &report, nil
 	}
 
 	vhs := []VisitHistorySummaryRow{}
@@ -485,12 +515,21 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, 
 	for _, v := range billingMap {
 		billingYen += v
 	}
-	return &BillingReport{
+	r := &BillingReport{
 		CompetitionID:    comp.ID,
 		CompetitionTitle: comp.Title,
 		PlayerCount:      int64(len(pss)),
 		BillingYen:       billingYen,
-	}, nil
+	}
+
+	if _, err := tenantDB.ExecContext(ctx,
+		`REPLACE INTO billing_report (competition_id, competition_title, player_count, billing_yen) VALUES (?, ?, ?, ?)`,
+		r.CompetitionID, r.CompetitionTitle, r.PlayerCount, r.BillingYen,
+	); err != nil {
+		return nil, err
+	}
+
+	return r, nil
 }
 
 type TenantWithBilling struct {
@@ -1325,6 +1364,16 @@ func initializeHandler(c echo.Context) error {
 			}
 			if _, err := tenantDB.ExecContext(ctx, "DELETE FROM player_score WHERE id > ?", initializeMaxID); err != nil {
 				return fmt.Errorf("error Delete player: tenant=%s %w", tn, err)
+			}
+			// billing確定テーブルを作る
+			if _, err := tenantDB.ExecContext(ctx, `
+				CREATE TABLE IF NOT EXISTS billing_report (
+					competition_id INTEGER NOT NULL PRIMARY KEY,
+					competition_title TEXT NOT NULL,
+					player_count INTEGER NOT NULL,
+					billing_yen INTEGER NOT NULL
+				)`); err != nil {
+				return fmt.Errorf("error Create billing_report: tenant=%s %w", tn, err)
 			}
 			return nil
 		}()

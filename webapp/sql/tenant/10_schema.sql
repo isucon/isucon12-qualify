@@ -28,3 +28,10 @@ CREATE TABLE `player_score` (
   `updated_at` DATETIME NOT NULL,
   UNIQUE (`player_id`, `competition_id`)
 );
+
+CREATE TABLE IF NOT EXISTS billing_report (
+  competition_id INTEGER NOT NULL PRIMARY KEY,
+  competition_title TEXT NOT NULL,
+  player_count INTEGER NOT NULL,
+  billing_yen INTEGER NOT NULL
+);
