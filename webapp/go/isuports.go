@@ -399,7 +399,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, 
 	if err := centerDB.SelectContext(
 		ctx,
 		&vhs,
-		"SELECT player_name, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_name",
+		"SELECT player_name, MIN(min_created_at) AS min_created_at FROM visit_history_s WHERE tenant_id = ? AND competition_id = ? GROUP BY player_name",
 		tenantID,
 		comp.ID,
 	); err != nil && err != sql.ErrNoRows {
@@ -1061,12 +1061,26 @@ func competitionRankingHandler(c echo.Context) error {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
 
-	if _, err := centerDB.ExecContext(
+	var count = struct {
+		C int64 `db:"c"`
+	}{}
+	if err := centerDB.GetContext(
 		ctx,
-		"INSERT INTO visit_history (player_name, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-		vp.Name, t.ID, competitionID, now, now,
+		&count,
+		"SELECT count(*) AS c FROM visit_history_s WHERE tenant_id = ? AND competition_id = ? AND player_name = ?",
+		t.ID, competitionID, vp.Name,
 	); err != nil {
-		return fmt.Errorf("error Insert visit_history: %w", err)
+		return fmt.Errorf("error Select visit_history_s: %w", err)
+	}
+	if count.C == 0 {
+		// 初回アクセス時だけ記録する
+		if _, err := centerDB.ExecContext(
+			ctx,
+			"INSERT INTO visit_history_s (player_name, tenant_id, competition_id, min_created_at) VALUES (?, ?, ?, ?)",
+			vp.Name, t.ID, competitionID, now,
+		); err != nil {
+			return fmt.Errorf("error Insert visit_history: %w", err)
+		}
 	}
 
 	var rankAfter int64
@@ -1217,7 +1231,7 @@ func initializeHandler(c echo.Context) error {
 	// constに定義されたmax_visit_historyより大きいCreatedAtのvisit_historyを削除
 	if _, err := centerDB.ExecContext(
 		ctx,
-		"DELETE FROM visit_history WHERE created_at > ?",
+		"DELETE FROM visit_history_s WHERE min_created_at > ?",
 		initializeMaxVisitHistoryCreatedAt,
 	); err != nil {
 		return fmt.Errorf("error Delete visit_history: %w", err)
