@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
+	"github.com/kayac/go-katsubushi"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
@@ -84,29 +85,11 @@ func createTenantDB(name string) error {
 	return nil
 }
 
+var idg, _ = katsubushi.NewGenerator(1)
+
 func dispenseID(ctx context.Context) (int64, error) {
-	var id int64
-	var lastErr error
-	for i := 0; i < 100; i++ {
-		var ret sql.Result
-		ret, err := centerDB.ExecContext(ctx, "REPLACE INTO `id_generator` (`stub`) VALUES (?);", "a")
-		if err != nil {
-			if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1213 { // deadlocK
-				lastErr = fmt.Errorf("error REPLACE INTO `id_generator`: %w", err)
-				continue
-			}
-			return 0, fmt.Errorf("error REPLACE INTO `id_generator`: %w", err)
-		}
-		id, err = ret.LastInsertId()
-		if err != nil {
-			return 0, fmt.Errorf("error ret.LastInsertId: %w", err)
-		}
-		break
-	}
-	if id != 0 {
-		return id, nil
-	}
-	return 0, lastErr
+	id, err := idg.NextID()
+	return int64(id), err
 }
 
 var centerDB *sqlx.DB
