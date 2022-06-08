@@ -850,6 +850,7 @@ func competitionResultHandler(c echo.Context) error {
 		return fmt.Errorf("error Delete player_score: %w", err)
 	}
 	playerScoreRows := make([]*PlayerScoreRow, 0, 100)
+	playerScoreByName := make(map[string]int64)
 	for {
 		row, err := r.Read()
 		if err != nil {
@@ -864,24 +865,30 @@ func competitionResultHandler(c echo.Context) error {
 			return fmt.Errorf("row must have two columns: %#v", row)
 		}
 		playerName, scoreStr := row[0], row[1]
-		c, err := retrievePlayerByName(ctx, tenantDB, playerName)
-		if err != nil {
-			ttx.Rollback()
-			return fmt.Errorf("error retrievePlayerByName: %w", err)
-		}
-
-		id, _ := dispenseID(ctx)
 		var score int64
 		if score, err = strconv.ParseInt(scoreStr, 10, 64); err != nil {
 			ttx.Rollback()
 			return fmt.Errorf("error strconv.ParseUint: %w", err)
 		}
+		playerScoreByName[playerName] = score
+	}
+	playerNames := make([]string, 0, len(playerScoreByName))
+	for playerName, _ := range playerScoreByName {
+		playerNames = append(playerNames, playerName)
+	}
+	players := make([]*PlayerRow, 0, len(playerNames))
+	q, params, err := sqlx.In("SELECT id, name FROM player WHERE name IN(?)", playerNames)
+	if err := tenantDB.SelectContext(ctx, &players, q, params...); err != nil {
+		return fmt.Errorf("error Select players: %w", err)
+	}
 
+	for _, player := range players {
+		id, _ := dispenseID(ctx)
 		playerScoreRows = append(playerScoreRows, &PlayerScoreRow{
 			ID:            id,
-			PlayerID:      c.ID,
+			PlayerID:      player.ID,
 			CompetitionID: competitionID,
-			Score:         score,
+			Score:         playerScoreByName[player.Name],
 			CreatedAt:     now,
 			UpdatedAt:     now,
 		})
