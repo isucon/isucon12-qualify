@@ -26,6 +26,7 @@ func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32)
 func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
 	report := timeReporter("大会参加者シナリオ")
 	defer report()
+	scTag := ScenarioTag("PlayerScenario")
 
 	// 初期データから一人選ぶ
 	data := sc.InitialData.Choise()
@@ -48,7 +49,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		res, err := GetPlayerAction(ctx, data.PlayerName, playerAg)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(403))
 		if v.IsEmpty() {
-			step.AddScore(ScoreGETPlayerDetails)
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
 			return v
 		}
@@ -64,7 +65,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			}),
 		)
 		if v.IsEmpty() {
-			step.AddScore(ScoreGETPlayerDetails)
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
 			return v
 		}
@@ -78,7 +79,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			}),
 		)
 		if v.IsEmpty() {
-			step.AddScore(ScoreGETPlayerRanking)
+			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
 		} else {
 			return v
 		}
@@ -92,7 +93,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			}),
 		)
 		if v.IsEmpty() {
-			step.AddScore(ScoreGETPlayerCompetitions)
+			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
 		} else {
 			return v
 		}

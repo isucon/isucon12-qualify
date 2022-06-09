@@ -37,6 +37,7 @@ type PlayerData struct {
 func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
 	report := timeReporter("新規追加: 主催者シナリオ")
 	defer report()
+	scTag := ScenarioTag("OrganizerScenario")
 
 	// 各テナント
 	//  大会の作成 x N
@@ -107,7 +108,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 			}),
 		)
 		if v.IsEmpty() {
-			step.AddScore(ScorePOSTOrganizerCompetitionsAdd)
+			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionsAdd, scTag)
 		} else {
 			return v
 		}
@@ -135,7 +136,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 				}),
 			)
 			if v.IsEmpty() {
-				step.AddScore(ScorePOSTOrganizerPlayersAdd)
+				sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
 			} else {
 				return v
 			}
@@ -155,7 +156,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 				}),
 			)
 			if v.IsEmpty() {
-				step.AddScore(ScorePOSTOrganizerCompetitionResult)
+				sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionResult, scTag)
 			} else {
 				return v
 			}
@@ -178,7 +179,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 					}),
 				)
 				if v.IsEmpty() {
-					step.AddScore(ScorePOSTOrganizerPlayerDisqualified)
+					sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
 				} else {
 					return v
 				}
@@ -195,7 +196,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 				}),
 			)
 			if v.IsEmpty() {
-				step.AddScore(ScoreGETOrganizerBilling)
+				sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
 			} else {
 				return v
 			}
@@ -211,7 +212,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 				}),
 			)
 			if v.IsEmpty() {
-				step.AddScore(ScorePOSTOrganizerCompetitionFinish)
+				sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionFinish, scTag)
 			} else {
 				return v
 			}

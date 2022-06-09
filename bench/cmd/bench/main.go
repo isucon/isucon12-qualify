@@ -46,7 +46,8 @@ func main() {
 
 	// シナリオの生成
 	scenario := &bench.Scenario{
-		Option: option,
+		Option:           option,
+		ScenarioScoreMap: make(map[bench.ScenarioTag]*int64),
 	}
 
 	// ベンチマークの生成
@@ -95,6 +96,7 @@ func main() {
 	}
 
 	// スコア表示
+	scenario.PrintScenarioScoreMap()
 	score, addition, deduction := SumScore(result)
 	bench.ContestantLogger.Printf("SCORE: %d (+%d %d)", score, addition, -deduction)
 	bench.ContestantLogger.Printf("RESULT: %#v", result.Score.Breakdown())
@@ -108,18 +110,9 @@ func main() {
 func SumScore(result *isucandar.BenchmarkResult) (int64, int64, int64) {
 	score := result.Score
 	// 各タグに倍率を設定
-	score.Set(bench.ScoreGETRoot, 1)
-	score.Set(bench.ScorePOSTAdminTenantsAdd, 1)
-	score.Set(bench.ScoreGETAdminTenantsBilling, 1)
-	score.Set(bench.ScorePOSTOrganizerPlayersAdd, 1)
-	score.Set(bench.ScorePOSTOrganizerPlayerDisqualified, 1)
-	score.Set(bench.ScorePOSTOrganizerCompetitionsAdd, 1)
-	score.Set(bench.ScorePOSTOrganizerCompetitionFinish, 1)
-	score.Set(bench.ScorePOSTOrganizerCompetitionResult, 1)
-	score.Set(bench.ScoreGETOrganizerBilling, 1)
-	score.Set(bench.ScoreGETPlayerDetails, 1)
-	score.Set(bench.ScoreGETPlayerRanking, 1)
-	score.Set(bench.ScoreGETPlayerCompetitions, 1)
+	for scoreTag, value := range bench.ResultScoreMap {
+		score.Set(scoreTag, value)
+	}
 
 	// 加点分の合算
 	addition := score.Sum()

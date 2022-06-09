@@ -29,6 +29,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	report := timeReporter("新規テナント: SaaS管理者シナリオ")
 	defer report()
 
+	scTag := ScenarioTag("NewTenantScenario")
 	playerNum := 10 // 1テナント当たりの作成する参加者数
 
 	admin := &Account{
@@ -62,7 +63,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 			}),
 		)
 		if v.IsEmpty() {
-			step.AddScore(ScorePOSTAdminTenantsAdd)
+			sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
 		} else {
 			return v
 		}
@@ -77,7 +78,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 			}),
 		)
 		if v.IsEmpty() {
-			step.AddScore(ScoreGETAdminTenantsBilling)
+			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
 		} else {
 			return v
 		}
@@ -127,7 +128,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 			}),
 		)
 		if v.IsEmpty() {
-			step.AddScore(ScorePOSTOrganizerPlayersAdd)
+			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
 		} else {
 			return v
 		}
@@ -151,7 +152,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 			}),
 		)
 		if v.IsEmpty() {
-			step.AddScore(ScorePOSTOrganizerCompetitionsAdd)
+			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionsAdd, scTag)
 		} else {
 			return v
 		}
@@ -174,7 +175,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 				}),
 			)
 			if v.IsEmpty() {
-				step.AddScore(ScorePOSTOrganizerCompetitionResult)
+				sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionResult, scTag)
 			} else {
 				return v
 			}
@@ -189,7 +190,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 				}),
 			)
 			if v.IsEmpty() {
-				step.AddScore(ScorePOSTOrganizerCompetitionFinish)
+				sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionFinish, scTag)
 			} else {
 				return v
 			}
@@ -213,7 +214,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 				}),
 			)
 			if v.IsEmpty() {
-				step.AddScore(ScorePOSTOrganizerPlayerDisqualified)
+				sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
 			} else {
 				return v
 			}
@@ -232,7 +233,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 			}),
 		)
 		if v.IsEmpty() {
-			step.AddScore(ScoreGETOrganizerBilling)
+			sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
 		} else {
 			return v
 		}

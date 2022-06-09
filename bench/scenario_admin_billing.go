@@ -26,6 +26,8 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 	report := timeReporter("admin billingを見続けるシナリオ")
 	defer report()
 
+	scTag := ScenarioTag("AdminBillingScenario")
+
 	admin := &Account{
 		Role:       AccountRoleAdmin,
 		TenantName: "admin",
@@ -49,7 +51,7 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		}),
 	)
 	if v.IsEmpty() {
-		step.AddScore(ScoreGETAdminTenantsBilling)
+		sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
 	} else {
 		return v
 	}
