@@ -67,10 +67,10 @@ func Run(tenantsNum int) error {
 	benchSrcs := make([]*benchmarkerSource, 0)
 	for i := 0; i < tenantsNum; i++ {
 		log.Println("create tenant")
-		tenant := createTenant()
-		players := createPlayers(tenant)
-		competitions := createCompetitions(tenant)
-		playerScores, visitHistroies, b := createPlayerData(tenant, players, competitions)
+		tenant := CreateTenant()
+		players := CreatePlayers(tenant)
+		competitions := CreateCompetitions(tenant)
+		playerScores, visitHistroies, b := CreatePlayerData(tenant, players, competitions)
 		if err := storeTenant(tenant, players, competitions, playerScores); err != nil {
 			return err
 		}
@@ -221,7 +221,7 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	return tx.Commit()
 }
 
-func createTenant() *isuports.TenantRow {
+func CreateTenant() *isuports.TenantRow {
 	created := fake.Time().TimeBetween(Epoch, Now())
 	id := genID(created)
 	name := fmt.Sprintf("tenant-%d", id)
@@ -235,11 +235,11 @@ func createTenant() *isuports.TenantRow {
 	return &tenant
 }
 
-func createPlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
+func CreatePlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 	playersNum := fake.IntBetween(playersNumByTenant/10, playersNumByTenant)
 	players := make([]*isuports.PlayerRow, 0, playersNum)
 	for i := 0; i < playersNum; i++ {
-		players = append(players, createPlayer(tenant))
+		players = append(players, CreatePlayer(tenant))
 	}
 	sort.SliceStable(players, func(i int, j int) bool {
 		return players[i].CreatedAt.Before(players[j].CreatedAt)
@@ -247,7 +247,7 @@ func createPlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 	return players
 }
 
-func createPlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
+func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	player := isuports.PlayerRow{
 		ID:             genID(created),
@@ -260,11 +260,11 @@ func createPlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 	return &player
 }
 
-func createCompetitions(tenant *isuports.TenantRow) []*isuports.CompetitionRow {
+func CreateCompetitions(tenant *isuports.TenantRow) []*isuports.CompetitionRow {
 	num := fake.IntBetween(competitionsNumByTenant/10, competitionsNumByTenant)
 	rows := make([]*isuports.CompetitionRow, 0, num)
 	for i := 0; i < num; i++ {
-		rows = append(rows, createCompetition(tenant))
+		rows = append(rows, CreateCompetition(tenant))
 	}
 	sort.SliceStable(rows, func(i int, j int) bool {
 		return rows[i].CreatedAt.Before(rows[j].CreatedAt)
@@ -272,7 +272,7 @@ func createCompetitions(tenant *isuports.TenantRow) []*isuports.CompetitionRow {
 	return rows
 }
 
-func createCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
+func CreateCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	isFinished := rand.Intn(100) < 50
 	competition := isuports.CompetitionRow{
@@ -292,7 +292,7 @@ func createCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 	return &competition
 }
 
-func createPlayerData(
+func CreatePlayerData(
 	tenant *isuports.TenantRow,
 	players []*isuports.PlayerRow,
 	competitions []*isuports.CompetitionRow,
