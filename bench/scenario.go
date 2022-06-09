@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -54,6 +56,21 @@ const (
 	ScoreGETPlayerCompetitions score.ScoreTag = "GET /player/api/competitions"
 )
 
+// ScoreTag毎の倍率
+var ResultScoreMap = map[score.ScoreTag]int64{
+	ScorePOSTAdminTenantsAdd:             1,
+	ScoreGETAdminTenantsBilling:          1,
+	ScorePOSTOrganizerPlayersAdd:         1,
+	ScorePOSTOrganizerPlayerDisqualified: 1,
+	ScorePOSTOrganizerCompetitionsAdd:    1,
+	ScorePOSTOrganizerCompetitionFinish:  1,
+	ScorePOSTOrganizerCompetitionResult:  1,
+	ScoreGETOrganizerBilling:             1,
+	ScoreGETPlayerDetails:                1,
+	ScoreGETPlayerRanking:                1,
+	ScoreGETPlayerCompetitions:           1,
+}
+
 type TenantData struct {
 	DisplayName string
 	Name        string
@@ -61,17 +78,24 @@ type TenantData struct {
 
 // オプションと全データを持つシナリオ構造体
 type Scenario struct {
-	mu sync.RWMutex
-
 	Option Option
+	Errors failure.Errors
+
+	ScenarioScoreMap map[ScenarioTag]*int64
 
 	InitialData InitialDataRows
+	RawKey      *rsa.PrivateKey
+}
 
-	lastPlaylistCreatedAt   time.Time
-	rateGetPopularPlaylists int32
-	RawKey                  *rsa.PrivateKey
+// どのシナリオから加算されたスコアか
+type ScenarioTag string
 
-	Errors failure.Errors
+func (sc *Scenario) AddScoreByScenario(step *isucandar.BenchmarkStep, scoreTag score.ScoreTag, scenarioTag ScenarioTag) {
+	step.AddScore(scoreTag)
+	if sc.ScenarioScoreMap[scenarioTag] == nil {
+		sc.ScenarioScoreMap[scenarioTag] = new(int64)
+	}
+	atomic.AddInt64(sc.ScenarioScoreMap[scenarioTag], ResultScoreMap[scoreTag])
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -101,31 +125,36 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 	}()
 	Debug = true // prepareは常にデバッグログを出す
 
-	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./isuports.pem")
-	keysrc, err := os.ReadFile(keyFilename)
-	if err != nil {
-		return fmt.Errorf("error os.ReadFile: %w", err)
-	}
+	// 各シナリオに必要なデータの用意
+	{
+		keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./isuports.pem")
+		keysrc, err := os.ReadFile(keyFilename)
+		if err != nil {
+			return fmt.Errorf("error os.ReadFile: %w", err)
+		}
+		s.InitialData, err = GetInitialData()
+		if err != nil {
+			return fmt.Errorf("初期データのロードに失敗しました %s", err)
+		}
 
-	block, _ := pem.Decode([]byte(keysrc))
-	if block == nil {
-		return fmt.Errorf("error pem.Decode: block is nil")
-	}
-	s.RawKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return fmt.Errorf("error x509.ParsePKCS1PrivateKey: %w", err)
+		block, _ := pem.Decode([]byte(keysrc))
+		if block == nil {
+			return fmt.Errorf("error pem.Decode: block is nil")
+		}
+		s.RawKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			return fmt.Errorf("error x509.ParsePKCS1PrivateKey: %w", err)
+		}
+		s.InitialData, err = GetInitialData()
+		if err != nil {
+			return fmt.Errorf("初期データのロードに失敗しました %s", err)
+		}
 	}
 
 	// POST /initialize へ初期化リクエスト実行
 	res, err := PostInitializeAction(ctx, ag)
 	if v := ValidateResponse("初期化", step, res, err, WithStatusCode(200)); !v.IsEmpty() {
 		return fmt.Errorf("初期化リクエストに失敗しました %v", v)
-	}
-
-	// TODO: 初期データをロードする kayac/isucon2022/benchのLoad
-	s.InitialData, err = GetInitialData()
-	if err != nil {
-		return fmt.Errorf("初期データのロードに失敗しました %s", err)
 	}
 
 	// 検証シナリオを1回まわす
@@ -190,10 +219,15 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 		s.loadAdjustor(ctx, step,
 			newTenantCase,
 			organizerCase,
-			playerCase, // 回りすぎるので一旦増やさない
+			playerCase,
 		)
 	}()
 	wg.Wait()
+
+	// シナリオ毎のスコア
+	for key, value := range s.ScenarioScoreMap {
+		ContestantLogger.Println(string(key) + ": " + strconv.FormatInt(atomic.LoadInt64(value), 10))
+	}
 	return nil
 }
 
