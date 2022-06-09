@@ -6,6 +6,8 @@ import (
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
+	"github.com/isucon/isucon12-qualify/data"
+	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 )
 
 func (sc *Scenario) OrganizerScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
@@ -45,7 +47,6 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 	//      大会結果確定 x 1
 	//  テナント請求ダッシュボードの閲覧 x N
 
-	// TODO: 初期データ読むまで最初にテナントここで作ってみる
 	admin := Account{
 		Role:       AccountRoleAdmin,
 		TenantName: "admin",
@@ -59,12 +60,15 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 	if err != nil {
 		return err
 	}
-
-	var tenantName string // TODO: 初期データから持ってくる scenario.Prepare()の中で入れる
+	tenant := data.CreateTenant()
+	var tenantName string
 	{
-		res, err := PostAdminTenantsAddAction(ctx, "first", adminAg)
+		res, err := PostAdminTenantsAddAction(ctx, tenant.DisplayName, adminAg)
 		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
+				if tenant.DisplayName != r.Data.Tenant.DisplayName {
+					return fmt.Errorf("テナント名が一致しません: %s != %s", tenant.Name, r.Data.Tenant.Name)
+				}
 				tenantName = r.Data.Tenant.Name
 				return nil
 			}),
@@ -89,21 +93,15 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 		return err
 	}
 
-	//  大会の作成 x N
-	// TODO: 初期データから持ってくる
-	comps := []*CompetitionData{
-		&CompetitionData{
-			Title: "first",
-		},
-		&CompetitionData{
-			Title: "second",
-		},
-	}
+	comps := data.CreateCompetitions(tenant)
 	for _, comp := range comps {
 		// 大会の作成
 		res, err := PostOrganizerCompetitonsAddAction(ctx, comp.Title, orgAg)
 		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
+				if comp.Title != r.Data.Competition.Title {
+					return fmt.Errorf("大会名が一致しません: %s != %s", comp.Title, r.Data.Competition.Title)
+				}
 				comp.ID = r.Data.Competition.ID
 				return nil
 			}),
@@ -114,21 +112,11 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 			return v
 		}
 
-		// 参加者登録 x N
-		// TODO: 初期データから持ってくる
-		players := map[string]*PlayerData{
-			"player 1": &PlayerData{
-				DisplayName: "player 1",
-			},
-			"player 2": &PlayerData{
-				DisplayName: "player 2",
-			},
-		}
 		var playerDisplayNames []string
-		for key, _ := range players {
-			playerDisplayNames = append(playerDisplayNames, key)
+		players := make(map[string]*isuports.PlayerRow)
+		for _, p := range data.CreatePlayers(tenant) {
+			playerDisplayNames = append(playerDisplayNames, p.DisplayName)
 		}
-
 		{
 			res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
 			v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200),
@@ -136,10 +124,11 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 					if len(r.Data.Players) != len(playerDisplayNames) {
 						return fmt.Errorf("作成された大会参加者の数が違います got: %d expect: %d", len(r.Data.Players), len(playerDisplayNames))
 					}
-					for _, pl := range r.Data.Players {
-						players[pl.DisplayName] = &PlayerData{
-							Name:        pl.Name,
-							DisplayName: pl.DisplayName,
+					for _, rp := range r.Data.Players {
+						players[rp.DisplayName] = &isuports.PlayerRow{
+							Name:           rp.Name,
+							DisplayName:    rp.DisplayName,
+							IsDisqualified: rp.IsDisqualified,
 						}
 					}
 					return nil
@@ -156,7 +145,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 		{
 			csv := "player_name,score"
 			for _, player := range players {
-				csv += fmt.Sprintf("\n%s,%d", player.Name, 100)
+				csv += fmt.Sprintf("\n%s,%d", player.Name, data.CreateScore())
 			}
 			res, err := PostOrganizerCompetitionResultAction(ctx, comp.ID, []byte(csv), orgAg)
 			v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),

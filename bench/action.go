@@ -31,9 +31,9 @@ func GetRootAction(ctx context.Context, ag *agent.Agent) (*http.Response, error)
 	return ag.Do(ctx, req)
 }
 
-func PostAdminTenantsAddAction(ctx context.Context, name string, ag *agent.Agent) (*http.Response, error) {
+func PostAdminTenantsAddAction(ctx context.Context, displayName string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
-	form.Set("display_name", name)
+	form.Set("display_name", displayName)
 	req, err := ag.POST("/admin/api/tenants/add", strings.NewReader(form.Encode()))
 	if err != nil {
 		return nil, err
