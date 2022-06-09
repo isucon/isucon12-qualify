@@ -1,16 +1,14 @@
-package main
+package data
 
 import (
 	"database/sql"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
 	"os/exec"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -51,23 +49,18 @@ func init() {
 	maxID = int64(diff.Seconds()) * 1000
 }
 
-func main() {
-	flag.Parse()
-	tenantsNum, err := strconv.Atoi(flag.Args()[0])
-	if err != nil {
-		log.Fatal(err)
-	}
+func Run(tenantsNum int) error {
 	log.Println("tenantsNum", tenantsNum)
 	log.Println("epoch", epoch)
 
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("mysql -uisucon -pisucon --host 127.0.0.1 isuports < %s", adminDBSchemaFilePath))
 	if err := cmd.Run(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	db, err := adminDB()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer db.Close()
 	benchSrcs := make([]*benchmarkerSource, 0)
@@ -78,22 +71,23 @@ func main() {
 		competitions := createCompetitions(tenant)
 		playerScores, visitHistroies, b := createPlayerData(tenant, players, competitions)
 		if err := storeTenant(tenant, players, competitions, playerScores); err != nil {
-			log.Fatal(err)
+			return err
 		}
 		if err := storeAdmin(db, tenant, visitHistroies); err != nil {
-			log.Fatal(err)
+			return err
 		}
 		benchSrcs = append(benchSrcs, lo.Samples(b, 1000)...)
 	}
 	if err := storeMaxID(db); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if f, err := os.Create("benchmarker.json"); err != nil {
-		log.Fatal(err)
+		return err
 	} else {
 		json.NewEncoder(f).Encode(benchSrcs)
 		f.Close()
 	}
+	return nil
 }
 
 var mu sync.Mutex
@@ -184,7 +178,7 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	if err := cmd.Run(); err != nil {
 		return err
 	}
-	db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s.db?mode=rw", tenant.Name))
+	db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s.db?mode=rwc&_journal_mode=OFF", tenant.Name))
 	if err != nil {
 		return err
 	}
