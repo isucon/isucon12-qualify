@@ -7,6 +7,7 @@ import (
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
+	"github.com/isucon/isucon12-qualify/data"
 )
 
 func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
@@ -45,7 +46,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	displayNames := []string{
-		RandomString(16),
+		data.RandomString(16),
 	}
 	tenants := map[string]*TenantData{}
 
@@ -111,7 +112,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	{
 		playerDisplayNames := make([]string, playerNum)
 		for i := 0; i < playerNum; i++ {
-			playerDisplayNames = append(playerDisplayNames, RandomString(16))
+			playerDisplayNames = append(playerDisplayNames, data.RandomString(16))
 		}
 		res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
 		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200),
@@ -137,7 +138,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	var comps []*CompetitionData
 	for i := 0; i < competitionNum; i++ {
 		comps = append(comps, &CompetitionData{
-			Title: RandomString(24),
+			Title: data.RandomString(24),
 		})
 	}
 	for _, comp := range comps {

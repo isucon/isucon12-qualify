@@ -6,6 +6,7 @@ import (
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
+	"github.com/isucon/isucon12-qualify/data"
 )
 
 func (sc *Scenario) OrganizerScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
@@ -45,7 +46,6 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 	//      大会結果確定 x 1
 	//  テナント請求ダッシュボードの閲覧 x N
 
-	// TODO: 初期データ読むまで最初にテナントここで作ってみる
 	admin := Account{
 		Role:       AccountRoleAdmin,
 		TenantName: "admin",
@@ -59,12 +59,15 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 	if err != nil {
 		return err
 	}
-
-	var tenantName string // TODO: 初期データから持ってくる scenario.Prepare()の中で入れる
+	tenant := data.CreateTenant()
+	var tenantName string
 	{
-		res, err := PostAdminTenantsAddAction(ctx, "first", adminAg)
+		res, err := PostAdminTenantsAddAction(ctx, tenant.DisplayName, adminAg)
 		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
+				if tenant.DisplayName != r.Data.Tenant.DisplayName {
+					return fmt.Errorf("テナント名が一致しません: %s != %s", tenant.Name, r.Data.Tenant.Name)
+				}
 				tenantName = r.Data.Tenant.Name
 				return nil
 			}),

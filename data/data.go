@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/isucon/isucon12-qualify/bench"
 	"github.com/jaswdr/faker"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
@@ -251,7 +250,7 @@ func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	player := isuports.PlayerRow{
 		ID:             genID(created),
-		Name:           bench.RandomString(fake.IntBetween(8, 16)),
+		Name:           RandomString(fake.IntBetween(8, 16)),
 		DisplayName:    fake.Person().Name(),
 		IsDisqualified: rand.Intn(100) < disqualifiedRate,
 		CreatedAt:      created,
