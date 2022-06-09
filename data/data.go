@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -227,10 +228,11 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 func CreateTenant() *isuports.TenantRow {
 	created := fake.Time().TimeBetween(Epoch, Now())
 	id := GenID(created)
-	name := fmt.Sprintf("tenant-%d", id)
 	tenant := isuports.TenantRow{
-		ID:          id,
-		Name:        name,
+		ID: id,
+		Name: strings.ToLower(
+			UniqueRandomString(fake.IntBetween(2, 8)) + "-" + UniqueRandomString(fake.IntBetween(4, 16)),
+		),
 		DisplayName: fake.Company().Name(),
 		CreatedAt:   created,
 		UpdatedAt:   fake.Time().TimeBetween(created, Now()),
