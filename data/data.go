@@ -24,13 +24,14 @@ import (
 
 var fake = faker.New()
 
-var epoch = time.Date(2022, 05, 01, 0, 0, 0, 0, time.UTC)  // サービス開始時点(IDの起点)
-var now = time.Date(2022, 05, 31, 23, 59, 59, 0, time.UTC) // 初期データの終点
-var playersNumByTenant = 200                               // テナントごとのplayer数
-var competitionsNumByTenant = 20                           // テナントごとの大会数
-var disqualifiedRate = 10                                  // player失格確率
-var visitsByCompetition = 75                               // 1大会のplayerごとの訪問数
-var maxID int64                                            // webapp初期化時の起点ID
+var Now = func() time.Time { return defaultNow }                  // ベンチから使うときは上書きできるようにしておく
+var Epoch = time.Date(2022, 05, 01, 0, 0, 0, 0, time.UTC)         // サービス開始時点(IDの起点)
+var defaultNow = time.Date(2022, 05, 31, 23, 59, 59, 0, time.UTC) // 初期データの終点
+var playersNumByTenant = 200                                      // テナントごとのplayer数
+var competitionsNumByTenant = 20                                  // テナントごとの大会数
+var disqualifiedRate = 10                                         // player失格確率
+var visitsByCompetition = 75                                      // 1大会のplayerごとの訪問数
+var maxID int64                                                   // webapp初期化時の起点ID
 
 var tenantDBSchemaFilePath = "../webapp/sql/tenant/10_schema.sql"
 var adminDBSchemaFilePath = "../webapp/sql/admin/10_schema.sql"
@@ -45,13 +46,13 @@ type benchmarkerSource struct {
 
 func init() {
 	os.Setenv("TZ", "UTC")
-	diff := now.Add(time.Second).Sub(epoch)
+	diff := Now().Add(time.Second).Sub(Epoch)
 	maxID = int64(diff.Seconds()) * 1000
 }
 
 func Run(tenantsNum int) error {
 	log.Println("tenantsNum", tenantsNum)
-	log.Println("epoch", epoch)
+	log.Println("epoch", Epoch)
 
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("mysql -uisucon -pisucon --host 127.0.0.1 isuports < %s", adminDBSchemaFilePath))
 	if err := cmd.Run(); err != nil {
@@ -97,7 +98,7 @@ var generatedMaxID int64
 func genID(ts time.Time) int64 {
 	mu.Lock()
 	defer mu.Unlock()
-	diff := ts.Sub(epoch)
+	diff := ts.Sub(Epoch)
 	id := int64(diff.Seconds())
 	var newID int64
 	if _, exists := idMap[id]; !exists {
@@ -178,7 +179,7 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	if err := cmd.Run(); err != nil {
 		return err
 	}
-	db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s.db?mode=rwc&_journal_mode=OFF", tenant.Name))
+	db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s.db?mode=rw&_journal_mode=OFF", tenant.Name))
 	if err != nil {
 		return err
 	}
@@ -221,7 +222,7 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 }
 
 func createTenant() *isuports.TenantRow {
-	created := fake.Time().TimeBetween(epoch, now.Add(-time.Hour*24*1))
+	created := fake.Time().TimeBetween(Epoch, Now())
 	id := genID(created)
 	name := fmt.Sprintf("tenant-%d", id)
 	tenant := isuports.TenantRow{
@@ -229,7 +230,7 @@ func createTenant() *isuports.TenantRow {
 		Name:        name,
 		DisplayName: fake.Company().Name(),
 		CreatedAt:   created,
-		UpdatedAt:   fake.Time().TimeBetween(created, now),
+		UpdatedAt:   fake.Time().TimeBetween(created, Now()),
 	}
 	return &tenant
 }
@@ -247,14 +248,14 @@ func createPlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 }
 
 func createPlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
-	created := fake.Time().TimeBetween(tenant.CreatedAt, now)
+	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	player := isuports.PlayerRow{
 		ID:             genID(created),
 		Name:           bench.RandomString(fake.IntBetween(8, 16)),
 		DisplayName:    fake.Person().Name(),
 		IsDisqualified: rand.Intn(100) < disqualifiedRate,
 		CreatedAt:      created,
-		UpdatedAt:      fake.Time().TimeBetween(created, now),
+		UpdatedAt:      fake.Time().TimeBetween(created, Now()),
 	}
 	return &player
 }
@@ -272,7 +273,7 @@ func createCompetitions(tenant *isuports.TenantRow) []*isuports.CompetitionRow {
 }
 
 func createCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
-	created := fake.Time().TimeBetween(tenant.CreatedAt, now)
+	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	isFinished := rand.Intn(100) < 50
 	competition := isuports.CompetitionRow{
 		ID:        genID(created),
@@ -281,12 +282,12 @@ func createCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 	}
 	if isFinished {
 		competition.FinishedAt = sql.NullTime{
-			Time:  fake.Time().TimeBetween(created, now),
+			Time:  fake.Time().TimeBetween(created, Now()),
 			Valid: true,
 		}
 		competition.UpdatedAt = competition.FinishedAt.Time
 	} else {
-		competition.UpdatedAt = fake.Time().TimeBetween(created, now)
+		competition.UpdatedAt = fake.Time().TimeBetween(created, Now())
 	}
 	return &competition
 }
@@ -309,7 +310,7 @@ func createPlayerData(
 			if c.FinishedAt.Valid {
 				end = c.FinishedAt.Time
 			} else {
-				end = now
+				end = Now()
 			}
 			created := fake.Time().TimeBetween(c.CreatedAt, end)
 			lastVisitedAt := fake.Time().TimeBetween(created, end)
