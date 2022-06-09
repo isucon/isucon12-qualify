@@ -327,7 +327,7 @@ func CreatePlayerData(
 				ID:            genID(created),
 				PlayerID:      p.ID,
 				CompetitionID: c.ID,
-				Score:         fake.Int64Between(0, 100) * fake.Int64Between(0, 100) * fake.Int64Between(0, 100),
+				Score:         CreateScore(),
 				CreatedAt:     created,
 				UpdatedAt:     created,
 			})
@@ -341,4 +341,8 @@ func CreatePlayerData(
 		}
 	}
 	return scores, visits, bench
+}
+
+func CreateScore() int64 {
+	return fake.Int64Between(0, 100) * fake.Int64Between(0, 100) * fake.Int64Between(0, 100)
 }
