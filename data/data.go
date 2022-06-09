@@ -1,21 +1,18 @@
-package main
+package data
 
 import (
 	"database/sql"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"log"
 	"math/rand"
 	"os"
 	"os/exec"
 	"sort"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/isucon/isucon12-qualify/bench"
 	"github.com/jaswdr/faker"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/mattn/go-sqlite3"
@@ -26,13 +23,14 @@ import (
 
 var fake = faker.New()
 
-var epoch = time.Date(2022, 05, 01, 0, 0, 0, 0, time.UTC)  // サービス開始時点(IDの起点)
-var now = time.Date(2022, 05, 31, 23, 59, 59, 0, time.UTC) // 初期データの終点
-var playersNumByTenant = 200                               // テナントごとのplayer数
-var competitionsNumByTenant = 20                           // テナントごとの大会数
-var disqualifiedRate = 10                                  // player失格確率
-var visitsByCompetition = 75                               // 1大会のplayerごとの訪問数
-var maxID int64                                            // webapp初期化時の起点ID
+var Now = func() time.Time { return defaultNow }                  // ベンチから使うときは上書きできるようにしておく
+var Epoch = time.Date(2022, 05, 01, 0, 0, 0, 0, time.UTC)         // サービス開始時点(IDの起点)
+var defaultNow = time.Date(2022, 05, 31, 23, 59, 59, 0, time.UTC) // 初期データの終点
+var playersNumByTenant = 200                                      // テナントごとのplayer数
+var competitionsNumByTenant = 20                                  // テナントごとの大会数
+var disqualifiedRate = 10                                         // player失格確率
+var visitsByCompetition = 75                                      // 1大会のplayerごとの訪問数
+var maxID int64                                                   // webapp初期化時の起点ID
 
 var tenantDBSchemaFilePath = "../webapp/sql/tenant/10_schema.sql"
 var adminDBSchemaFilePath = "../webapp/sql/admin/10_schema.sql"
@@ -47,53 +45,49 @@ type benchmarkerSource struct {
 
 func init() {
 	os.Setenv("TZ", "UTC")
-	diff := now.Add(time.Second).Sub(epoch)
+	diff := Now().Add(time.Second).Sub(Epoch)
 	maxID = int64(diff.Seconds()) * 1000
 }
 
-func main() {
-	flag.Parse()
-	tenantsNum, err := strconv.Atoi(flag.Args()[0])
-	if err != nil {
-		log.Fatal(err)
-	}
+func Run(tenantsNum int) error {
 	log.Println("tenantsNum", tenantsNum)
-	log.Println("epoch", epoch)
+	log.Println("epoch", Epoch)
 
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("mysql -uisucon -pisucon --host 127.0.0.1 isuports < %s", adminDBSchemaFilePath))
 	if err := cmd.Run(); err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	db, err := adminDB()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer db.Close()
 	benchSrcs := make([]*benchmarkerSource, 0)
 	for i := 0; i < tenantsNum; i++ {
 		log.Println("create tenant")
-		tenant := createTenant()
-		players := createPlayers(tenant)
-		competitions := createCompetitions(tenant)
-		playerScores, visitHistroies, b := createPlayerData(tenant, players, competitions)
+		tenant := CreateTenant()
+		players := CreatePlayers(tenant)
+		competitions := CreateCompetitions(tenant)
+		playerScores, visitHistroies, b := CreatePlayerData(tenant, players, competitions)
 		if err := storeTenant(tenant, players, competitions, playerScores); err != nil {
-			log.Fatal(err)
+			return err
 		}
 		if err := storeAdmin(db, tenant, visitHistroies); err != nil {
-			log.Fatal(err)
+			return err
 		}
 		benchSrcs = append(benchSrcs, lo.Samples(b, 1000)...)
 	}
 	if err := storeMaxID(db); err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if f, err := os.Create("benchmarker.json"); err != nil {
-		log.Fatal(err)
+		return err
 	} else {
 		json.NewEncoder(f).Encode(benchSrcs)
 		f.Close()
 	}
+	return nil
 }
 
 var mu sync.Mutex
@@ -103,7 +97,7 @@ var generatedMaxID int64
 func genID(ts time.Time) int64 {
 	mu.Lock()
 	defer mu.Unlock()
-	diff := ts.Sub(epoch)
+	diff := ts.Sub(Epoch)
 	id := int64(diff.Seconds())
 	var newID int64
 	if _, exists := idMap[id]; !exists {
@@ -184,7 +178,7 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	if err := cmd.Run(); err != nil {
 		return err
 	}
-	db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s.db?mode=rw", tenant.Name))
+	db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s.db?mode=rw&_journal_mode=OFF", tenant.Name))
 	if err != nil {
 		return err
 	}
@@ -226,8 +220,8 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	return tx.Commit()
 }
 
-func createTenant() *isuports.TenantRow {
-	created := fake.Time().TimeBetween(epoch, now.Add(-time.Hour*24*1))
+func CreateTenant() *isuports.TenantRow {
+	created := fake.Time().TimeBetween(Epoch, Now())
 	id := genID(created)
 	name := fmt.Sprintf("tenant-%d", id)
 	tenant := isuports.TenantRow{
@@ -235,16 +229,16 @@ func createTenant() *isuports.TenantRow {
 		Name:        name,
 		DisplayName: fake.Company().Name(),
 		CreatedAt:   created,
-		UpdatedAt:   fake.Time().TimeBetween(created, now),
+		UpdatedAt:   fake.Time().TimeBetween(created, Now()),
 	}
 	return &tenant
 }
 
-func createPlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
+func CreatePlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 	playersNum := fake.IntBetween(playersNumByTenant/10, playersNumByTenant)
 	players := make([]*isuports.PlayerRow, 0, playersNum)
 	for i := 0; i < playersNum; i++ {
-		players = append(players, createPlayer(tenant))
+		players = append(players, CreatePlayer(tenant))
 	}
 	sort.SliceStable(players, func(i int, j int) bool {
 		return players[i].CreatedAt.Before(players[j].CreatedAt)
@@ -252,24 +246,24 @@ func createPlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 	return players
 }
 
-func createPlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
-	created := fake.Time().TimeBetween(tenant.CreatedAt, now)
+func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
+	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	player := isuports.PlayerRow{
 		ID:             genID(created),
-		Name:           bench.RandomString(fake.IntBetween(8, 16)),
+		Name:           RandomString(fake.IntBetween(8, 16)),
 		DisplayName:    fake.Person().Name(),
 		IsDisqualified: rand.Intn(100) < disqualifiedRate,
 		CreatedAt:      created,
-		UpdatedAt:      fake.Time().TimeBetween(created, now),
+		UpdatedAt:      fake.Time().TimeBetween(created, Now()),
 	}
 	return &player
 }
 
-func createCompetitions(tenant *isuports.TenantRow) []*isuports.CompetitionRow {
+func CreateCompetitions(tenant *isuports.TenantRow) []*isuports.CompetitionRow {
 	num := fake.IntBetween(competitionsNumByTenant/10, competitionsNumByTenant)
 	rows := make([]*isuports.CompetitionRow, 0, num)
 	for i := 0; i < num; i++ {
-		rows = append(rows, createCompetition(tenant))
+		rows = append(rows, CreateCompetition(tenant))
 	}
 	sort.SliceStable(rows, func(i int, j int) bool {
 		return rows[i].CreatedAt.Before(rows[j].CreatedAt)
@@ -277,8 +271,8 @@ func createCompetitions(tenant *isuports.TenantRow) []*isuports.CompetitionRow {
 	return rows
 }
 
-func createCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
-	created := fake.Time().TimeBetween(tenant.CreatedAt, now)
+func CreateCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
+	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	isFinished := rand.Intn(100) < 50
 	competition := isuports.CompetitionRow{
 		ID:        genID(created),
@@ -287,17 +281,17 @@ func createCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 	}
 	if isFinished {
 		competition.FinishedAt = sql.NullTime{
-			Time:  fake.Time().TimeBetween(created, now),
+			Time:  fake.Time().TimeBetween(created, Now()),
 			Valid: true,
 		}
 		competition.UpdatedAt = competition.FinishedAt.Time
 	} else {
-		competition.UpdatedAt = fake.Time().TimeBetween(created, now)
+		competition.UpdatedAt = fake.Time().TimeBetween(created, Now())
 	}
 	return &competition
 }
 
-func createPlayerData(
+func CreatePlayerData(
 	tenant *isuports.TenantRow,
 	players []*isuports.PlayerRow,
 	competitions []*isuports.CompetitionRow,
@@ -315,7 +309,7 @@ func createPlayerData(
 			if c.FinishedAt.Valid {
 				end = c.FinishedAt.Time
 			} else {
-				end = now
+				end = Now()
 			}
 			created := fake.Time().TimeBetween(c.CreatedAt, end)
 			lastVisitedAt := fake.Time().TimeBetween(created, end)
@@ -333,7 +327,7 @@ func createPlayerData(
 				ID:            genID(created),
 				PlayerID:      p.ID,
 				CompetitionID: c.ID,
-				Score:         fake.Int64Between(0, 100) * fake.Int64Between(0, 100) * fake.Int64Between(0, 100),
+				Score:         CreateScore(),
 				CreatedAt:     created,
 				UpdatedAt:     created,
 			})
@@ -347,4 +341,8 @@ func createPlayerData(
 		}
 	}
 	return scores, visits, bench
+}
+
+func CreateScore() int64 {
+	return fake.Int64Between(0, 100) * fake.Int64Between(0, 100) * fake.Int64Between(0, 100)
 }

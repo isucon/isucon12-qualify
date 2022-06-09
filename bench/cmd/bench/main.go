@@ -67,6 +67,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// データ生成器の初期化
+	bench.InitializeData()
+
 	// ベンチマーク開始
 	result := benchmark.Start(ctx)
 

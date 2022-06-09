@@ -1,15 +1,11 @@
-package bench
+package data
 
 import (
 	crand "crypto/rand"
 	"encoding/binary"
 	"math/rand"
 	"time"
-
-	"github.com/oklog/ulid/v2"
 )
-
-var entropy *ulid.MonotonicEntropy
 
 func init() {
 	var s int64
@@ -18,8 +14,6 @@ func init() {
 		s = time.Now().UnixNano()
 	}
 	rand.Seed(s)
-
-	entropy = ulid.Monotonic(rand.New(rand.NewSource(s)), 0)
 }
 
 func RandomString(n int) string {

@@ -1,5 +1,5 @@
-builder: go.* *.go ../webapp/go/*
-	@go build -o builder .
+builder: go.* *.go ../webapp/go/* cmd/builder/*
+	@go build -o builder cmd/builder/main.go
 
 build: builder
 	@./builder 100
