@@ -3,7 +3,7 @@
 export GOARCH = amd64
 export GOOS = linux
 
-build: files.tar.gz webapp.tar.gz bench.tar.gz isucon-admin.pub
+build: files.tar.gz webapp.tar.gz bench.tar.gz blackauth.tar.gz isucon-admin.pub
 	packer build -on-error=ask qualify.pkr.hcl
 
 files.tar.gz: sshd_config *.sh *.service *.pub *.conf
