@@ -2,12 +2,12 @@ package bench
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
 	"github.com/isucon/isucon12-qualify/data"
+	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 )
 
 func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
@@ -46,19 +46,13 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		return err
 	}
 
-	displayNames := []string{
-		data.RandomString(16),
+	tenants := []*isuports.TenantRow{
+		data.CreateTenant(),
 	}
-	tenants := map[string]*TenantData{}
-
-	for _, displayName := range displayNames {
-		res, err := PostAdminTenantsAddAction(ctx, displayName, adminAg)
+	for _, tenant := range tenants {
+		res, err := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
 		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
-				tenants[displayName] = &TenantData{
-					Name:        r.Data.Tenant.Name,
-					DisplayName: r.Data.Tenant.DisplayName,
-				}
 				return nil
 			}),
 		)
@@ -85,16 +79,10 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	// 複数作ったうちの1つに負荷をかける
-	var tenantName string
-	if tenant, ok := tenants[displayNames[0]]; ok {
-		tenantName = tenant.Name
-	} else {
-		return fmt.Errorf("error: tenants[%s] not exist", displayNames[0])
-	}
-
+	tenant := tenants[0]
 	organizer := Account{
 		Role:       AccountRoleOrganizer,
-		TenantName: tenantName,
+		TenantName: tenant.Name,
 		PlayerName: "organizer",
 		Option:     sc.Option,
 	}

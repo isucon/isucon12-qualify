@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +31,10 @@ import (
 const (
 	tenantDBSchemaFilePath = "../sql/tenant/10_schema.sql"
 	cookieName             = "isuports_session"
+)
+
+var (
+	tenantNameRegexp = regexp.MustCompile(`^[a-z][a-z0-9-]{0,61}[a-z0-9]$`)
 )
 
 func getEnv(key string, defaultValue string) string {
@@ -91,7 +96,7 @@ func dispenseID(ctx context.Context) (int64, error) {
 		var ret sql.Result
 		ret, err := centerDB.ExecContext(ctx, "REPLACE INTO `id_generator` (`stub`) VALUES (?);", "a")
 		if err != nil {
-			if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1213 { // deadlocK
+			if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1213 { // deadlock
 				lastErr = fmt.Errorf("error REPLACE INTO `id_generator`: %w", err)
 				continue
 			}
@@ -343,6 +348,11 @@ func tenantsAddHandler(c echo.Context) error {
 	}
 
 	displayName := c.FormValue("display_name")
+	name := c.FormValue("name")
+	if err := validateTenantName(name); err != nil {
+		c.Logger().Errorf("failed to validateTenantName: %v", err)
+		return echo.NewHTTPError(http.StatusBadRequest)
+	}
 
 	ctx := c.Request().Context()
 	tx, err := centerDB.BeginTxx(ctx, nil)
@@ -354,7 +364,6 @@ func tenantsAddHandler(c echo.Context) error {
 		tx.Rollback()
 		return fmt.Errorf("error dispenseID: %w", err)
 	}
-	name := fmt.Sprintf("tenant-%d", id)
 	now := time.Now()
 	_, err = tx.ExecContext(
 		ctx,
@@ -363,6 +372,10 @@ func tenantsAddHandler(c echo.Context) error {
 	)
 	if err != nil {
 		tx.Rollback()
+		if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1062 { // duplicate entry
+			c.Logger().Errorf("failed to insert tenant: %v", err)
+			return echo.NewHTTPError(http.StatusConflict)
+		}
 		return fmt.Errorf("error Insert tenant: %w", err)
 	}
 
@@ -384,6 +397,13 @@ func tenantsAddHandler(c echo.Context) error {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 	return nil
+}
+
+func validateTenantName(name string) error {
+	if tenantNameRegexp.MatchString(name) {
+		return nil
+	}
+	return fmt.Errorf("invalid tenant name: %s", name)
 }
 
 type BillingReport struct {

@@ -3,6 +3,7 @@ package bench
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/isucon/isucandar"
 )
@@ -36,14 +37,17 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	}
 
 	// SaaS管理API
-	tenantDisplayName := "validate_tenantname"
+	tenantDisplayName := "Validate-TenantName"
 	var tenantName string
 	{
-		res, err := PostAdminTenantsAddAction(ctx, tenantDisplayName, adminAg)
+		res, err := PostAdminTenantsAddAction(ctx, strings.ToLower(tenantDisplayName), tenantDisplayName, adminAg)
 		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
 				if tenantDisplayName != r.Data.Tenant.DisplayName {
 					return fmt.Errorf("作成したテナントのDisplayNameが違います (want: %s, got: %s)", tenantDisplayName, r.Data.Tenant.DisplayName)
+				}
+				if strings.ToLower(tenantDisplayName) != r.Data.Tenant.Name {
+					return fmt.Errorf("作成したテナントのNameが違います (want: %s, got: %s)", strings.ToLower(tenantDisplayName), r.Data.Tenant.Name)
 				}
 				tenantName = r.Data.Tenant.Name
 				return nil
@@ -53,6 +57,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return v
 		}
 	}
+	// TODO: 新規テナント作成がエラーになるのも確認  name重複、不正なnameなど
 	{
 		res, err := GetAdminTenantsBillingAction(ctx, tenantName, adminAg)
 		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
