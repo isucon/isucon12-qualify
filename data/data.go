@@ -94,6 +94,10 @@ var mu sync.Mutex
 var idMap = map[int64]int64{}
 var generatedMaxID int64
 
+var GenID = func(ts time.Time) int64 {
+	return genID(ts)
+}
+
 func genID(ts time.Time) int64 {
 	mu.Lock()
 	defer mu.Unlock()
@@ -222,7 +226,7 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 
 func CreateTenant() *isuports.TenantRow {
 	created := fake.Time().TimeBetween(Epoch, Now())
-	id := genID(created)
+	id := GenID(created)
 	name := fmt.Sprintf("tenant-%d", id)
 	tenant := isuports.TenantRow{
 		ID:          id,
@@ -249,7 +253,7 @@ func CreatePlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	player := isuports.PlayerRow{
-		ID:             genID(created),
+		ID:             GenID(created),
 		Name:           RandomString(fake.IntBetween(8, 16)),
 		DisplayName:    fake.Person().Name(),
 		IsDisqualified: rand.Intn(100) < disqualifiedRate,
@@ -275,7 +279,7 @@ func CreateCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	isFinished := rand.Intn(100) < 50
 	competition := isuports.CompetitionRow{
-		ID:        genID(created),
+		ID:        GenID(created),
 		Title:     fake.Music().Name(),
 		CreatedAt: created,
 	}
@@ -324,7 +328,7 @@ func CreatePlayerData(
 				})
 			}
 			scores = append(scores, &isuports.PlayerScoreRow{
-				ID:            genID(created),
+				ID:            GenID(created),
 				PlayerID:      p.ID,
 				CompetitionID: c.ID,
 				Score:         CreateScore(),
