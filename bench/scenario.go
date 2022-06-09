@@ -87,17 +87,6 @@ type Scenario struct {
 	RawKey      *rsa.PrivateKey
 }
 
-// どのシナリオから加算されたスコアか
-type ScenarioTag string
-
-func (sc *Scenario) AddScoreByScenario(step *isucandar.BenchmarkStep, scoreTag score.ScoreTag, scenarioTag ScenarioTag) {
-	step.AddScore(scoreTag)
-	if sc.ScenarioScoreMap[scenarioTag] == nil {
-		sc.ScenarioScoreMap[scenarioTag] = new(int64)
-	}
-	atomic.AddInt64(sc.ScenarioScoreMap[scenarioTag], ResultScoreMap[scoreTag])
-}
-
 // isucandar.PrepeareScenario を満たすメソッド
 // isucandar.Benchmark の Prepare ステップで実行される
 func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) error {
@@ -224,10 +213,6 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	}()
 	wg.Wait()
 
-	// シナリオ毎のスコア
-	for key, value := range s.ScenarioScoreMap {
-		ContestantLogger.Println(string(key) + ": " + strconv.FormatInt(atomic.LoadInt64(value), 10))
-	}
 	return nil
 }
 
@@ -282,4 +267,22 @@ func getEnv(key string, defaultValue string) string {
 		return val
 	}
 	return defaultValue
+}
+
+// どのシナリオから加算されたスコアかをカウントしならがスコアを追加する
+type ScenarioTag string
+
+func (sc *Scenario) AddScoreByScenario(step *isucandar.BenchmarkStep, scoreTag score.ScoreTag, scenarioTag ScenarioTag) {
+	step.AddScore(scoreTag)
+	if sc.ScenarioScoreMap[scenarioTag] == nil {
+		sc.ScenarioScoreMap[scenarioTag] = new(int64)
+	}
+	atomic.AddInt64(sc.ScenarioScoreMap[scenarioTag], ResultScoreMap[scoreTag])
+}
+
+// シナリオ毎のスコア表示
+func (sc *Scenario) PrintScenarioScoreMap() {
+	for key, value := range sc.ScenarioScoreMap {
+		ContestantLogger.Println(string(key) + ": " + strconv.FormatInt(atomic.LoadInt64(value), 10))
+	}
 }

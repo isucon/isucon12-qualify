@@ -93,6 +93,7 @@ func main() {
 	}
 
 	// スコア表示
+	scenario.PrintScenarioScoreMap()
 	score, addition, deduction := SumScore(result)
 	bench.ContestantLogger.Printf("SCORE: %d (+%d %d)", score, addition, -deduction)
 	bench.ContestantLogger.Printf("RESULT: %#v", result.Score.Breakdown())
