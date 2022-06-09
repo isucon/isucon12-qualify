@@ -90,7 +90,7 @@ build {
 
       # Install isuport-go.service
       "sudo mv /dev/shm/*.service /etc/systemd/system/",
-      "sudo chown root:root /etc/systemd/system/*.service",
+      "sudo chown root:root /etc/systemd/system/isuports-*.service",
       "sudo chown root:root /etc/systemd/system/blackauth.service",
 
       "sudo systemctl daemon-reload",
