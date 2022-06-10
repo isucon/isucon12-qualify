@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -123,11 +124,25 @@ func Run() {
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
 
+	var traceLogFile io.WriteCloser
+	if traceFilePath := getEnv("ISUCON_SQLITE_TRACE_FILE", "sqlite-trace.log"); traceFilePath != "" {
+		var err error
+		traceLogFile, err = os.OpenFile(traceFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			e.Logger.Panicf("cannot open ISUCON_SQLITE_TRACE_FILE: %s", err)
+		}
+		defer traceLogFile.Close()
+	}
 	sql.Register("sqlite3-with-trace", proxy.NewProxyContext(&sqlite3.SQLiteDriver{}, &proxy.HooksContext{
 		PreExec: func(_ context.Context, _ *proxy.Stmt, _ []driver.NamedValue) (interface{}, error) {
 			return time.Now(), nil
 		},
 		PostExec: func(_ context.Context, ctx interface{}, stmt *proxy.Stmt, args []driver.NamedValue, result driver.Result, _ error) error {
+			if traceLogFile == nil {
+				return nil
+			}
+			enc := json.NewEncoder(traceLogFile)
+			enc.SetEscapeHTML(false)
 			starts := ctx.(time.Time)
 			queryTime := time.Since(starts)
 
@@ -140,13 +155,22 @@ func Run() {
 				return fmt.Errorf("error driver.Result.RowsAffected at PostExec: %w", err)
 			}
 
-			e.Logger.Debugj(log.JSON{
-				"time":          starts.Format(time.RFC3339),
-				"statement":     stmt.QueryString,
-				"args":          argsValues,
-				"query_time":    queryTime.Seconds(),
-				"affected_rows": affected,
-			})
+			sqlLog := struct {
+				Time         string        `json:"time"`
+				Statement    string        `json:"statement"`
+				Args         []interface{} `json:"args"`
+				QueryTime    float64       `json:"query_time"`
+				AffectedRows int64         `json:"affected_rows"`
+			}{
+				Time:         starts.Format(time.RFC3339),
+				Statement:    stmt.QueryString,
+				Args:         argsValues,
+				QueryTime:    queryTime.Seconds(),
+				AffectedRows: affected,
+			}
+			if err := enc.Encode(sqlLog); err != nil {
+				return fmt.Errorf("error encode.Encode at PostExec: %w", err)
+			}
 			return nil
 		},
 	}))
