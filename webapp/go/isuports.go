@@ -3,6 +3,7 @@ package isuports
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/csv"
 	"errors"
 	"fmt"
@@ -25,7 +26,8 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
+	proxy "github.com/shogo82148/go-sql-proxy"
 )
 
 const (
@@ -65,7 +67,7 @@ func tenantDBPath(name string) string {
 
 func connectToTenantDB(name string) (*sqlx.DB, error) {
 	p := tenantDBPath(name)
-	return sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rw", p))
+	return sqlx.Open("sqlite3-with-trace", fmt.Sprintf("file:%s?mode=rw", p))
 }
 
 func getTenantName(c echo.Context) (string, error) {
@@ -120,6 +122,34 @@ func Run() {
 	e := echo.New()
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
+
+	sql.Register("sqlite3-with-trace", proxy.NewProxyContext(&sqlite3.SQLiteDriver{}, &proxy.HooksContext{
+		PreExec: func(_ context.Context, _ *proxy.Stmt, _ []driver.NamedValue) (interface{}, error) {
+			return time.Now(), nil
+		},
+		PostExec: func(_ context.Context, ctx interface{}, stmt *proxy.Stmt, args []driver.NamedValue, result driver.Result, _ error) error {
+			starts := ctx.(time.Time)
+			queryTime := time.Since(starts)
+
+			argsValues := make([]any, 0, len(args))
+			for _, arg := range args {
+				argsValues = append(argsValues, arg.Value)
+			}
+			affected, err := result.RowsAffected()
+			if err != nil {
+				return fmt.Errorf("error driver.Result.RowsAffected at PostExec: %w", err)
+			}
+
+			e.Logger.Debugj(log.JSON{
+				"time":          starts.Format(time.RFC3339),
+				"statement":     stmt.QueryString,
+				"args":          argsValues,
+				"query_time":    queryTime.Seconds(),
+				"affected_rows": affected,
+			})
+			return nil
+		},
+	}))
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())

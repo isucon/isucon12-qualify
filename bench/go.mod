@@ -29,6 +29,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.13 // indirect
 	github.com/pquerna/cachecontrol v0.1.0 // indirect
 	github.com/samber/lo v1.21.0 // indirect
+	github.com/shogo82148/go-sql-proxy v0.6.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.1 // indirect
 	golang.org/x/crypto v0.0.0-20220427172511-eb4f295cb31f // indirect
