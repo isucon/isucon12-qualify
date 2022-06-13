@@ -525,7 +525,6 @@ func tenantsBillingHandler(c echo.Context) error {
 		if err != nil {
 			return fmt.Errorf("error strconv.ParseInt: %w", err)
 		}
-		beforeID = value
 	}
 	// テナントごとに
 	//   大会ごとに
