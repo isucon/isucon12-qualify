@@ -285,7 +285,7 @@ func (sc *Scenario) AddScoreByScenario(step *isucandar.BenchmarkStep, scoreTag s
 		if ptr, ok := value.(*int64); ok {
 			atomic.AddInt64(ptr, ResultScoreMap[scoreTag])
 		} else {
-			log.Printf("error failed ScenarioScoreMap.Load type assertion: key(%w)\n", key)
+			log.Printf("error failed ScenarioScoreMap.Load type assertion: key(%s)\n", key)
 		}
 	} else {
 		n := ResultScoreMap[scoreTag]
@@ -300,7 +300,7 @@ func (sc *Scenario) PrintScenarioScoreMap() {
 		tag, okKey := key.(string)
 		scorePtr, okVal := value.(*int64)
 		if !okKey || !okVal {
-			log.Printf("error failed ScenarioScoreMap.Load type assertion: key(%w)\n", key)
+			log.Printf("error failed ScenarioScoreMap.Load type assertion: key(%s)\n", key)
 			return false
 		}
 
