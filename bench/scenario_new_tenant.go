@@ -47,7 +47,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	tenants := []*isuports.TenantRow{
-		data.CreateTenant(),
+		data.CreateTenant(false),
 	}
 	for _, tenant := range tenants {
 		res, err := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)

@@ -61,7 +61,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 	if err != nil {
 		return err
 	}
-	tenant := data.CreateTenant()
+	tenant := data.CreateTenant(false)
 	var tenantName string
 	{
 		res, err := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
