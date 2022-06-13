@@ -24,7 +24,7 @@ CREATE TABLE `id_generator` (
 CREATE TABLE `visit_history` (
   `player_id` VARCHAR(255) NOT NULL,
   `tenant_id` BIGINT UNSIGNED NOT NULL,
-  `competition_id` VARCHAR(255) UNSIGNED NOT NULL,
+  `competition_id` VARCHAR(255) NOT NULL,
   `created_at` DATETIME(6) NOT NULL,
   `updated_at` DATETIME(6) NOT NULL,
   INDEX `tenant_id_idx` (`tenant_id`)
