@@ -158,8 +158,8 @@ func storeAdmin(db *sqlx.DB, tenant *isuports.TenantRow, visitHistories []*isupo
 	for i, _ := range visitHistories {
 		if i > 0 && i%1000 == 0 || i == len(visitHistories)-1 {
 			if _, err := tx.NamedExec(
-				`INSERT INTO visit_history (player_name, tenant_id, competition_id, created_at, updated_at)
-				VALUES(:player_name, :tenant_id, :competition_id, :created_at, :updated_at)`,
+				`INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at)
+				VALUES(:player_id, :tenant_id, :competition_id, :created_at, :updated_at)`,
 				visitHistories[from:i],
 			); err != nil {
 				return err
@@ -198,8 +198,8 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	defer tx.Rollback()
 
 	if _, err = tx.NamedExec(
-		`INSERT INTO player (id, name, display_name, is_disqualified, created_at, updated_at)
-		 VALUES (:id, :name, :display_name, :is_disqualified, :created_at, :updated_at)`,
+		`INSERT INTO player (id, display_name, is_disqualified, created_at, updated_at)
+		 VALUES (:id, :display_name, :is_disqualified, :created_at, :updated_at)`,
 		players,
 	); err != nil {
 		return err
