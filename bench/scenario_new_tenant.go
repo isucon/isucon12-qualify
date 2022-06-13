@@ -155,7 +155,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 				break
 			}
 			if err := sc.tenantPlayerScenario(ctx, step, &tenantPlayerScenarioData{
-				tenantName:    tenantName,
+				tenantName:    tenant.Name,
 				playerName:    player.Name,
 				competitionID: comp.ID,
 			}); err != nil {
