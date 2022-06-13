@@ -3,9 +3,7 @@ package isuports
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"encoding/csv"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,8 +25,6 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
-	"github.com/mattn/go-sqlite3"
-	proxy "github.com/shogo82148/go-sql-proxy"
 )
 
 const (
@@ -124,56 +120,11 @@ func Run() {
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
 
-	var traceLogFile io.WriteCloser
-	if traceFilePath := getEnv("ISUCON_SQLITE_TRACE_FILE", "sqlite-trace.log"); traceFilePath != "" {
-		var err error
-		traceLogFile, err = os.OpenFile(traceFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
-		if err != nil {
-			e.Logger.Panicf("cannot open ISUCON_SQLITE_TRACE_FILE: %s", err)
-		}
-		defer traceLogFile.Close()
+	sqlLogger, err := initializeSQLLogger()
+	if err != nil {
+		e.Logger.Panicf("error initializeSQLLogger: %s", err)
 	}
-	sql.Register("sqlite3-with-trace", proxy.NewProxyContext(&sqlite3.SQLiteDriver{}, &proxy.HooksContext{
-		PreExec: func(_ context.Context, _ *proxy.Stmt, _ []driver.NamedValue) (interface{}, error) {
-			return time.Now(), nil
-		},
-		PostExec: func(_ context.Context, ctx interface{}, stmt *proxy.Stmt, args []driver.NamedValue, result driver.Result, _ error) error {
-			if traceLogFile == nil {
-				return nil
-			}
-			enc := json.NewEncoder(traceLogFile)
-			enc.SetEscapeHTML(false)
-			starts := ctx.(time.Time)
-			queryTime := time.Since(starts)
-
-			argsValues := make([]any, 0, len(args))
-			for _, arg := range args {
-				argsValues = append(argsValues, arg.Value)
-			}
-			affected, err := result.RowsAffected()
-			if err != nil {
-				return fmt.Errorf("error driver.Result.RowsAffected at PostExec: %w", err)
-			}
-
-			sqlLog := struct {
-				Time         string        `json:"time"`
-				Statement    string        `json:"statement"`
-				Args         []interface{} `json:"args"`
-				QueryTime    float64       `json:"query_time"`
-				AffectedRows int64         `json:"affected_rows"`
-			}{
-				Time:         starts.Format(time.RFC3339),
-				Statement:    stmt.QueryString,
-				Args:         argsValues,
-				QueryTime:    queryTime.Seconds(),
-				AffectedRows: affected,
-			}
-			if err := enc.Encode(sqlLog); err != nil {
-				return fmt.Errorf("error encode.Encode at PostExec: %w", err)
-			}
-			return nil
-		},
-	}))
+	defer sqlLogger.Close()
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
@@ -202,7 +153,6 @@ func Run() {
 
 	e.HTTPErrorHandler = errorResponseHandler
 
-	var err error
 	centerDB, err = connectCenterDB()
 	if err != nil {
 		e.Logger.Fatalf("failed to connect db: %v", err)
