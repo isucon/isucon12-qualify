@@ -530,12 +530,12 @@ func tenantsBillingHandler(c echo.Context) error {
 	//   を合計したものを
 	// テナントの課金とする
 	ts := []TenantRow{}
-	if err := centerDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY id ASC"); err != nil {
+	if err := centerDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY id DESC"); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	for _, t := range ts {
-		if beforeID != 0 && beforeID > t.ID {
+		if beforeID != 0 && beforeID <= t.ID {
 			continue
 		}
 		tb := TenantWithBilling{
