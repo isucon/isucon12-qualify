@@ -46,8 +46,7 @@ func main() {
 
 	// シナリオの生成
 	scenario := &bench.Scenario{
-		Option:           option,
-		ScenarioScoreMap: make(map[bench.ScenarioTag]*int64),
+		Option: option,
 	}
 
 	// ベンチマークの生成
