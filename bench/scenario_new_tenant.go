@@ -10,6 +10,8 @@ import (
 	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 )
 
+var scTag = ScenarioTag("NewTenantScenario")
+
 func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		sc.NewTenantScenario(ctx, step)
@@ -28,9 +30,9 @@ func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int
 func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
 	report := timeReporter("新規テナント: SaaS管理者シナリオ")
 	defer report()
+	ContestantLogger.Println("NewTenantScenario start")
 
-	scTag := ScenarioTag("NewTenantScenario")
-	playerNum := 10 // 1テナント当たりの作成する参加者数
+	playerNum := 100 // 1テナント当たりの作成する参加者数
 
 	admin := &Account{
 		Role:       AccountRoleAdmin,
@@ -145,6 +147,22 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 			return v
 		}
 
+		// 大会のランキングを参照するプレイヤーたち
+		var i = 0
+		for _, player := range players {
+			i++
+			if 10 < i {
+				break
+			}
+			if err := sc.tenantPlayerScenario(ctx, step, &tenantPlayerScenarioData{
+				tenantName:    tenant.Name,
+				playerName:    player.Name,
+				competitionID: comp.ID,
+			}); err != nil {
+				return err
+			}
+		}
+
 		// 大会結果入稿 x 1
 		{
 			var score ScoreRows
@@ -209,8 +227,6 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		}
 	}
 
-	// TODO 結果確認
-
 	// テナント請求ダッシュボードの閲覧 x 1
 	{
 		res, err := GetOrganizerBillingAction(ctx, orgAg)
@@ -222,6 +238,74 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
+		} else {
+			return v
+		}
+	}
+
+	ContestantLogger.Println("NewTenantScenario end")
+	return nil
+}
+
+type tenantPlayerScenarioData struct {
+	tenantName    string
+	playerName    string
+	competitionID int64
+}
+
+func (sc *Scenario) tenantPlayerScenario(ctx context.Context, step *isucandar.BenchmarkStep, data *tenantPlayerScenarioData) error {
+	player := Account{
+		Role:       AccountRolePlayer,
+		TenantName: data.tenantName,
+		PlayerName: data.playerName,
+		Option:     sc.Option,
+	}
+	if err := player.SetJWT(sc.RawKey); err != nil {
+		return err
+	}
+	playerAg, err := player.GetAgent()
+	if err != nil {
+		return err
+	}
+
+	{
+		res, err := GetPlayerAction(ctx, data.playerName, playerAg)
+		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayer) error {
+				_ = r
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			return v
+		}
+	}
+	{
+		res, err := GetPlayerCompetitionRankingAction(ctx, data.competitionID, 1, playerAg)
+		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				_ = r
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
+		} else {
+			return v
+		}
+	}
+	{
+		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
+		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitions) error {
+				_ = r
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
 		} else {
 			return v
 		}

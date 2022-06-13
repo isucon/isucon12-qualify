@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"log"
 	"net/url"
 	"os"
 	"strconv"
@@ -81,7 +82,7 @@ type Scenario struct {
 	Option Option
 	Errors failure.Errors
 
-	ScenarioScoreMap map[ScenarioTag]*int64
+	ScenarioScoreMap sync.Map // map[string]*int64
 
 	InitialData InitialDataRows
 	RawKey      *rsa.PrivateKey
@@ -93,6 +94,7 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 	// Prepareは60秒以内に完了
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
+	s.ScenarioScoreMap = sync.Map{}
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(s.Option.TargetURL)
@@ -187,6 +189,9 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
+	// _ = organizerCase
+	// _ = playerCase
+	// _ = adminBillingCase
 
 	workers := []*worker.Worker{
 		newTenantCase,
@@ -272,17 +277,35 @@ func getEnv(key string, defaultValue string) string {
 // どのシナリオから加算されたスコアかをカウントしならがスコアを追加する
 type ScenarioTag string
 
+// AddScoreByScenarioが呼び出された回数はカウントされるが、AddScoreがResultに反映されるかは別なようなのでスコアはズレる
 func (sc *Scenario) AddScoreByScenario(step *isucandar.BenchmarkStep, scoreTag score.ScoreTag, scenarioTag ScenarioTag) {
-	step.AddScore(scoreTag)
-	if sc.ScenarioScoreMap[scenarioTag] == nil {
-		sc.ScenarioScoreMap[scenarioTag] = new(int64)
+	key := fmt.Sprintf("%s", scenarioTag)
+	value, ok := sc.ScenarioScoreMap.Load(key)
+	if ok {
+		if ptr, ok := value.(*int64); ok {
+			atomic.AddInt64(ptr, ResultScoreMap[scoreTag])
+		} else {
+			log.Printf("error failed ScenarioScoreMap.Load type assertion: key(%s)\n", key)
+		}
+	} else {
+		n := ResultScoreMap[scoreTag]
+		sc.ScenarioScoreMap.Store(key, &n)
 	}
-	atomic.AddInt64(sc.ScenarioScoreMap[scenarioTag], ResultScoreMap[scoreTag])
+	step.AddScore(scoreTag)
 }
 
 // シナリオ毎のスコア表示
 func (sc *Scenario) PrintScenarioScoreMap() {
-	for key, value := range sc.ScenarioScoreMap {
-		ContestantLogger.Println(string(key) + ": " + strconv.FormatInt(atomic.LoadInt64(value), 10))
-	}
+	sc.ScenarioScoreMap.Range(func(key, value any) bool {
+		tag, okKey := key.(string)
+		scorePtr, okVal := value.(*int64)
+		if !okKey || !okVal {
+			log.Printf("error failed ScenarioScoreMap.Load type assertion: key(%s)\n", key)
+			return false
+		}
+
+		scoreVal := atomic.LoadInt64(scorePtr)
+		ContestantLogger.Println(string(tag) + ": " + strconv.FormatInt(scoreVal, 10))
+		return true
+	})
 }
