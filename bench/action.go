@@ -31,6 +31,7 @@ func GetRootAction(ctx context.Context, ag *agent.Agent) (*http.Response, error)
 	return ag.Do(ctx, req)
 }
 
+// TODO: nameとdisplayname両方受けれるようにする
 func PostAdminTenantsAddAction(ctx context.Context, displayName string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
 	form.Set("display_name", displayName)
@@ -43,8 +44,12 @@ func PostAdminTenantsAddAction(ctx context.Context, displayName string, ag *agen
 	return ag.Do(ctx, req)
 }
 
-func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantName string, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/admin/api/tenants/billing?before=" + beforeTenantName)
+func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantID string, ag *agent.Agent) (*http.Response, error) {
+	path := "/admin/api/tenants/billing"
+	if beforeTenantID != "" {
+		path = fmt.Sprintf("%s?before=%s", path, beforeTenantID)
+	}
+	req, err := ag.GET(path)
 	if err != nil {
 		return nil, err
 	}
