@@ -30,9 +30,9 @@ func GetRootAction(ctx context.Context, ag *agent.Agent) (*http.Response, error)
 	return ag.Do(ctx, req)
 }
 
-func PostAdminTenantsAddAction(ctx context.Context, id, displayName string, ag *agent.Agent) (*http.Response, error) {
+func PostAdminTenantsAddAction(ctx context.Context, name, displayName string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
-	form.Set("id", id)
+	form.Set("name", name)
 	form.Set("display_name", displayName)
 	req, err := ag.POST("/admin/api/tenants/add", strings.NewReader(form.Encode()))
 	if err != nil {
@@ -56,10 +56,10 @@ func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantID string, ag
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerPlayersAddAction(ctx context.Context, playerIDs []string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerPlayersAddAction(ctx context.Context, playerDisplayNames []string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
-	for _, id := range playerIDs {
-		form.Add("display_id", id)
+	for _, displayName := range playerDisplayNames {
+		form.Add("display_name", displayName)
 	}
 	req, err := ag.POST("/organizer/api/players/add", strings.NewReader(form.Encode()))
 	if err != nil {

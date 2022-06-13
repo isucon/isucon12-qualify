@@ -3,7 +3,6 @@ package bench
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/isucon/isucandar"
 )
@@ -37,19 +36,18 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	}
 
 	// SaaS管理API
-	tenantDisplayName := "Validate-TenantName"
-	var tenantName string
+	tenantName := "valid-tenantid"
+	tenantDisplayName := "valid-Tenantname"
 	{
-		res, err := PostAdminTenantsAddAction(ctx, strings.ToLower(tenantDisplayName), tenantDisplayName, adminAg)
+		res, err := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, adminAg)
 		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
 				if tenantDisplayName != r.Data.Tenant.DisplayName {
 					return fmt.Errorf("作成したテナントのDisplayNameが違います (want: %s, got: %s)", tenantDisplayName, r.Data.Tenant.DisplayName)
 				}
-				if strings.ToLower(tenantDisplayName) != r.Data.Tenant.Name {
-					return fmt.Errorf("作成したテナントのNameが違います (want: %s, got: %s)", strings.ToLower(tenantDisplayName), r.Data.Tenant.Name)
+				if tenantName != r.Data.Tenant.Name {
+					return fmt.Errorf("作成したテナントのNameが違います (want: %s, got: %s)", tenantName, r.Data.Tenant.Name)
 				}
-				tenantName = r.Data.Tenant.Name
 				return nil
 			}),
 		)

@@ -623,8 +623,8 @@ func playersAddHandler(c echo.Context) error {
 
 		if _, err := ttx.ExecContext(
 			ctx,
-			"INSERT INTO player (id, name, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-			id, id, displayName, false, now, now,
+			"INSERT INTO player (id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+			id, displayName, false, now, now,
 		); err != nil {
 			ttx.Rollback()
 			return fmt.Errorf("error Insert player at tenantDB: %w", err)
