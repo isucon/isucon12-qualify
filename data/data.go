@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +32,7 @@ var competitionsNumByTenant = 20                                  // テナン�
 var disqualifiedRate = 10                                         // player失格確率
 var visitsByCompetition = 75                                      // 1大会のplayerごとの訪問数
 var maxID int64                                                   // webapp初期化時の起点ID
+var hugeTenantScale = 25                                          // 1個だけある巨大テナント データサイズ倍数
 
 var tenantDBSchemaFilePath = "../webapp/sql/tenant/10_schema.sql"
 var adminDBSchemaFilePath = "../webapp/sql/admin/10_schema.sql"
@@ -66,7 +68,7 @@ func Run(tenantsNum int) error {
 	benchSrcs := make([]*benchmarkerSource, 0)
 	for i := 0; i < tenantsNum; i++ {
 		log.Println("create tenant")
-		tenant := CreateTenant()
+		tenant := CreateTenant(i == 0)
 		players := CreatePlayers(tenant)
 		competitions := CreateCompetitions(tenant)
 		playerScores, visitHistroies, b := CreatePlayerData(tenant, players, competitions)
@@ -93,6 +95,10 @@ func Run(tenantsNum int) error {
 var mu sync.Mutex
 var idMap = map[int64]int64{}
 var generatedMaxID int64
+
+var GenID = func(ts time.Time) int64 {
+	return genID(ts)
+}
 
 func genID(ts time.Time) int64 {
 	mu.Lock()
@@ -220,13 +226,19 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	return tx.Commit()
 }
 
-func CreateTenant() *isuports.TenantRow {
-	created := fake.Time().TimeBetween(Epoch, Now())
-	id := genID(created)
-	name := fmt.Sprintf("tenant-%d", id)
+func CreateTenant(isFirst bool) *isuports.TenantRow {
+	created := Epoch
+	var id int64
+	if isFirst {
+		id = 1
+	} else {
+		id = GenID(created)
+	}
 	tenant := isuports.TenantRow{
-		ID:          id,
-		Name:        name,
+		ID: id,
+		Name: strings.ToLower(
+			UniqueRandomString(fake.IntBetween(2, 8)) + "-" + UniqueRandomString(fake.IntBetween(4, 16)),
+		),
 		DisplayName: fake.Company().Name(),
 		CreatedAt:   created,
 		UpdatedAt:   fake.Time().TimeBetween(created, Now()),
@@ -236,6 +248,10 @@ func CreateTenant() *isuports.TenantRow {
 
 func CreatePlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 	playersNum := fake.IntBetween(playersNumByTenant/10, playersNumByTenant)
+	if tenant.ID == 1 {
+		playersNum = playersNumByTenant * hugeTenantScale
+	}
+	log.Println("create players", playersNum, "for tenant", tenant.ID)
 	players := make([]*isuports.PlayerRow, 0, playersNum)
 	for i := 0; i < playersNum; i++ {
 		players = append(players, CreatePlayer(tenant))
@@ -249,7 +265,7 @@ func CreatePlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	player := isuports.PlayerRow{
-		ID:             genID(created),
+		ID:             GenID(created),
 		Name:           RandomString(fake.IntBetween(8, 16)),
 		DisplayName:    fake.Person().Name(),
 		IsDisqualified: rand.Intn(100) < disqualifiedRate,
@@ -275,7 +291,7 @@ func CreateCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	isFinished := rand.Intn(100) < 50
 	competition := isuports.CompetitionRow{
-		ID:        genID(created),
+		ID:        GenID(created),
 		Title:     fake.Music().Name(),
 		CreatedAt: created,
 	}
@@ -324,7 +340,7 @@ func CreatePlayerData(
 				})
 			}
 			scores = append(scores, &isuports.PlayerScoreRow{
-				ID:            genID(created),
+				ID:            GenID(created),
 				PlayerID:      p.ID,
 				CompetitionID: c.ID,
 				Score:         CreateScore(),

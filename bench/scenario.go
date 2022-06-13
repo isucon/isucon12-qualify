@@ -223,7 +223,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 
 // 並列数の調整
 func (s *Scenario) loadAdjustor(ctx context.Context, step *isucandar.BenchmarkStep, workers ...*worker.Worker) {
-	tk := time.NewTicker(time.Second * 3) // TODO: 適切な値にする
+	tk := time.NewTicker(time.Second * 1) // TODO: 適切な値にする
 	var prevErrors int64
 	for {
 		select {

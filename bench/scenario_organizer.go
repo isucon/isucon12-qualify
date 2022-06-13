@@ -61,14 +61,17 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 	if err != nil {
 		return err
 	}
-	tenant := data.CreateTenant()
+	tenant := data.CreateTenant(false)
 	var tenantName string
 	{
-		res, err := PostAdminTenantsAddAction(ctx, tenant.DisplayName, adminAg)
+		res, err := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
 		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
 				if tenant.DisplayName != r.Data.Tenant.DisplayName {
-					return fmt.Errorf("テナント名が一致しません: %s != %s", tenant.Name, r.Data.Tenant.Name)
+					return fmt.Errorf("作成したテナントのDisplayNameが一致しません: %s != %s", tenant.DisplayName, r.Data.Tenant.DisplayName)
+				}
+				if tenant.Name != r.Data.Tenant.Name {
+					return fmt.Errorf("作成したテナントのNameが一致しません: %s != %s", tenant.Name, r.Data.Tenant.Name)
 				}
 				tenantName = r.Data.Tenant.Name
 				return nil

@@ -1,4 +1,4 @@
-builder
+./builder
 *.db
 *.sql
 *.tar.gz

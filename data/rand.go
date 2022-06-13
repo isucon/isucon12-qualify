@@ -4,8 +4,11 @@ import (
 	crand "crypto/rand"
 	"encoding/binary"
 	"math/rand"
+	"sync"
 	"time"
 )
+
+var randomStringUnique = sync.Map{}
 
 func init() {
 	var s int64
@@ -17,11 +20,22 @@ func init() {
 }
 
 func RandomString(n int) string {
-	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+	var letter = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 	b := make([]rune, n)
 	for i := range b {
 		b[i] = letter[rand.Intn(len(letter))]
 	}
 	return string(b)
+}
+
+func UniqueRandomString(n int) string {
+	s := RandomString(n)
+	for {
+		if _, ok := randomStringUnique.Load(s); ok {
+			continue
+		}
+		randomStringUnique.Store(s, struct{}{})
+		return s
+	}
 }

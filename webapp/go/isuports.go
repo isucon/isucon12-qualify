@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -24,12 +25,15 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
 	tenantDBSchemaFilePath = "../sql/tenant/10_schema.sql"
 	cookieName             = "isuports_session"
+)
+
+var (
+	tenantNameRegexp = regexp.MustCompile(`^[a-z][a-z0-9-]{0,61}[a-z0-9]$`)
 )
 
 func getEnv(key string, defaultValue string) string {
@@ -60,7 +64,7 @@ func tenantDBPath(name string) string {
 
 func connectToTenantDB(name string) (*sqlx.DB, error) {
 	p := tenantDBPath(name)
-	return sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rw", p))
+	return sqlx.Open("sqlite3-with-trace", fmt.Sprintf("file:%s?mode=rw", p))
 }
 
 func getTenantName(c echo.Context) (string, error) {
@@ -91,7 +95,7 @@ func dispenseID(ctx context.Context) (int64, error) {
 		var ret sql.Result
 		ret, err := centerDB.ExecContext(ctx, "REPLACE INTO `id_generator` (`stub`) VALUES (?);", "a")
 		if err != nil {
-			if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1213 { // deadlocK
+			if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1213 { // deadlock
 				lastErr = fmt.Errorf("error REPLACE INTO `id_generator`: %w", err)
 				continue
 			}
@@ -115,6 +119,12 @@ func Run() {
 	e := echo.New()
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
+
+	sqlLogger, err := initializeSQLLogger()
+	if err != nil {
+		e.Logger.Panicf("error initializeSQLLogger: %s", err)
+	}
+	defer sqlLogger.Close()
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
@@ -143,7 +153,6 @@ func Run() {
 
 	e.HTTPErrorHandler = errorResponseHandler
 
-	var err error
 	centerDB, err = connectCenterDB()
 	if err != nil {
 		e.Logger.Fatalf("failed to connect db: %v", err)
@@ -343,6 +352,11 @@ func tenantsAddHandler(c echo.Context) error {
 	}
 
 	displayName := c.FormValue("display_name")
+	name := c.FormValue("name")
+	if err := validateTenantName(name); err != nil {
+		c.Logger().Errorf("failed to validateTenantName: %v", err)
+		return echo.NewHTTPError(http.StatusBadRequest)
+	}
 
 	ctx := c.Request().Context()
 	tx, err := centerDB.BeginTxx(ctx, nil)
@@ -354,7 +368,6 @@ func tenantsAddHandler(c echo.Context) error {
 		tx.Rollback()
 		return fmt.Errorf("error dispenseID: %w", err)
 	}
-	name := fmt.Sprintf("tenant-%d", id)
 	now := time.Now()
 	_, err = tx.ExecContext(
 		ctx,
@@ -363,6 +376,10 @@ func tenantsAddHandler(c echo.Context) error {
 	)
 	if err != nil {
 		tx.Rollback()
+		if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1062 { // duplicate entry
+			c.Logger().Errorf("failed to insert tenant: %v", err)
+			return echo.NewHTTPError(http.StatusConflict)
+		}
 		return fmt.Errorf("error Insert tenant: %w", err)
 	}
 
@@ -384,6 +401,13 @@ func tenantsAddHandler(c echo.Context) error {
 		return fmt.Errorf("error c.JSON: %w", err)
 	}
 	return nil
+}
+
+func validateTenantName(name string) error {
+	if tenantNameRegexp.MatchString(name) {
+		return nil
+	}
+	return fmt.Errorf("invalid tenant name: %s", name)
 }
 
 type BillingReport struct {
@@ -456,8 +480,11 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, 
 	}
 
 	var billingYen int64
-	for _, v := range billingMap {
-		billingYen += v
+	// 大会が終了している場合は課金を計算する(開催中の場合は常に 0)
+	if comp.FinishedAt.Valid {
+		for _, v := range billingMap {
+			billingYen += v
+		}
 	}
 	return &BillingReport{
 		CompetitionID:    comp.ID,
@@ -468,6 +495,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, 
 }
 
 type TenantWithBilling struct {
+	ID          string `json:"id"`
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name"`
 	BillingYen  int64  `json:"billing"`
@@ -490,6 +518,10 @@ func tenantsBillingHandler(c echo.Context) error {
 	}
 
 	before := c.QueryParam("before")
+	beforeID, err := strconv.ParseInt(before, 10, 64)
+	if err != nil {
+		return fmt.Errorf("error strconv.ParseInt: %w", err)
+	}
 	// テナントごとに
 	//   大会ごとに
 	//     scoreに登録されているplayerでアクセスした人 * 100
@@ -498,15 +530,16 @@ func tenantsBillingHandler(c echo.Context) error {
 	//   を合計したものを
 	// テナントの課金とする
 	ts := []TenantRow{}
-	if err := centerDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY name ASC"); err != nil {
+	if err := centerDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY id DESC"); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	for _, t := range ts {
-		if before != "" && before > t.Name {
+		if beforeID != 0 && beforeID <= t.ID {
 			continue
 		}
 		tb := TenantWithBilling{
+			ID:          strconv.FormatInt(t.ID, 10),
 			Name:        t.Name,
 			DisplayName: t.DisplayName,
 		}
