@@ -480,8 +480,10 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, 
 	}
 
 	var billingYen int64
-	for _, v := range billingMap {
-		billingYen += v
+	if comp.FinishedAt.Valid {
+		for _, v := range billingMap {
+			billingYen += v
+		}
 	}
 	return &BillingReport{
 		CompetitionID:    comp.ID,
