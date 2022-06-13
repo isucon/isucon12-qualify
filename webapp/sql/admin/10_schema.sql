@@ -22,7 +22,7 @@ CREATE TABLE `id_generator` (
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;
 
 CREATE TABLE `visit_history` (
-  `player_name` VARCHAR(256) NOT NULL,
+  `player_id` VARCHAR(256) NOT NULL,
   `tenant_id` BIGINT UNSIGNED NOT NULL,
   `competition_id` BIGINT UNSIGNED NOT NULL,
   `created_at` DATETIME(6) NOT NULL,
