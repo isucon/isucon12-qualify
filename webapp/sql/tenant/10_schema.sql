@@ -11,7 +11,7 @@ CREATE TABLE `competition` (
 );
 
 CREATE TABLE `player` (
-  `id` INTEGER PRIMARY KEY,
+  `id` TEXT PRIMARY KEY,
   `display_name` TEXT NOT NULL,
   `is_disqualified` INTEGER NOT NULL,
   `created_at` DATETIME NOT NULL,

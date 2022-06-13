@@ -135,7 +135,7 @@ func Run() {
 	// for tenant endpoint
 	// 参加者操作
 	e.POST("/organizer/api/players/add", playersAddHandler)
-	e.POST("/organizer/api/player/:player_name/disqualified", playerDisqualifiedHandler)
+	e.POST("/organizer/api/player/:player_id/disqualified", playerDisqualifiedHandler)
 	// 大会操作
 	e.POST("/organizer/api/competitions/add", competitionsAddHandler)
 	e.POST("/organizer/api/competition/:competition_id/finish", competitionFinishHandler)
@@ -143,7 +143,7 @@ func Run() {
 	// テナント操作
 	e.GET("/organizer/api/billing", billingHandler)
 	// 参加者からの閲覧
-	e.GET("/player/api/player/:player_name", playerHandler)
+	e.GET("/player/api/player/:player_id", playerHandler)
 	e.GET("/player/api/competition/:competition_id/ranking", competitionRankingHandler)
 	e.GET("/player/api/competitions", competitionsHandler)
 
@@ -214,7 +214,7 @@ var (
 
 type Viewer struct {
 	role       Role
-	playerName string
+	playerID   string
 	tenantName string
 }
 
@@ -261,7 +261,7 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 
 	v := &Viewer{
 		role:       r,
-		playerName: token.Subject(),
+		playerID:   token.Subject(),
 		tenantName: aud[0],
 	}
 	return v, nil
@@ -282,23 +282,14 @@ type dbOrTx interface {
 }
 
 type PlayerRow struct {
-	ID             int64     `db:"id"`
-	Name           string    `db:"name"`
+	ID             string    `db:"id"`
 	DisplayName    string    `db:"display_name"`
 	IsDisqualified bool      `db:"is_disqualified"`
 	CreatedAt      time.Time `db:"created_at"`
 	UpdatedAt      time.Time `db:"updated_at"`
 }
 
-func retrievePlayerByName(ctx context.Context, tenantDB dbOrTx, name string) (*PlayerRow, error) {
-	var c PlayerRow
-	if err := tenantDB.GetContext(ctx, &c, "SELECT * FROM player WHERE name = ?", name); err != nil {
-		return nil, fmt.Errorf("error Select player: %w", err)
-	}
-	return &c, nil
-}
-
-func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id int64) (*PlayerRow, error) {
+func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id string) (*PlayerRow, error) {
 	var c PlayerRow
 	if err := tenantDB.GetContext(ctx, &c, "SELECT * FROM player WHERE id = ?", id); err != nil {
 		return nil, fmt.Errorf("error Select player: %w", err)
@@ -418,7 +409,7 @@ type BillingReport struct {
 }
 
 type VisitHistoryRow struct {
-	PlayerName    string    `db:"player_name"`
+	PlayerID      string    `db:"player_id"`
 	TenantID      int64     `db:"tenant_id"`
 	CompetitionID int64     `db:"competition_id"`
 	CreatedAt     time.Time `db:"created_at"`
@@ -426,7 +417,7 @@ type VisitHistoryRow struct {
 }
 
 type VisitHistorySummaryRow struct {
-	PlayerName   string    `db:"player_name"`
+	PlayerID     string    `db:"player_id"`
 	MinCreatedAt time.Time `db:"min_created_at"`
 }
 
@@ -440,7 +431,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, 
 	if err := centerDB.SelectContext(
 		ctx,
 		&vhs,
-		"SELECT player_name, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_name",
+		"SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id",
 		tenantID,
 		comp.ID,
 	); err != nil && err != sql.ErrNoRows {
@@ -453,7 +444,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, 
 			continue
 		}
 		// scoreに登録されていないplayerでアクセスした人 * 10
-		billingMap[vh.PlayerName] = 10
+		billingMap[vh.PlayerID] = 10
 	}
 
 	pss := []PlayerScoreRow{}
@@ -470,12 +461,12 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, 
 		if err != nil {
 			return nil, fmt.Errorf("error retrievePlayer: %w", err)
 		}
-		if _, ok := billingMap[player.Name]; ok {
+		if _, ok := billingMap[player.ID]; ok {
 			// scoreに登録されているplayerでアクセスした人 * 100
-			billingMap[player.Name] = 100
+			billingMap[player.ID] = 100
 		} else {
 			// scoreに登録されているplayerでアクセスしていない人 * 50
-			billingMap[player.Name] = 50
+			billingMap[player.ID] = 50
 		}
 	}
 
@@ -580,7 +571,7 @@ func tenantsBillingHandler(c echo.Context) error {
 }
 
 type PlayerDetail struct {
-	Name           string `json:"name"`
+	ID             string `json:"id"`
 	DisplayName    string `json:"display_name"`
 	IsDisqualified bool   `json:"is_disqualified"`
 }
@@ -640,7 +631,7 @@ func playersAddHandler(c echo.Context) error {
 			return fmt.Errorf("error retrievePlayer: %w", err)
 		}
 		pds = append(pds, PlayerDetail{
-			Name:           p.Name,
+			ID:             p.ID,
 			DisplayName:    p.DisplayName,
 			IsDisqualified: p.IsDisqualified,
 		})
@@ -680,24 +671,24 @@ func playerDisqualifiedHandler(c echo.Context) error {
 	}
 	defer tenantDB.Close()
 
-	name := c.Param("player_name")
+	playerID := c.Param("player_id")
 
 	now := time.Now()
 	if _, err := tenantDB.ExecContext(
 		ctx,
-		"UPDATE player SET is_disqualified = ?, updated_at = ? WHERE name = ?",
-		true, now, name,
+		"UPDATE player SET is_disqualified = ?, updated_at = ? WHERE id = ?",
+		true, now, playerID,
 	); err != nil {
 		return fmt.Errorf("error Update player: %w", err)
 	}
-	p, err := retrievePlayerByName(ctx, tenantDB, name)
+	p, err := retrievePlayer(ctx, tenantDB, playerID)
 	if err != nil {
-		return fmt.Errorf("error retrievePlayerByName: %w", err)
+		return fmt.Errorf("error retrievePlayer: %w", err)
 	}
 
 	res := PlayerDisqualifiedHandlerResult{
 		Player: PlayerDetail{
-			Name:           p.Name,
+			ID:             p.ID,
 			DisplayName:    p.DisplayName,
 			IsDisqualified: p.IsDisqualified,
 		},
@@ -857,7 +848,7 @@ func competitionResultHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error r.Read at header: %w", err)
 	}
-	if !reflect.DeepEqual(headers, []string{"player_name", "score"}) {
+	if !reflect.DeepEqual(headers, []string{"player_id", "score"}) {
 		return fmt.Errorf("not match header: %#v", headers)
 	}
 	ttx, err := tenantDB.BeginTxx(ctx, nil)
@@ -884,11 +875,11 @@ func competitionResultHandler(c echo.Context) error {
 			ttx.Rollback()
 			return fmt.Errorf("row must have two columns: %#v", row)
 		}
-		playerName, scoreStr := row[0], row[1]
-		c, err := retrievePlayerByName(ctx, tenantDB, playerName)
+		playerID, scoreStr := row[0], row[1]
+		c, err := retrievePlayer(ctx, tenantDB, playerID)
 		if err != nil {
 			ttx.Rollback()
-			return fmt.Errorf("error retrievePlayerByName: %w", err)
+			return fmt.Errorf("error retrievePlayer: %w", err)
 		}
 		var score int64
 		if score, err = strconv.ParseInt(scoreStr, 10, 64); err != nil {
@@ -1010,19 +1001,26 @@ func playerHandler(c echo.Context) error {
 	}
 	defer tenantDB.Close()
 
-	vp, err := retrievePlayerByName(c.Request().Context(), tenantDB, v.playerName)
+	vp, err := retrievePlayer(c.Request().Context(), tenantDB, v.playerID)
 	if err != nil {
-		return fmt.Errorf("error retrievePlayerByName: %w", err)
+		return fmt.Errorf("error retrievePlayer: %w", err)
 	}
 	if vp.IsDisqualified {
 		return errNotPermitted
 	}
 
-	pn := c.Param("player_name")
+	playerID := c.Param("player_id")
+	if playerID == "" {
+		return echo.ErrBadRequest
+	}
 
-	p, err := retrievePlayerByName(ctx, tenantDB, pn)
+	// playerの存在確認
+	p, err := retrievePlayer(ctx, tenantDB, playerID)
 	if err != nil {
-		return fmt.Errorf("error retrievePlayerByName: %w", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.ErrNotFound
+		}
+		return fmt.Errorf("error retrievePlayer: %w", err)
 	}
 	pss := []PlayerScoreRow{}
 	if err := tenantDB.SelectContext(
@@ -1049,7 +1047,7 @@ func playerHandler(c echo.Context) error {
 		Success: true,
 		Data: PlayerHandlerResult{
 			Player: PlayerDetail{
-				Name:           p.Name,
+				ID:             p.ID,
 				DisplayName:    p.DisplayName,
 				IsDisqualified: p.IsDisqualified,
 			},
@@ -1066,7 +1064,7 @@ func playerHandler(c echo.Context) error {
 type CompetitionRank struct {
 	Rank              int64  `json:"rank"`
 	Score             int64  `json:"score"`
-	PlayerName        string `json:"player_name"`
+	PlayerID          string `json:"player_id"`
 	PlayerDisplayName string `json:"player_display_name"`
 }
 
@@ -1097,9 +1095,9 @@ func competitionRankingHandler(c echo.Context) error {
 	}
 	defer tenantDB.Close()
 
-	vp, err := retrievePlayerByName(c.Request().Context(), tenantDB, v.playerName)
+	vp, err := retrievePlayer(c.Request().Context(), tenantDB, v.playerID)
 	if err != nil {
-		return fmt.Errorf("error retrievePlayerByName: %w", err)
+		return fmt.Errorf("error retrievePlayer: %w", err)
 	}
 	if vp.IsDisqualified {
 		return errNotPermitted
@@ -1113,8 +1111,8 @@ func competitionRankingHandler(c echo.Context) error {
 
 	if _, err := centerDB.ExecContext(
 		ctx,
-		"INSERT INTO visit_history (player_name, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-		vp.Name, t.ID, competitionID, now, now,
+		"INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+		vp.ID, t.ID, competitionID, now, now,
 	); err != nil {
 		return fmt.Errorf("error Insert visit_history: %w", err)
 	}
@@ -1148,7 +1146,7 @@ func competitionRankingHandler(c echo.Context) error {
 		crs = append(crs, CompetitionRank{
 			Rank:              int64(i + 1),
 			Score:             ps.Score,
-			PlayerName:        co.Name,
+			PlayerID:          co.ID,
 			PlayerDisplayName: co.DisplayName,
 		})
 		if len(crs) >= 100 {
@@ -1191,9 +1189,9 @@ func competitionsHandler(c echo.Context) error {
 	}
 	defer tenantDB.Close()
 
-	vp, err := retrievePlayerByName(c.Request().Context(), tenantDB, v.playerName)
+	vp, err := retrievePlayer(c.Request().Context(), tenantDB, v.playerID)
 	if err != nil {
-		return fmt.Errorf("error retrievePlayerByName: %w", err)
+		return fmt.Errorf("error retrievePlayer: %w", err)
 	}
 	if vp.IsDisqualified {
 		return errNotPermitted
