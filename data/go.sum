@@ -44,6 +44,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/samber/lo v1.21.0 h1:FSby8pJQtX4KmyddTCCGhc3JvnnIVrDA+NW37rG+7G8=
 github.com/samber/lo v1.21.0/go.mod h1:2I7tgIv8Q1SG2xEIkRq0F2i2zgxVpnyPOP0d3Gj2r+A=
+github.com/shogo82148/go-sql-proxy v0.6.1 h1:eNLXaab4M7VYT2Zftqu4mJZT320iL1iNxGwh3tIF44E=
+github.com/shogo82148/go-sql-proxy v0.6.1/go.mod h1:C/5AD9VYU98jA799IvDNjdxJGl2ZzVW/b/LQ7nAL+V4=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
