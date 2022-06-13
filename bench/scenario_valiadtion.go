@@ -58,20 +58,6 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 	// TODO: 新規テナント作成がエラーになるのも確認  name重複、不正なnameなど
-	{
-		res, err := GetAdminTenantsBillingAction(ctx, tenantName, adminAg)
-		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
-				if 1 > len(r.Data.Tenants) {
-					return fmt.Errorf("請求ダッシュボードの結果が足りません")
-				}
-				return nil
-			}),
-		)
-		if !v.IsEmpty() {
-			return v
-		}
-	}
 
 	// 大会主催者API
 	organizer := Account{
@@ -259,6 +245,29 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			WithSuccessResponse(func(r ResponseAPICompetitions) error {
 				if 1 != len(r.Data.Competitions) {
 					return fmt.Errorf("テナントに含まれる大会の数が違います (want: %d, got: %d)", 1, len(r.Data.Competitions))
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+
+	{
+		// ページング無しで今回操作したテナントが含まれていることを確認
+		res, err := GetAdminTenantsBillingAction(ctx, "", adminAg)
+		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
+				if 1 > len(r.Data.Tenants) {
+					return fmt.Errorf("請求ダッシュボードの結果が足りません")
+				}
+				var tenantNameMap map[string]interface{}
+				for _, tenant := range r.Data.Tenants {
+					tenantNameMap[tenant.DisplayName] = new(interface{})
+				}
+				if _, ok := tenantNameMap[tenantDisplayName]; !ok {
+					return fmt.Errorf("請求ダッシュボードの結果に作成したテナントがありません")
 				}
 				return nil
 			}),

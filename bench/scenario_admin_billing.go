@@ -42,8 +42,9 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		return err
 	}
 
-	data := sc.InitialData.Choise()
-	res, err := GetAdminTenantsBillingAction(ctx, data.TenantName, adminAg)
+	// ランダムで初期データから取るとid=1を引いて一つも結果を取らないことがあるので
+	// ページングなしで順に辿っていく
+	res, err := GetAdminTenantsBillingAction(ctx, "", adminAg)
 	v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
 		WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 			_ = r

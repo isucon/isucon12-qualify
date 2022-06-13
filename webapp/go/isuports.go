@@ -509,9 +509,13 @@ func tenantsBillingHandler(c echo.Context) error {
 	}
 
 	before := c.QueryParam("before")
-	beforeID, err := strconv.ParseInt(before, 10, 64)
-	if err != nil {
-		return fmt.Errorf("error strconv.ParseInt: %w", err)
+	var beforeID int64
+	if before != "" {
+		var err error
+		beforeID, err = strconv.ParseInt(before, 10, 64)
+		if err != nil {
+			return fmt.Errorf("error strconv.ParseInt: %w", err)
+		}
 	}
 	// テナントごとに
 	//   大会ごとに
