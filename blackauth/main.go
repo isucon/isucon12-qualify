@@ -29,15 +29,15 @@ func getNameParam(r *http.Request) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	name := r.Form.Get("name")
-	if name == "" {
-		return "", fmt.Errorf("name is not found")
+	id := r.Form.Get("id")
+	if id == "" {
+		return "", fmt.Errorf("id is not found")
 	}
-	return name, nil
+	return id, nil
 }
 
 func loginPlayerHandler(w http.ResponseWriter, r *http.Request) {
-	name, err := getNameParam(r)
+	id, err := getNameParam(r)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -46,7 +46,7 @@ func loginPlayerHandler(w http.ResponseWriter, r *http.Request) {
 
 	token := jwt.New()
 	token.Set(jwt.IssuerKey, "isuports")
-	token.Set(jwt.SubjectKey, name)
+	token.Set(jwt.SubjectKey, id)
 	token.Set(jwt.AudienceKey, tenant)
 	token.Set("role", "player")
 	token.Set(jwt.ExpirationKey, time.Now().Add(time.Hour).Unix())
