@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -39,9 +40,9 @@ var adminDBSchemaFilePath = "../webapp/sql/admin/10_schema.sql"
 
 type benchmarkerSource struct {
 	TenantName     string `json:"tenant_name"`
-	CompetitionID  int64  `json:"competition_id"`
+	CompetitionID  string `json:"competition_id"`
 	IsFinished     bool   `json:"is_finished"`
-	PlayerName     string `json:"player_name"`
+	PlayerID       string `json:"player_id"`
 	IsDisqualified bool   `json:"is_disqualified"`
 }
 
@@ -265,8 +266,7 @@ func CreatePlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	player := isuports.PlayerRow{
-		ID:             GenID(created),
-		Name:           RandomString(fake.IntBetween(8, 16)),
+		ID:             strconv.FormatInt(GenID(created), 10),
 		DisplayName:    fake.Person().Name(),
 		IsDisqualified: rand.Intn(100) < disqualifiedRate,
 		CreatedAt:      created,
@@ -291,7 +291,7 @@ func CreateCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	isFinished := rand.Intn(100) < 50
 	competition := isuports.CompetitionRow{
-		ID:        GenID(created),
+		ID:        strconv.FormatInt(GenID(created), 10),
 		Title:     fake.Music().Name(),
 		CreatedAt: created,
 	}
@@ -333,7 +333,7 @@ func CreatePlayerData(
 				visitedAt := fake.Time().TimeBetween(created, lastVisitedAt)
 				visits = append(visits, &isuports.VisitHistoryRow{
 					TenantID:      tenant.ID,
-					PlayerName:    p.Name,
+					PlayerID:      p.ID,
 					CompetitionID: c.ID,
 					CreatedAt:     visitedAt,
 					UpdatedAt:     visitedAt,
@@ -350,7 +350,7 @@ func CreatePlayerData(
 			bench = append(bench, &benchmarkerSource{
 				TenantName:     tenant.Name,
 				CompetitionID:  c.ID,
-				PlayerName:     p.Name,
+				PlayerID:       p.ID,
 				IsFinished:     c.FinishedAt.Valid,
 				IsDisqualified: p.IsDisqualified,
 			})
