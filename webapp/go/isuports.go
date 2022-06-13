@@ -518,7 +518,7 @@ func tenantsBillingHandler(c echo.Context) error {
 	}
 
 	before := c.QueryParam("before")
-	beforeID := int64(0)
+	var beforeID int64
 	if before != "" {
 		value, err := strconv.ParseInt(before, 10, 64)
 		if err != nil {
