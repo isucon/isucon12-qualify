@@ -88,7 +88,7 @@ func createTenantDB(name string) error {
 	return nil
 }
 
-func dispenseID(ctx context.Context) (int64, error) {
+func dispenseID(ctx context.Context) (string, error) {
 	var id int64
 	var lastErr error
 	for i := 0; i < 100; i++ {
@@ -99,18 +99,18 @@ func dispenseID(ctx context.Context) (int64, error) {
 				lastErr = fmt.Errorf("error REPLACE INTO `id_generator`: %w", err)
 				continue
 			}
-			return 0, fmt.Errorf("error REPLACE INTO `id_generator`: %w", err)
+			return "", fmt.Errorf("error REPLACE INTO `id_generator`: %w", err)
 		}
 		id, err = ret.LastInsertId()
 		if err != nil {
-			return 0, fmt.Errorf("error ret.LastInsertId: %w", err)
+			return "", fmt.Errorf("error ret.LastInsertId: %w", err)
 		}
 		break
 	}
 	if id != 0 {
-		return id, nil
+		return strconv.FormatInt(id, 10), nil
 	}
-	return 0, lastErr
+	return "", lastErr
 }
 
 var centerDB *sqlx.DB
@@ -298,14 +298,14 @@ func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id string) (*PlayerRow
 }
 
 type CompetitionRow struct {
-	ID         int64        `db:"id"`
+	ID         string       `db:"id"`
 	Title      string       `db:"title"`
 	FinishedAt sql.NullTime `db:"finished_at"`
 	CreatedAt  time.Time    `db:"created_at"`
 	UpdatedAt  time.Time    `db:"updated_at"`
 }
 
-func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id int64) (*CompetitionRow, error) {
+func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id string) (*CompetitionRow, error) {
 	var c CompetitionRow
 	if err := tenantDB.GetContext(ctx, &c, "SELECT * FROM competition WHERE id = ?", id); err != nil {
 		return nil, fmt.Errorf("error Select competition: %w", err)
@@ -315,8 +315,8 @@ func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id int64) (*Compe
 
 type PlayerScoreRow struct {
 	ID            int64     `db:"id"`
-	PlayerID      int64     `db:"player_id"`
-	CompetitionID int64     `db:"competition_id"`
+	PlayerID      string    `db:"player_id"`
+	CompetitionID string    `db:"competition_id"`
 	Score         int64     `db:"score"`
 	CreatedAt     time.Time `db:"created_at"`
 	UpdatedAt     time.Time `db:"updated_at"`
@@ -402,7 +402,7 @@ func validateTenantName(name string) error {
 }
 
 type BillingReport struct {
-	CompetitionID    int64  `json:"competition_id"`
+	CompetitionID    string `json:"competition_id"`
 	CompetitionTitle string `json:"competition_title"`
 	PlayerCount      int64  `json:"player_count"`
 	BillingYen       int64  `json:"billing_yen"`
@@ -421,7 +421,7 @@ type VisitHistorySummaryRow struct {
 	MinCreatedAt time.Time `db:"min_created_at"`
 }
 
-func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, competitonID int64) (*BillingReport, error) {
+func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID int64, competitonID string) (*BillingReport, error) {
 	comp, err := retrieveCompetition(ctx, tenantDB, competitonID)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieveCompetition: %w", err)
@@ -704,7 +704,7 @@ func playerDisqualifiedHandler(c echo.Context) error {
 }
 
 type CompetitionDetail struct {
-	ID         int64  `json:"id"`
+	ID         string `json:"id"`
 	Title      string `json:"title"`
 	IsFinished bool   `json:"is_finished"`
 }
@@ -777,10 +777,9 @@ func competitionFinishHandler(c echo.Context) error {
 	}
 	defer tenantDB.Close()
 
-	idStr := c.Param("competition_id")
-	var id int64
-	if id, err = strconv.ParseInt(idStr, 10, 64); err != nil {
-		return fmt.Errorf("error strconv.ParseUint: %w", err)
+	id := c.Param("competition_id")
+	if id == "" {
+		return echo.ErrBadRequest
 	}
 
 	now := time.Now()
@@ -816,10 +815,9 @@ func competitionResultHandler(c echo.Context) error {
 	}
 	defer tenantDB.Close()
 
-	competitionIDStr := c.Param("competition_id")
-	var competitionID int64
-	if competitionID, err = strconv.ParseInt(competitionIDStr, 10, 64); err != nil {
-		return fmt.Errorf("error strconv.ParseUint: %w", err)
+	competitionID := c.Param("competition_id")
+	if competitionID == "" {
+		return echo.ErrBadRequest
 	}
 	comp, err := retrieveCompetition(ctx, tenantDB, competitionID)
 	if err != nil {
@@ -1083,10 +1081,9 @@ func competitionRankingHandler(c echo.Context) error {
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
 
-	competitionIDStr := c.Param("competition_id")
-	var competitionID int64
-	if competitionID, err = strconv.ParseInt(competitionIDStr, 10, 64); err != nil {
-		return fmt.Errorf("error strconv.ParseUint: %w", err)
+	competitionID := c.Param("competition_id")
+	if competitionID == "" {
+		return echo.ErrBadRequest
 	}
 
 	tenantName, err := getTenantName(c)
@@ -1098,6 +1095,14 @@ func competitionRankingHandler(c echo.Context) error {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
 	defer tenantDB.Close()
+
+	// 大会の存在確認
+	if _, err := retrieveCompetition(ctx, tenantDB, competitionID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.ErrNotFound
+		}
+		return fmt.Errorf("error retrieveCompetition: %w", err)
+	}
 
 	vp, err := retrievePlayer(c.Request().Context(), tenantDB, v.playerID)
 	if err != nil {
