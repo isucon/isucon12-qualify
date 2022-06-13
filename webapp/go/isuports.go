@@ -411,7 +411,7 @@ type BillingReport struct {
 type VisitHistoryRow struct {
 	PlayerID      string    `db:"player_id"`
 	TenantID      int64     `db:"tenant_id"`
-	CompetitionID int64     `db:"competition_id"`
+	CompetitionID string    `db:"competition_id"`
 	CreatedAt     time.Time `db:"created_at"`
 	UpdatedAt     time.Time `db:"updated_at"`
 }
