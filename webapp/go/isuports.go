@@ -492,6 +492,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, 
 }
 
 type TenantWithBilling struct {
+	ID          string `json:"id"`
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name"`
 	BillingYen  int64  `json:"billing"`
@@ -514,6 +515,10 @@ func tenantsBillingHandler(c echo.Context) error {
 	}
 
 	before := c.QueryParam("before")
+	beforeID, err := strconv.ParseInt(before, 10, 64)
+	if err != nil {
+		return fmt.Errorf("error strconv.ParseInt: %w", err)
+	}
 	// テナントごとに
 	//   大会ごとに
 	//     scoreに登録されているplayerでアクセスした人 * 100
@@ -522,15 +527,16 @@ func tenantsBillingHandler(c echo.Context) error {
 	//   を合計したものを
 	// テナントの課金とする
 	ts := []TenantRow{}
-	if err := centerDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY name ASC"); err != nil {
+	if err := centerDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY id ASC"); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
 	for _, t := range ts {
-		if before != "" && before > t.Name {
+		if beforeID != 0 && beforeID > t.ID {
 			continue
 		}
 		tb := TenantWithBilling{
+			ID:          strconv.FormatInt(t.ID, 10),
 			Name:        t.Name,
 			DisplayName: t.DisplayName,
 		}
