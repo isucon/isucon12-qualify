@@ -25,7 +25,6 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 const (
@@ -65,7 +64,7 @@ func tenantDBPath(name string) string {
 
 func connectToTenantDB(name string) (*sqlx.DB, error) {
 	p := tenantDBPath(name)
-	return sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rw", p))
+	return sqlx.Open("sqlite3-with-trace", fmt.Sprintf("file:%s?mode=rw", p))
 }
 
 func getTenantName(c echo.Context) (string, error) {
@@ -121,6 +120,12 @@ func Run() {
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
 
+	sqlLogger, err := initializeSQLLogger()
+	if err != nil {
+		e.Logger.Panicf("error initializeSQLLogger: %s", err)
+	}
+	defer sqlLogger.Close()
+
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
@@ -148,7 +153,6 @@ func Run() {
 
 	e.HTTPErrorHandler = errorResponseHandler
 
-	var err error
 	centerDB, err = connectCenterDB()
 	if err != nil {
 		e.Logger.Fatalf("failed to connect db: %v", err)
