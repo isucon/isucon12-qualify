@@ -25,7 +25,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	admin := Account{
 		Role:       AccountRoleAdmin,
 		TenantName: "admin",
-		PlayerName: "admin",
+		PlayerID:   "admin",
 		Option:     sc.Option,
 	}
 	if err := admin.SetJWT(sc.RawKey); err != nil {
@@ -63,7 +63,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	organizer := Account{
 		Role:       AccountRoleOrganizer,
 		TenantName: tenantName,
-		PlayerName: "organizer",
+		PlayerID:   "organizer",
 		Option:     sc.Option,
 	}
 	if err := organizer.SetJWT(sc.RawKey); err != nil {
@@ -75,7 +75,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	}
 
 	competitionName := "validate_competition"
-	var competitionId int64
+	var competitionId string
 	{
 		res, err := PostOrganizerCompetitonsAddAction(ctx, competitionName, orgAg)
 		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200),
@@ -95,7 +95,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	for i := 0; i < playerNum; i++ {
 		playerDisplayNames = append(playerDisplayNames, fmt.Sprintf("validate_player%d", i))
 	}
-	var playerNames []string
+	var playerIDs []string
 	{
 		res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
 		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200),
@@ -104,7 +104,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 					return fmt.Errorf("追加されたプレイヤー数が違います (want: %d, got: %d)", playerNum, len(r.Data.Players))
 				}
 				for _, pl := range r.Data.Players {
-					playerNames = append(playerNames, pl.Name)
+					playerIDs = append(playerIDs, pl.ID)
 				}
 				return nil
 			}),
@@ -114,11 +114,11 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 	{
-		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerNames[1], orgAg)
+		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerIDs[1], orgAg)
 		v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
-				if playerNames[1] != r.Data.Player.Name {
-					return fmt.Errorf("失格にした参加者が違います (want: %s, got: %s)", playerNames[1], r.Data.Player.Name)
+				if playerIDs[1] != r.Data.Player.ID {
+					return fmt.Errorf("失格にした参加者が違います (want: %s, got: %s)", playerIDs[1], r.Data.Player.ID)
 				}
 				return nil
 			}),
@@ -129,10 +129,10 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	}
 
 	var score ScoreRows
-	for i, playerName := range playerNames {
+	for i, playerID := range playerIDs {
 		score = append(score, &ScoreRow{
-			PlayerName: playerName,
-			Score:      100 * i,
+			PlayerID: playerID,
+			Score:    100 * i,
 		})
 	}
 	{
@@ -168,7 +168,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 					return fmt.Errorf("請求レポートの数が違います (want: %d, got: %d)", 1, len(r.Data.Reports))
 				}
 				if competitionId != r.Data.Reports[0].CompetitionID {
-					return fmt.Errorf("対象の大会のIDが違います (want: %d, got: %d)", competitionId, r.Data.Reports[0].CompetitionID)
+					return fmt.Errorf("対象の大会のIDが違います (want: %s, got: %s)", competitionId, r.Data.Reports[0].CompetitionID)
 				}
 				return nil
 			}),
@@ -182,7 +182,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	player := Account{
 		Role:       AccountRolePlayer,
 		TenantName: tenantName,
-		PlayerName: playerNames[0],
+		PlayerID:   playerIDs[0],
 		Option:     sc.Option,
 	}
 	if err := player.SetJWT(sc.RawKey); err != nil {
@@ -194,11 +194,11 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	}
 
 	{
-		res, err := GetPlayerAction(ctx, playerNames[0], playerAg)
+		res, err := GetPlayerAction(ctx, playerIDs[0], playerAg)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
-				if playerNames[0] != r.Data.Player.Name {
-					return fmt.Errorf("参照した参加者名が違います (want: %s, got: %s)", playerNames[0], r.Data.Player.Name)
+				if playerIDs[0] != r.Data.Player.ID {
+					return fmt.Errorf("参照した参加者名が違います (want: %s, got: %s)", playerIDs[0], r.Data.Player.ID)
 				}
 				if 1 != len(r.Data.Scores) {
 					return fmt.Errorf("参加した大会数が違います (want: %d, got: %d)", 1, len(r.Data.Scores))

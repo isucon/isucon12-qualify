@@ -31,7 +31,7 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 	admin := &Account{
 		Role:       AccountRoleAdmin,
 		TenantName: "admin",
-		PlayerName: "admin",
+		PlayerID:   "admin",
 		Option:     sc.Option,
 	}
 	if err := admin.SetJWT(sc.RawKey); err != nil {

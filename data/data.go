@@ -38,7 +38,7 @@ var hugeTenantScale = 25                                          // 1個だけ�
 var tenantDBSchemaFilePath = "../webapp/sql/tenant/10_schema.sql"
 var adminDBSchemaFilePath = "../webapp/sql/admin/10_schema.sql"
 
-type benchmarkerSource struct {
+type BenchmarkerSource struct {
 	TenantName     string `json:"tenant_name"`
 	CompetitionID  string `json:"competition_id"`
 	IsFinished     bool   `json:"is_finished"`
@@ -66,7 +66,7 @@ func Run(tenantsNum int) error {
 		return err
 	}
 	defer db.Close()
-	benchSrcs := make([]*benchmarkerSource, 0)
+	benchSrcs := make([]*BenchmarkerSource, 0)
 	for i := 0; i < tenantsNum; i++ {
 		log.Println("create tenant")
 		tenant := CreateTenant(i == 0)
@@ -84,7 +84,7 @@ func Run(tenantsNum int) error {
 	if err := storeMaxID(db); err != nil {
 		return err
 	}
-	if f, err := os.Create("benchmarker.json"); err != nil {
+	if f, err := os.Create("Benchmarker.json"); err != nil {
 		return err
 	} else {
 		json.NewEncoder(f).Encode(benchSrcs)
@@ -311,10 +311,10 @@ func CreatePlayerData(
 	tenant *isuports.TenantRow,
 	players []*isuports.PlayerRow,
 	competitions []*isuports.CompetitionRow,
-) ([]*isuports.PlayerScoreRow, []*isuports.VisitHistoryRow, []*benchmarkerSource) {
+) ([]*isuports.PlayerScoreRow, []*isuports.VisitHistoryRow, []*BenchmarkerSource) {
 	scores := make([]*isuports.PlayerScoreRow, 0, len(players)*len(competitions))
 	visits := make([]*isuports.VisitHistoryRow, 0, len(players)*len(competitions)*visitsByCompetition)
-	bench := make([]*benchmarkerSource, 0, len(players)*len(competitions))
+	bench := make([]*BenchmarkerSource, 0, len(players)*len(competitions))
 	for _, c := range competitions {
 		for _, p := range players {
 			if c.FinishedAt.Valid && p.CreatedAt.After(c.FinishedAt.Time) {
@@ -347,7 +347,7 @@ func CreatePlayerData(
 				CreatedAt:     created,
 				UpdatedAt:     created,
 			})
-			bench = append(bench, &benchmarkerSource{
+			bench = append(bench, &BenchmarkerSource{
 				TenantName:     tenant.Name,
 				CompetitionID:  c.ID,
 				PlayerID:       p.ID,

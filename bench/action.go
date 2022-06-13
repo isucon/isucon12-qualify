@@ -7,7 +7,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"github.com/isucon/isucandar/agent"
@@ -31,9 +30,9 @@ func GetRootAction(ctx context.Context, ag *agent.Agent) (*http.Response, error)
 	return ag.Do(ctx, req)
 }
 
-func PostAdminTenantsAddAction(ctx context.Context, name, displayName string, ag *agent.Agent) (*http.Response, error) {
+func PostAdminTenantsAddAction(ctx context.Context, id, displayName string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
-	form.Set("name", name)
+	form.Set("id", id)
 	form.Set("display_name", displayName)
 	req, err := ag.POST("/admin/api/tenants/add", strings.NewReader(form.Encode()))
 	if err != nil {
@@ -57,10 +56,10 @@ func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantID string, ag
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerPlayersAddAction(ctx context.Context, playerNames []string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerPlayersAddAction(ctx context.Context, playerIDs []string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
-	for _, name := range playerNames {
-		form.Add("display_name", name)
+	for _, id := range playerIDs {
+		form.Add("display_id", id)
 	}
 	req, err := ag.POST("/organizer/api/players/add", strings.NewReader(form.Encode()))
 	if err != nil {
@@ -71,8 +70,8 @@ func PostOrganizerPlayersAddAction(ctx context.Context, playerNames []string, ag
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, playerName string, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.POST("/organizer/api/player/"+playerName+"/disqualified", nil)
+func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, playerID string, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.POST("/organizer/api/player/"+playerID+"/disqualified", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -93,8 +92,8 @@ func PostOrganizerCompetitonsAddAction(ctx context.Context, title string, ag *ag
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId int64, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.POST("/organizer/api/competition/"+strconv.FormatInt(competitionId, 10)+"/finish", nil)
+func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId string, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.POST("/organizer/api/competition/"+competitionId+"/finish", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +101,7 @@ func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId int
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId int64, csv []byte, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId string, csv []byte, ag *agent.Agent) (*http.Response, error) {
 	body := &bytes.Buffer{}
 	mw := multipart.NewWriter(body)
 	fw, err := mw.CreateFormFile("scores", "nandemoii")
@@ -114,7 +113,7 @@ func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId int
 
 	mw.Close()
 
-	req, err := ag.POST("/organizer/api/competition/"+strconv.FormatInt(competitionId, 10)+"/result", body)
+	req, err := ag.POST("/organizer/api/competition/"+competitionId+"/result", body)
 	if err != nil {
 		return nil, err
 	}
@@ -131,8 +130,8 @@ func GetOrganizerBillingAction(ctx context.Context, ag *agent.Agent) (*http.Resp
 	return ag.Do(ctx, req)
 }
 
-func GetPlayerAction(ctx context.Context, playerName string, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/player/api/player/" + playerName)
+func GetPlayerAction(ctx context.Context, playerID string, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.GET("/player/api/player/" + playerID)
 	if err != nil {
 		return nil, err
 	}
@@ -140,8 +139,8 @@ func GetPlayerAction(ctx context.Context, playerName string, ag *agent.Agent) (*
 	return ag.Do(ctx, req)
 }
 
-func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID int64, rankAfter int, ag *agent.Agent) (*http.Response, error) {
-	path := fmt.Sprintf("/player/api/competition/%s/ranking", strconv.FormatInt(competitionID, 10))
+func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID string, rankAfter int, ag *agent.Agent) (*http.Response, error) {
+	path := fmt.Sprintf("/player/api/competition/%s/ranking", competitionID)
 	if rankAfter > 1 {
 		path += fmt.Sprintf("?rank_after=%d", rankAfter)
 	}

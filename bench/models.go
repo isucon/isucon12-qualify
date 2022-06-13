@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/isucon/isucandar/agent"
+	"github.com/isucon/isucon12-qualify/data"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
@@ -30,7 +31,7 @@ type Account struct {
 	Option     Option // SetJWT時にGetAgentをしたいのでしぶしぶ含めた
 	Role       string
 	TenantName string // JWTのaudience adminの場合は空（あるいは無視）
-	PlayerName string // JWTのsubject
+	PlayerID   string // JWTのsubject
 
 	// Option.TargetURL: http://t.isucon.dev Role: adminなら
 	// GetRequestURLは http://admin.t.isucon.dev
@@ -58,7 +59,7 @@ func (ac *Account) SetJWT(rawkey *rsa.PrivateKey) error {
 
 	token := jwt.New()
 	token.Set("iss", "isuports")
-	token.Set("sub", ac.PlayerName)
+	token.Set("sub", ac.PlayerID)
 	token.Set("aud", ac.TenantName)
 	token.Set("role", ac.Role)
 	token.Set("exp", time.Now().Add(24*time.Hour).Unix())
@@ -132,14 +133,7 @@ func GetInitialData() (InitialDataRows, error) {
 	return data, nil
 }
 
-type InitialDataRow struct {
-	TenantName     string `json:"tenant_name"`
-	CompetitionID  int64  `json:"competition_id"`
-	IsFinished     bool   `json:"is_finished"`
-	IsDisqualified bool   `json:"is_disqualified"`
-	PlayerName     string `json:"player_name"`
-}
-
+type InitialDataRow data.BenchmarkerSource
 type InitialDataRows []*InitialDataRow
 
 func (idrs InitialDataRows) Choise() *InitialDataRow {
@@ -148,16 +142,26 @@ func (idrs InitialDataRows) Choise() *InitialDataRow {
 }
 
 type ScoreRow struct {
-	PlayerName string
-	Score      int
+	PlayerID string
+	Score    int
 }
 
 type ScoreRows []*ScoreRow
 
 func (srs ScoreRows) CSV() string {
-	csv := fmt.Sprintf("player_name,score")
+	csv := fmt.Sprintf("player_id,score")
 	for _, row := range srs {
-		csv += fmt.Sprintf("\n%s,%d", row.PlayerName, row.Score)
+		csv += fmt.Sprintf("\n%s,%d", row.PlayerID, row.Score)
 	}
 	return csv
+}
+
+type CompetitionData struct {
+	ID    string
+	Title string
+}
+type PlayerData struct {
+	ID          string
+	Name        string
+	DisplayName string
 }
