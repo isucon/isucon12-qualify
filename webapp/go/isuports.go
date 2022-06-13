@@ -480,6 +480,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID, 
 	}
 
 	var billingYen int64
+	// 大会が終了している場合は課金を計算する(開催中の場合は常に 0)
 	if comp.FinishedAt.Valid {
 		for _, v := range billingMap {
 			billingYen += v
