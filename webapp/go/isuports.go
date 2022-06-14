@@ -237,8 +237,15 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		return nil, fmt.Errorf("error jwk.DecodePEM: %w", err)
 	}
 
-	token, err := jwt.Parse([]byte(tokenStr), jwt.WithKey(jwa.RS256, key))
+	token, err := jwt.Parse(
+		[]byte(tokenStr),
+		jwt.WithKey(jwa.RS256, key),
+		jwt.WithRequiredClaim(jwt.SubjectKey),
+	)
 	if err != nil {
+		if jwt.IsValidationError(err) {
+			return nil, echo.ErrBadGateway
+		}
 		return nil, fmt.Errorf("error parse: %w", err)
 	}
 	var r Role
@@ -259,11 +266,6 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 	aud := token.Audience()
 	if len(aud) != 1 {
 		return nil, fmt.Errorf("token is invalid, aud field is few or too many: %s", tokenStr)
-	}
-
-	sub := token.Subject()
-	if sub == "" {
-		return nil, fmt.Errorf("token is invalid, sub field is empty: %s", tokenStr)
 	}
 
 	v := &Viewer{
