@@ -326,7 +326,6 @@ func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id string) (*Comp
 }
 
 type PlayerScoreRow struct {
-	ID            int64     `db:"id"`
 	PlayerID      string    `db:"player_id"`
 	CompetitionID string    `db:"competition_id"`
 	Score         int64     `db:"score"`
@@ -910,20 +909,15 @@ func competitionResultHandler(c echo.Context) error {
 			ttx.Rollback()
 			return fmt.Errorf("error strconv.ParseUint: scoreStr=%s, %w", scoreStr, err)
 		}
-		id, err := dispenseID(ctx)
-		if err != nil {
-			ttx.Rollback()
-			return fmt.Errorf("error dispenseID: %w", err)
-		}
 		if _, err := ttx.ExecContext(
 			ctx,
-			"REPLACE INTO player_score (id, player_id, competition_id, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-			id, c.ID, competitionID, score, now, now,
+			"REPLACE INTO player_score (player_id, competition_id, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+			c.ID, competitionID, score, now, now,
 		); err != nil {
 			ttx.Rollback()
 			return fmt.Errorf(
-				"error Update competition: id=%s, playerID=%s, competitionID=%s, score=%d, createdAt=%s, updatedAt=%s, %w",
-				id, c.ID, competitionID, score, now, now, err,
+				"error Replace player_score: playerID=%s, competitionID=%s, score=%d, createdAt=%s, updatedAt=%s, %w",
+				c.ID, competitionID, score, now, now, err,
 			)
 		}
 	}
