@@ -29,6 +29,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 	report := timeReporter("新規追加: 主催者シナリオ")
 	defer report()
 	scTag := ScenarioTag("OrganizerScenario")
+	ContestantLogger.Printf("%s start\n", scTag)
 
 	// 各テナント
 	//  大会の作成 x N

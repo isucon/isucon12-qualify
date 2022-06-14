@@ -8,6 +8,8 @@ import (
 	"github.com/isucon/isucandar/worker"
 )
 
+// TODO: NewTenantScenarioで大量に叩くので不要かも
+
 func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		sc.PlayerScenario(ctx, step)
@@ -27,6 +29,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	report := timeReporter("大会参加者シナリオ")
 	defer report()
 	scTag := ScenarioTag("PlayerScenario")
+	ContestantLogger.Printf("%s start\n", scTag)
 
 	// 初期データから一人選ぶ
 	data := sc.InitialData.Choise()

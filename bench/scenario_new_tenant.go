@@ -2,22 +2,21 @@ package bench
 
 import (
 	"context"
-	"math/rand"
+	"fmt"
+	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
 	"github.com/isucon/isucon12-qualify/data"
 )
 
-var scTag = ScenarioTag("NewTenantScenario")
-
 func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		sc.NewTenantScenario(ctx, step)
 	},
-		// 無限回繰り返す
-		worker.WithInfinityLoop(),
-		worker.WithUnlimitedParallelism(),
+	// 無限回繰り返す
+	// worker.WithInfinityLoop(),
+	// worker.WithUnlimitedParallelism(),
 	)
 	if err != nil {
 		return nil, err
@@ -26,12 +25,15 @@ func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int
 	return w, nil
 }
 
+// 30エラー出るまでPlayerがリクエストを続ける
 func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
-	report := timeReporter("新規テナント: SaaS管理者シナリオ")
+	report := timeReporter("新規テナントシナリオ")
 	defer report()
-	ContestantLogger.Println("NewTenantScenario start")
+	scTag := ScenarioTag("NewTenantScenario")
+	ContestantLogger.Printf("%s start\n", scTag)
 
-	playerNum := 100 // 1テナント当たりの作成する参加者数
+	playerNum := 100     // 1テナント当たりの作成する参加者数
+	returnErrorNum := 30 // 指定エラー数が出るまでリクエストを続ける
 
 	admin := &Account{
 		Role:       AccountRoleAdmin,
@@ -102,124 +104,121 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		}
 	}
 
-	//  大会の作成 x N
-	competitionNum := 10
-	var comps []*CompetitionData
-	for i := 0; i < competitionNum; i++ {
-		comps = append(comps, &CompetitionData{
-			Title: data.RandomString(24),
-		})
+	// 大会を1つ作成し、プレイヤーが登録し、リザルトを確認し続ける
+	comp := &CompetitionData{
+		Title: data.RandomString(24),
 	}
-	for _, comp := range comps {
-		// 大会の作成
+	// 大会の作成
+	{
 		res, err := PostOrganizerCompetitonsAddAction(ctx, comp.Title, orgAg)
 		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
 				comp.ID = r.Data.Competition.ID
 				return nil
-			}),
-		)
+			}))
+
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionsAdd, scTag)
 		} else {
 			return v
 		}
+	}
 
-		// 大会のランキングを参照するプレイヤーたち
-		var i = 0
+	// 大会のランキングを参照するプレイヤーたち
+	var errors []error
+	for len(errors) < returnErrorNum {
 		for _, player := range players {
-			i++
-			if 10 < i {
-				break
-			}
 			if err := sc.tenantPlayerScenario(ctx, step, &tenantPlayerScenarioData{
 				tenantName:    tenant.Name,
 				playerID:      player.ID,
 				competitionID: comp.ID,
 			}); err != nil {
-				return err
+				errors = append(errors, err)
+				break
 			}
-		}
-
-		// 大会結果入稿 x 1
-		{
-			var score ScoreRows
-			for _, player := range players {
-				score = append(score, &ScoreRow{
-					PlayerID: player.ID,
-					Score:    rand.Intn(1000),
-				})
-			}
-			csv := score.CSV()
-			res, err := PostOrganizerCompetitionResultAction(ctx, comp.ID, []byte(csv), orgAg)
-			v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
-					_ = r
-					return nil
-				}),
-			)
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionResult, scTag)
-			} else {
-				return v
-			}
-		}
-		// 大会結果確定 x 1
-		{
-			res, err := PostOrganizerCompetitionFinishAction(ctx, comp.ID, orgAg)
-			v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
-					_ = r
-					return nil
-				}),
-			)
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionFinish, scTag)
-			} else {
-				return v
-			}
+			time.Sleep(time.Millisecond * 300) // TODO: 流石に回りすぎるのでちょっとsleepを入れる
 		}
 	}
+	return fmt.Errorf("%+s", errors)
+
+	// 大会結果入稿 x 1
+	// {
+	// 	var score ScoreRows
+	// 	for _, player := range players {
+	// 		score = append(score, &ScoreRow{
+	// 			PlayerID: player.ID,
+	// 			Score:    rand.Intn(1000),
+	// 		})
+	// 	}
+	// 	csv := score.CSV()
+	// 	res, err := PostOrganizerCompetitionResultAction(ctx, comp.ID, []byte(csv), orgAg)
+	// 	v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
+	// 	WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+	// 		_ = r
+	// 		return nil
+	// 	}),
+	// )
+	// if v.IsEmpty() {
+	// 	sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionResult, scTag)
+	// } else {
+	// 	return v
+	// }
+
+	// 大会結果確定 x 1
+	// {
+	// 	res, err := PostOrganizerCompetitionFinishAction(ctx, comp.ID, orgAg)
+	// 	v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
+	// 	WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
+	// 		_ = r
+	// 		return nil
+	// 	})
+
+	// 	if v.IsEmpty() {
+	// 		sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionFinish, scTag)
+	// 	} else {
+	// 		return v
+	// 	}
+	// }
 
 	// 参加者を失格状態にする x N
-	{
-		index := 0
-		for _, player := range players {
-			// 5%の人は失格
-			index++
-			if index%100 > 5 {
-				continue
-			}
-			res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, player.ID, orgAg)
-			v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
-					_ = r
-					return nil
-				}),
-			)
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
-			} else {
-				return v
-			}
-		}
-	}
+	// {
+	// 	index := 0
+	// 	for _, player := range players {
+	// 		// 5%の人は失格
+	// 		index++
+	// 		if index%100 > 5 {
+	// 			continue
+	// 		}
+	// 		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, player.ID, orgAg)
+	// 		v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200),
+	// 			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
+	// 				_ = r
+	// 				return nil
+	// 			}),
+	// 		)
+	// 		if v.IsEmpty() {
+	// 			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
+	// 		} else {
+	// 			return v
+	// 		}
+	// 	}
+	// }
 
 	// テナント請求ダッシュボードの閲覧 x 1
-	{
-		res, err := GetOrganizerBillingAction(ctx, orgAg)
-		v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPIBilling) error {
-				_ = r
-				return nil
-			}),
-		)
-		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
-		} else {
-			return v
-		}
-	}
+	// {
+	// 	res, err := GetOrganizerBillingAction(ctx, orgAg)
+	// 	v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
+	// 		WithSuccessResponse(func(r ResponseAPIBilling) error {
+	// 			_ = r
+	// 			return nil
+	// 		}),
+	// 	)
+	// 	if v.IsEmpty() {
+	// 		sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
+	// 	} else {
+	// 		return v
+	// 	}
+	// }
 
 	ContestantLogger.Println("NewTenantScenario end")
 	return nil
@@ -232,6 +231,7 @@ type tenantPlayerScenarioData struct {
 }
 
 func (sc *Scenario) tenantPlayerScenario(ctx context.Context, step *isucandar.BenchmarkStep, data *tenantPlayerScenarioData) error {
+	scTag := ScenarioTag("NewTenantScenario")
 	player := Account{
 		Role:       AccountRolePlayer,
 		TenantName: data.tenantName,
