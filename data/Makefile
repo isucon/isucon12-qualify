@@ -6,7 +6,8 @@ build: builder
 	mysqldump -uisucon -pisucon --host 127.0.0.1 -B isuports --no-tablespaces > 90_data.sql
 
 build-for-local: builder
-	@./builder 10
+	@ISUPORTS_DATA_HUGE_TENANT_SCALE=2 \
+		./builder 10
 	mysqldump -uisucon -pisucon --host 127.0.0.1 -B isuports --no-tablespaces > 90_data.sql
 
 clean:

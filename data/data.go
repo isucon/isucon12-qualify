@@ -60,7 +60,17 @@ func init() {
 }
 
 func Run(tenantsNum int) error {
+	v := os.Getenv("ISUPORTS_DATA_HUGE_TENANT_SCALE")
+	if v != "" {
+		var err error
+		hugeTenantScale, err = strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("error failed strconv.Atoi", err)
+		}
+	}
+
 	log.Println("tenantsNum", tenantsNum)
+	log.Println("hugeTenantScale", hugeTenantScale)
 	log.Println("epoch", Epoch)
 
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("mysql -uisucon -pisucon --host 127.0.0.1 isuports < %s", adminDBSchemaFilePath))
