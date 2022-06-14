@@ -17,5 +17,6 @@ data.tar.gz:
 
 install:
 	cp *.db ../webapp/tenant_db/
+	cp *.db ../initial_data/
 	cp *.sql ../webapp/sql/admin/
 	cp *.json ../bench/
