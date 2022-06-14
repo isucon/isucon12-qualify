@@ -39,6 +39,7 @@ services:
       - mysql
     volumes:
       - ./webapp:/home/isucon/webapp
+      - ./initial_data:/home/isucon/initial_data
       - gopkg:/home/isucon/go/pkg
     init: true
     restart: always
