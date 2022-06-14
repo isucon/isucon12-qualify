@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -967,7 +968,7 @@ func billingHandler(c echo.Context) error {
 	if err := tenantDB.SelectContext(
 		ctx,
 		&cs,
-		"SELECT * FROM competition ORDER BY id ASC",
+		"SELECT * FROM competition ORDER BY created_at DESC",
 	); err != nil {
 		return fmt.Errorf("error Select competition: %w", err)
 	}
@@ -994,8 +995,9 @@ func billingHandler(c echo.Context) error {
 }
 
 type PlayerScoreDetail struct {
-	CompetitionTitle string `json:"competition_title"`
-	Score            int64  `json:"score"`
+	CompetitionCreatedAt time.Time `json:"-"`
+	CompetitionTitle     string    `json:"competition_title"`
+	Score                int64     `json:"score"`
 }
 
 type PlayerHandlerResult struct {
@@ -1058,10 +1060,16 @@ func playerHandler(c echo.Context) error {
 			return fmt.Errorf("error retrieveCompetition: %w", err)
 		}
 		psds = append(psds, PlayerScoreDetail{
-			CompetitionTitle: comp.Title,
-			Score:            ps.Score,
+			CompetitionCreatedAt: comp.CreatedAt,
+			CompetitionTitle:     comp.Title,
+			Score:                ps.Score,
 		})
 	}
+	// 大会作成日時で降順ソートする
+	sort.Slice(psds, func(i, j int) bool {
+		psd1, psd2 := psds[i], psds[j]
+		return psd1.CompetitionCreatedAt.After(psd2.CompetitionCreatedAt)
+	})
 
 	res := SuccessResult{
 		Success: true,
@@ -1231,7 +1239,7 @@ func competitionsHandler(c echo.Context) error {
 	if err := tenantDB.SelectContext(
 		ctx,
 		&cs,
-		"SELECT * FROM competition ORDER BY id ASC",
+		"SELECT * FROM competition ORDER BY created_at DESC",
 	); err != nil {
 		return fmt.Errorf("error Select competition: %w", err)
 	}
