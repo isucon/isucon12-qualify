@@ -240,14 +240,17 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 	token, err := jwt.Parse(
 		[]byte(tokenStr),
 		jwt.WithKey(jwa.RS256, key),
-		jwt.WithRequiredClaim(jwt.SubjectKey),
 	)
 	if err != nil {
 		if jwt.IsValidationError(err) {
-			return nil, echo.ErrBadGateway
+			return nil, echo.ErrBadRequest
 		}
 		return nil, fmt.Errorf("error parse: %w", err)
 	}
+	if token.Subject() == "" {
+		return nil, echo.ErrBadRequest
+	}
+
 	var r Role
 	tr, ok := token.Get("role")
 	if !ok {
