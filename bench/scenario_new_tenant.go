@@ -235,6 +235,7 @@ func (sc *Scenario) tenantPlayerScenario(ctx context.Context, step *isucandar.Be
 	player := Account{
 		Role:       AccountRolePlayer,
 		TenantName: data.tenantName,
+		PlayerID:   data.playerID,
 		Option:     sc.Option,
 	}
 	if err := player.SetJWT(sc.RawKey); err != nil {
