@@ -73,7 +73,8 @@ func Run(tenantsNum int) error {
 	log.Println("epoch", Epoch)
 
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("mysql -uisucon -pisucon --host 127.0.0.1 isuports < %s", adminDBSchemaFilePath))
-	if err := cmd.Run(); err != nil {
+	if out, err := cmd.CombinedOutput(); err != nil {
+		log.Println(string(out))
 		return err
 	}
 
