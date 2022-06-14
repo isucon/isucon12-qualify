@@ -36,7 +36,7 @@ const (
 	ScoreGETRoot score.ScoreTag = "GET /"
 
 	// for admin endpoint
-	ScorePOSTAdminTenantsAdd    score.ScoreTag = "GET /admin/api/tenants/add"
+	ScorePOSTAdminTenantsAdd    score.ScoreTag = "POST /admin/api/tenants/add"
 	ScoreGETAdminTenantsBilling score.ScoreTag = "GET /admin/api/tenants/billing"
 
 	// for organizer endpoint

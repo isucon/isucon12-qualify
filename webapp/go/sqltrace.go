@@ -44,9 +44,13 @@ func initializeSQLLogger() (io.Closer, error) {
 			for _, arg := range args {
 				argsValues = append(argsValues, arg.Value)
 			}
-			affected, err := result.RowsAffected()
-			if err != nil {
-				return fmt.Errorf("error driver.Result.RowsAffected at PostExec: %w", err)
+			var affected int64
+			if result != nil {
+				var err error
+				affected, err = result.RowsAffected()
+				if err != nil {
+					return fmt.Errorf("error driver.Result.RowsAffected at PostExec: %w", err)
+				}
 			}
 
 			sqlLog := struct {
