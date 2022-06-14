@@ -124,7 +124,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 					return fmt.Errorf("追加された大会の名前が違います (want: %s, got: %s)", competitionName, r.Data.Competition.Title)
 				}
 				if r.Data.Competition.IsFinished {
-					return fmt.Errorf("新規追加された大会は開催中である必要があります competition.title: %s, competition.id", r.Data.Competition.Title, r.Data.Competition.ID)
+					return fmt.Errorf("新規追加された大会は開催中である必要があります competition.title: %s, competition.id: %s", r.Data.Competition.Title, r.Data.Competition.ID)
 				}
 				competitionId = r.Data.Competition.ID
 				return nil
