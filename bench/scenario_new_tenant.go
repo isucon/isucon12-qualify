@@ -260,7 +260,7 @@ func (sc *Scenario) tenantPlayerScenario(ctx context.Context, step *isucandar.Be
 		}
 	}
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, data.competitionID, 1, playerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, data.competitionID, "", playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				_ = r

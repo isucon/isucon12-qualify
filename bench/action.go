@@ -139,10 +139,10 @@ func GetPlayerAction(ctx context.Context, playerID string, ag *agent.Agent) (*ht
 	return ag.Do(ctx, req)
 }
 
-func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID string, rankAfter int, ag *agent.Agent) (*http.Response, error) {
+func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID string, rankAfter string, ag *agent.Agent) (*http.Response, error) {
 	path := fmt.Sprintf("/player/api/competition/%s/ranking", competitionID)
-	if rankAfter > 1 {
-		path += fmt.Sprintf("?rank_after=%d", rankAfter)
+	if rankAfter != "" {
+		path += fmt.Sprintf("?rank_after=%s", rankAfter)
 	}
 	req, err := ag.GET(path)
 	if err != nil {
