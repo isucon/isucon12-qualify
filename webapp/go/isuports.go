@@ -31,6 +31,7 @@ import (
 const (
 	tenantDBSchemaFilePath = "../sql/tenant/10_schema.sql"
 	cookieName             = "isuports_session"
+	initializeScript       = "../sql/init.sh"
 )
 
 var (
@@ -260,6 +261,11 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		return nil, fmt.Errorf("token is invalid, aud field is few or too many: %s", tokenStr)
 	}
 
+	sub := token.Subject()
+	if sub == "" {
+		return nil, fmt.Errorf("token is invalid, sub field is empty: %s", tokenStr)
+	}
+
 	v := &Viewer{
 		role:       r,
 		playerID:   token.Subject(),
@@ -355,16 +361,11 @@ func tenantsAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error centerDB.BeginTxx: %w", err)
 	}
-	id, err := dispenseID(ctx)
-	if err != nil {
-		tx.Rollback()
-		return fmt.Errorf("error dispenseID for tenant: %w", err)
-	}
 	now := time.Now()
 	_, err = tx.ExecContext(
 		ctx,
-		"INSERT INTO `tenant` (`id`, `name`, `display_name`, `created_at`, `updated_at`) VALUES (?, ?, ?, ?, ?)",
-		id, name, displayName, now, now,
+		"INSERT INTO `tenant` (`name`, `display_name`, `created_at`, `updated_at`) VALUES (?, ?, ?, ?)",
+		name, displayName, now, now,
 	)
 	if err != nil {
 		tx.Rollback()
@@ -373,8 +374,8 @@ func tenantsAddHandler(c echo.Context) error {
 			return echo.ErrBadRequest
 		}
 		return fmt.Errorf(
-			"error Insert tenant: id=%s, name=%s, displayName=%s, createdAt=%s, updatedAt=%s, %w",
-			id, name, displayName, now, now, err,
+			"error Insert tenant: name=%s, displayName=%s, createdAt=%s, updatedAt=%s, %w",
+			name, displayName, now, now, err,
 		)
 	}
 
@@ -1023,7 +1024,7 @@ func playerHandler(c echo.Context) error {
 	}
 	defer tenantDB.Close()
 
-	vp, err := retrievePlayer(c.Request().Context(), tenantDB, v.playerID)
+	vp, err := retrievePlayer(ctx, tenantDB, v.playerID)
 	if err != nil {
 		return fmt.Errorf("error retrievePlayer: %w", err)
 	}
@@ -1265,96 +1266,16 @@ func competitionsHandler(c echo.Context) error {
 	return nil
 }
 
-const initializeMaxID = 2678400000
-
-var initializeMaxVisitHistoryCreatedAt = time.Date(2022, 05, 31, 23, 59, 59, 0, time.UTC)
-
 type InitializeHandlerResult struct {
 	Lang   string `json:"lang"`
 	Appeal string `json:"appeal"`
 }
 
 func initializeHandler(c echo.Context) error {
-	ctx := c.Request().Context()
-
-	// constに定義されたmax_idより大きいIDのtenantを削除
-	dtns := []string{}
-	if err := centerDB.SelectContext(
-		ctx,
-		&dtns,
-		"SELECT name FROM tenant WHERE id > ?",
-		initializeMaxID,
-	); err != nil {
-		return fmt.Errorf("error Select tenant: id > %d, %w", initializeMaxID, err)
+	out, err := exec.Command(initializeScript).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("error exec.Command: %s %e", string(out), err)
 	}
-	for _, tn := range dtns {
-		p := tenantDBPath(tn)
-		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("error os.Remove: tenantDBPath=%s, %w", p, err)
-		}
-	}
-	if _, err := centerDB.ExecContext(
-		ctx,
-		"DELETE FROM tenant WHERE id > ?",
-		initializeMaxID,
-	); err != nil {
-		return fmt.Errorf("error Delete tenant: id > %d, %w", initializeMaxID, err)
-	}
-	// constに定義されたmax_visit_historyより大きいCreatedAtのvisit_historyを削除
-	if _, err := centerDB.ExecContext(
-		ctx,
-		"DELETE FROM visit_history WHERE created_at > ?",
-		initializeMaxVisitHistoryCreatedAt,
-	); err != nil {
-		return fmt.Errorf("error Delete visit_history: createdAt > %s, %w", initializeMaxVisitHistoryCreatedAt, err)
-	}
-	// constに定義されたmax_idにid_generatorを戻す
-	if _, err := centerDB.ExecContext(
-		ctx,
-		"UPDATE id_generator SET id = ? WHERE stub = ?",
-		initializeMaxID, "a",
-	); err != nil {
-		return fmt.Errorf("error Update id_generator: id=%d, stub=%s, %w", initializeMaxID, "a", err)
-	}
-	if _, err := centerDB.ExecContext(
-		ctx,
-		fmt.Sprintf("ALTER TABLE id_generator AUTO_INCREMENT = %d", initializeMaxID),
-	); err != nil {
-		return fmt.Errorf("error ALTER TABLE id_generator AUTO_INCREMENT = %d: %w", initializeMaxID, err)
-	}
-
-	// 残ったtenantのうち、max_idより大きいcompetition, player, player_scoreを削除
-	utns := []string{}
-	if err := centerDB.SelectContext(
-		ctx,
-		&utns,
-		"SELECT name FROM tenant",
-	); err != nil {
-		return fmt.Errorf("error Select tenant: %w", err)
-	}
-	for _, tn := range utns {
-		err := func() error {
-			tenantDB, err := connectToTenantDB(tn)
-			if err != nil {
-				return fmt.Errorf("error connectToTenantDB: %w", err)
-			}
-			defer tenantDB.Close()
-			if _, err := tenantDB.ExecContext(ctx, "DELETE FROM competition WHERE id > ?", initializeMaxID); err != nil {
-				return fmt.Errorf("error Delete competition: tenant=%s id > %d, %w", tn, initializeMaxID, err)
-			}
-			if _, err := tenantDB.ExecContext(ctx, "DELETE FROM player WHERE id > ?", initializeMaxID); err != nil {
-				return fmt.Errorf("error Delete player: tenant=%s id > %d, %w", tn, initializeMaxID, err)
-			}
-			if _, err := tenantDB.ExecContext(ctx, "DELETE FROM player_score WHERE id > ?", initializeMaxID); err != nil {
-				return fmt.Errorf("error Delete player: tenant=%s id > %d, %w", tn, initializeMaxID, err)
-			}
-			return nil
-		}()
-		if err != nil {
-			return err
-		}
-	}
-
 	res := InitializeHandlerResult{
 		Lang: "go",
 		// 頑張ったポイントやこだわりポイントがあれば書いてください
