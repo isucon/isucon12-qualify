@@ -41,3 +41,15 @@ jobs:
           mysql -uroot -proot --host 127.0.0.1 < ../webapp/sql/admin/01_create_mysql_database.sql
           make build
           make install
+
+      - name: "run webapp"
+        working-directory: ./webapp/go
+        run: |
+          make
+          ./isuports &
+
+      - name: "run bench"
+        working-directory: ./bench
+        run: |
+          make
+          ./bench
