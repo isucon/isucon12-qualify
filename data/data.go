@@ -91,7 +91,7 @@ func Run(tenantsNum int) error {
 	if err := storeMaxID(db); err != nil {
 		return err
 	}
-	if f, err := os.Create("Benchmarker.json"); err != nil {
+	if f, err := os.Create("benchmarker.json"); err != nil {
 		return err
 	} else {
 		json.NewEncoder(f).Encode(benchSrcs)
