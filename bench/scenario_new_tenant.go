@@ -7,7 +7,6 @@ import (
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
 	"github.com/isucon/isucon12-qualify/data"
-	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 )
 
 var scTag = ScenarioTag("NewTenantScenario")
@@ -48,40 +47,19 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		return err
 	}
 
-	tenants := []*isuports.TenantRow{
-		data.CreateTenant(false),
-	}
-	for _, tenant := range tenants {
-		res, err := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
-		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
-				return nil
-			}),
-		)
-		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
-		} else {
-			return v
-		}
+	tenant := data.CreateTenant(false)
+	res, err := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
+	v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
+		WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
+			return nil
+		}),
+	)
+	if v.IsEmpty() {
+		sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
+	} else {
+		return v
 	}
 
-	for _, tenant := range tenants {
-		res, err := GetAdminTenantsBillingAction(ctx, tenant.Name, adminAg)
-		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
-				_ = r
-				return nil
-			}),
-		)
-		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
-		} else {
-			return v
-		}
-	}
-
-	// 複数作ったうちの1つに負荷をかける
-	tenant := tenants[0]
 	organizer := Account{
 		Role:       AccountRoleOrganizer,
 		TenantName: tenant.Name,

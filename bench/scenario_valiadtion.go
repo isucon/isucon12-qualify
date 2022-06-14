@@ -260,9 +260,9 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 				if 1 > len(r.Data.Tenants) {
 					return fmt.Errorf("請求ダッシュボードの結果が足りません")
 				}
-				var tenantNameMap map[string]interface{}
+				tenantNameMap := make(map[string]struct{})
 				for _, tenant := range r.Data.Tenants {
-					tenantNameMap[tenant.DisplayName] = new(interface{})
+					tenantNameMap[tenant.DisplayName] = struct{}{}
 				}
 				if _, ok := tenantNameMap[tenantDisplayName]; !ok {
 					return fmt.Errorf("請求ダッシュボードの結果に作成したテナントがありません")
