@@ -899,7 +899,7 @@ func competitionResultHandler(c echo.Context) error {
 			return fmt.Errorf("row must have two columns: %#v", row)
 		}
 		playerID, scoreStr := row[0], row[1]
-		c, err := retrievePlayer(ctx, tenantDB, playerID)
+		player, err := retrievePlayer(ctx, tenantDB, playerID)
 		if err != nil {
 			ttx.Rollback()
 			return fmt.Errorf("error retrievePlayer: %w", err)
@@ -911,13 +911,13 @@ func competitionResultHandler(c echo.Context) error {
 		}
 		if _, err := ttx.ExecContext(
 			ctx,
-			"REPLACE INTO player_score (player_id, competition_id, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-			c.ID, competitionID, score, now, now,
+			"REPLACE INTO player_score (player_id, competition_id, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+			player.ID, competitionID, score, now, now,
 		); err != nil {
 			ttx.Rollback()
 			return fmt.Errorf(
 				"error Replace player_score: playerID=%s, competitionID=%s, score=%d, createdAt=%s, updatedAt=%s, %w",
-				c.ID, competitionID, score, now, now, err,
+				player.ID, competitionID, score, now, now, err,
 			)
 		}
 	}
