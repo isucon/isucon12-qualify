@@ -95,13 +95,13 @@ func dispenseID(ctx context.Context) (string, error) {
 	var lastErr error
 	for i := 0; i < 100; i++ {
 		var ret sql.Result
-		ret, err := centerDB.ExecContext(ctx, "REPLACE INTO `id_generator` (`stub`) VALUES (?);", "a")
+		ret, err := centerDB.ExecContext(ctx, "REPLACE INTO id_generator (stub) VALUES (?);", "a")
 		if err != nil {
 			if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1213 { // deadlock
-				lastErr = fmt.Errorf("error REPLACE INTO `id_generator`: %w", err)
+				lastErr = fmt.Errorf("error REPLACE INTO id_generator: %w", err)
 				continue
 			}
-			return "", fmt.Errorf("error REPLACE INTO `id_generator`: %w", err)
+			return "", fmt.Errorf("error REPLACE INTO id_generator: %w", err)
 		}
 		id, err = ret.LastInsertId()
 		if err != nil {
@@ -364,7 +364,7 @@ func tenantsAddHandler(c echo.Context) error {
 	now := time.Now()
 	_, err = tx.ExecContext(
 		ctx,
-		"INSERT INTO `tenant` (`name`, `display_name`, `created_at`, `updated_at`) VALUES (?, ?, ?, ?)",
+		"INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)",
 		name, displayName, now, now,
 	)
 	if err != nil {
