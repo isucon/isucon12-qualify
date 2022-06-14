@@ -37,7 +37,7 @@ var hugeTenantScale = 25                                          // 1個だけ�
 var tenantID int64
 
 // テナントIDは連番で生成
-var genTenantID = func() int64 {
+var GenTenantID = func() int64 {
 	return atomic.AddInt64(&tenantID, 1)
 }
 
@@ -96,7 +96,8 @@ func Run(tenantsNum int) error {
 		if err := storeAdmin(db, tenant, visitHistroies); err != nil {
 			return err
 		}
-		benchSrcs = append(benchSrcs, lo.Samples(b, 1000)...)
+		samples := len(players)
+		benchSrcs = append(benchSrcs, lo.Samples(b, samples)...)
 	}
 	if err := storeMaxID(db); err != nil {
 		return err
@@ -246,7 +247,7 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 }
 
 func CreateTenant(isFirst bool) *isuports.TenantRow {
-	id := genTenantID()
+	id := GenTenantID()
 	var created time.Time
 	var name, displayName string
 	if isFirst {
@@ -276,7 +277,7 @@ func CreatePlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 	if tenant.ID == 1 {
 		playersNum = playersNumByTenant * hugeTenantScale
 	}
-	log.Println("create players", playersNum, "for tenant", tenant.ID)
+	log.Printf("create %d players for tenant %s", playersNum, tenant.Name)
 	players := make([]*isuports.PlayerRow, 0, playersNum)
 	for i := 0; i < playersNum; i++ {
 		players = append(players, CreatePlayer(tenant))
