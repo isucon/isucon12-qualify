@@ -228,7 +228,7 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./public.pem")
 	keysrc, err := os.ReadFile(keyFilename)
 	if err != nil {
-		return nil, fmt.Errorf("error os.ReadFile: %w", err)
+		return nil, fmt.Errorf("error os.ReadFile: keyFilename=%s: %w", keyFilename, err)
 	}
 	key, _, err := jwk.DecodePEM(keysrc)
 	if err != nil {
@@ -292,7 +292,7 @@ type PlayerRow struct {
 func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id string) (*PlayerRow, error) {
 	var c PlayerRow
 	if err := tenantDB.GetContext(ctx, &c, "SELECT * FROM player WHERE id = ?", id); err != nil {
-		return nil, fmt.Errorf("error Select player: %w", err)
+		return nil, fmt.Errorf("error Select player: id=%s, %w", id, err)
 	}
 	return &c, nil
 }
@@ -308,7 +308,7 @@ type CompetitionRow struct {
 func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id string) (*CompetitionRow, error) {
 	var c CompetitionRow
 	if err := tenantDB.GetContext(ctx, &c, "SELECT * FROM competition WHERE id = ?", id); err != nil {
-		return nil, fmt.Errorf("error Select competition: %w", err)
+		return nil, fmt.Errorf("error Select competition: id=%s, %w", id, err)
 	}
 	return &c, nil
 }
@@ -345,7 +345,7 @@ func tenantsAddHandler(c echo.Context) error {
 	displayName := c.FormValue("display_name")
 	name := c.FormValue("name")
 	if err := validateTenantName(name); err != nil {
-		c.Logger().Errorf("failed to validateTenantName: %v", err)
+		c.Logger().Errorf("failed to validateTenantName: %v", name, err)
 		return echo.NewHTTPError(http.StatusBadRequest)
 	}
 
@@ -357,7 +357,7 @@ func tenantsAddHandler(c echo.Context) error {
 	id, err := dispenseID(ctx)
 	if err != nil {
 		tx.Rollback()
-		return fmt.Errorf("error dispenseID: %w", err)
+		return fmt.Errorf("error dispenseID for tenant: %w", err)
 	}
 	now := time.Now()
 	_, err = tx.ExecContext(
@@ -371,12 +371,15 @@ func tenantsAddHandler(c echo.Context) error {
 			c.Logger().Errorf("failed to insert tenant: %v", err)
 			return echo.NewHTTPError(http.StatusConflict)
 		}
-		return fmt.Errorf("error Insert tenant: %w", err)
+		return fmt.Errorf(
+			"error Insert tenant: id=%s, name=%s, displayName=%s, createdAt=%s, updatedAt=%s, %w",
+			id, name, displayName, now, now, err,
+		)
 	}
 
 	if err := createTenantDB(name); err != nil {
 		tx.Rollback()
-		return fmt.Errorf("error createTenantDB: %w", err)
+		return fmt.Errorf("error createTenantDB: name=%s %w", name, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("error tx.Commit: %w", err)
@@ -435,7 +438,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 		tenantID,
 		comp.ID,
 	); err != nil && err != sql.ErrNoRows {
-		return nil, fmt.Errorf("error Select visit_history: %w", err)
+		return nil, fmt.Errorf("error Select visit_history: tenantID=%d, competitionID=%s, %w", tenantID, comp.ID, err)
 	}
 	billingMap := map[string]int64{}
 	for _, vh := range vhs {
@@ -454,7 +457,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 		"SELECT * FROM player_score WHERE competition_id = ?",
 		comp.ID,
 	); err != nil && err != sql.ErrNoRows {
-		return nil, fmt.Errorf("error Select count player_score: %w", err)
+		return nil, fmt.Errorf("error Select count player_score: competitionID=%s, %w", competitonID, err)
 	}
 	for _, ps := range pss {
 		player, err := retrievePlayer(ctx, tenantDB, ps.PlayerID)
@@ -514,7 +517,7 @@ func tenantsBillingHandler(c echo.Context) error {
 		var err error
 		beforeID, err = strconv.ParseInt(before, 10, 64)
 		if err != nil {
-			return fmt.Errorf("error strconv.ParseInt: %w", err)
+			return fmt.Errorf("error strconv.ParseInt at before: %w", err)
 		}
 	}
 	// テナントごとに
@@ -627,7 +630,10 @@ func playersAddHandler(c echo.Context) error {
 			id, displayName, false, now, now,
 		); err != nil {
 			ttx.Rollback()
-			return fmt.Errorf("error Insert player at tenantDB: %w", err)
+			return fmt.Errorf(
+				"error Insert player at tenantDB: id=%s, displayName=%s, isDisqualified=%t, createdAt=%s, updatedAt=%s, %w",
+				id, displayName, false, now, now, err,
+			)
 		}
 		p, err := retrievePlayer(ctx, ttx, id)
 		if err != nil {
@@ -683,7 +689,10 @@ func playerDisqualifiedHandler(c echo.Context) error {
 		"UPDATE player SET is_disqualified = ?, updated_at = ? WHERE id = ?",
 		true, now, playerID,
 	); err != nil {
-		return fmt.Errorf("error Update player: %w", err)
+		return fmt.Errorf(
+			"error Update player: isDisqualified=%t, updatedAt=%s, id=%s, %w",
+			true, now, playerID, err,
+		)
 	}
 	p, err := retrievePlayer(ctx, tenantDB, playerID)
 	if err != nil {
@@ -743,7 +752,10 @@ func competitionsAddHandler(c echo.Context) error {
 		"INSERT INTO competition (id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
 		id, title, sql.NullTime{}, now, now,
 	); err != nil {
-		return fmt.Errorf("error Insert competition: %w", err)
+		return fmt.Errorf(
+			"error Insert competition: id=%s, title=%s, finishedAt=null, createdAt=%s, updatedAt=%s, %w",
+			id, title, now, now, err,
+		)
 	}
 
 	res := CompetitionsAddHandlerResult{
@@ -788,7 +800,10 @@ func competitionFinishHandler(c echo.Context) error {
 		"UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?",
 		now, now, id,
 	); err != nil {
-		return fmt.Errorf("error Update competition: %w", err)
+		return fmt.Errorf(
+			"error Update competition: finishedAt=%s, updatedAt=%s, id=%s, %w",
+			now, now, id, err,
+		)
 	}
 
 	if err := c.JSON(http.StatusOK, SuccessResult{Success: true}); err != nil {
@@ -835,11 +850,11 @@ func competitionResultHandler(c echo.Context) error {
 
 	fh, err := c.FormFile("scores")
 	if err != nil {
-		return fmt.Errorf("error c.FormFile: %w", err)
+		return fmt.Errorf("error c.FormFile(scores): %w", err)
 	}
 	f, err := fh.Open()
 	if err != nil {
-		return fmt.Errorf("error fh.Open: %w", err)
+		return fmt.Errorf("error fh.Open FormFile(scores): %w", err)
 	}
 	defer f.Close()
 
@@ -862,7 +877,7 @@ func competitionResultHandler(c echo.Context) error {
 		"DELETE FROM player_score WHERE competition_id = ?",
 		competitionID,
 	); err != nil {
-		return fmt.Errorf("error Delete player_score: %w", err)
+		return fmt.Errorf("error Delete player_score: competitionID=%s, %w", competitionID, err)
 	}
 	for {
 		row, err := r.Read()
@@ -886,7 +901,7 @@ func competitionResultHandler(c echo.Context) error {
 		var score int64
 		if score, err = strconv.ParseInt(scoreStr, 10, 64); err != nil {
 			ttx.Rollback()
-			return fmt.Errorf("error strconv.ParseUint: %w", err)
+			return fmt.Errorf("error strconv.ParseUint: scoreStr=%s, %w", scoreStr, err)
 		}
 		id, err := dispenseID(ctx)
 		if err != nil {
@@ -899,7 +914,10 @@ func competitionResultHandler(c echo.Context) error {
 			id, c.ID, competitionID, score, now, now,
 		); err != nil {
 			ttx.Rollback()
-			return fmt.Errorf("error Update competition: %w", err)
+			return fmt.Errorf(
+				"error Update competition: id=%s, playerID=%s, competitionID=%s, score=%d, createdAt=%s, updatedAt=%s, %w",
+				id, c.ID, competitionID, score, now, now, err,
+			)
 		}
 	}
 
@@ -942,7 +960,7 @@ func billingHandler(c echo.Context) error {
 		"SELECT * FROM tenant WHERE name = ?",
 		tenantName,
 	); err != nil {
-		return fmt.Errorf("error Select tenant: %w", err)
+		return fmt.Errorf("error Select tenant: name=%s, %w", tenantName, err)
 	}
 
 	cs := []CompetitionRow{}
@@ -1031,7 +1049,7 @@ func playerHandler(c echo.Context) error {
 		"SELECT * FROM player_score WHERE player_id = ? ORDER BY competition_id ASC",
 		p.ID,
 	); err != nil {
-		return fmt.Errorf("error Select player_score: %w", err)
+		return fmt.Errorf("error Select player_score: playerID=%s, %w", p.ID, err)
 	}
 	psds := make([]PlayerScoreDetail, 0, len(pss))
 	for _, ps := range pss {
@@ -1115,7 +1133,7 @@ func competitionRankingHandler(c echo.Context) error {
 	now := time.Now()
 	var t TenantRow
 	if err := centerDB.GetContext(ctx, &t, "SELECT * FROM tenant WHERE name = ?", v.tenantName); err != nil {
-		return fmt.Errorf("error Select tenant: %w", err)
+		return fmt.Errorf("error Select tenant: name=%s, %w", v.tenantName, err)
 	}
 
 	if _, err := centerDB.ExecContext(
@@ -1123,14 +1141,17 @@ func competitionRankingHandler(c echo.Context) error {
 		"INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
 		vp.ID, t.ID, competitionID, now, now,
 	); err != nil {
-		return fmt.Errorf("error Insert visit_history: %w", err)
+		return fmt.Errorf(
+			"error Insert visit_history: playerID=%s, tenantID=%d, competitionID=%s, createdAt=%s, updatedAt=%s, %w",
+			vp.ID, t.ID, competitionID, now, now, err,
+		)
 	}
 
 	var rankAfter int64
 	rankAfterStr := c.QueryParam("rank_after")
 	if rankAfterStr != "" {
 		if rankAfter, err = strconv.ParseInt(rankAfterStr, 10, 64); err != nil {
-			return fmt.Errorf("error strconv.ParseUint: %w", err)
+			return fmt.Errorf("error strconv.ParseUint: rankAfterStr=%s, %w", rankAfterStr, err)
 		}
 	}
 
@@ -1141,7 +1162,7 @@ func competitionRankingHandler(c echo.Context) error {
 		"SELECT * FROM player_score WHERE competition_id = ? ORDER BY score DESC, player_id DESC",
 		competitionID,
 	); err != nil {
-		return fmt.Errorf("error Select player_score: %w", err)
+		return fmt.Errorf("error Select player_score: competitionID=%s, %w", competitionID, err)
 	}
 	crs := make([]CompetitionRank, 0, len(pss))
 	for i, ps := range pss {
@@ -1256,12 +1277,12 @@ func initializeHandler(c echo.Context) error {
 		"SELECT name FROM tenant WHERE id > ?",
 		initializeMaxID,
 	); err != nil {
-		return fmt.Errorf("error Select tenant: %w", err)
+		return fmt.Errorf("error Select tenant: id > %d, %w", initializeMaxID, err)
 	}
 	for _, tn := range dtns {
 		p := tenantDBPath(tn)
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("error os.Remove: %w", err)
+			return fmt.Errorf("error os.Remove: tenantDBPath=%s, %w", p, err)
 		}
 	}
 	if _, err := centerDB.ExecContext(
@@ -1269,7 +1290,7 @@ func initializeHandler(c echo.Context) error {
 		"DELETE FROM tenant WHERE id > ?",
 		initializeMaxID,
 	); err != nil {
-		return fmt.Errorf("error Delete tenant: %w", err)
+		return fmt.Errorf("error Delete tenant: id > %d, %w", initializeMaxID, err)
 	}
 	// constに定義されたmax_visit_historyより大きいCreatedAtのvisit_historyを削除
 	if _, err := centerDB.ExecContext(
@@ -1277,7 +1298,7 @@ func initializeHandler(c echo.Context) error {
 		"DELETE FROM visit_history WHERE created_at > ?",
 		initializeMaxVisitHistoryCreatedAt,
 	); err != nil {
-		return fmt.Errorf("error Delete visit_history: %w", err)
+		return fmt.Errorf("error Delete visit_history: createdAt > %s, %w", initializeMaxVisitHistoryCreatedAt, err)
 	}
 	// constに定義されたmax_idにid_generatorを戻す
 	if _, err := centerDB.ExecContext(
@@ -1285,13 +1306,13 @@ func initializeHandler(c echo.Context) error {
 		"UPDATE id_generator SET id = ? WHERE stub = ?",
 		initializeMaxID, "a",
 	); err != nil {
-		return fmt.Errorf("error Update id_generator: %w", err)
+		return fmt.Errorf("error Update id_generator: id=%d, stub=%s, %w", initializeMaxID, "a", err)
 	}
 	if _, err := centerDB.ExecContext(
 		ctx,
 		fmt.Sprintf("ALTER TABLE id_generator AUTO_INCREMENT = %d", initializeMaxID),
 	); err != nil {
-		return fmt.Errorf("error Update id_generator: %w", err)
+		return fmt.Errorf("error ALTER TABLE id_generator AUTO_INCREMENT = %d: %w", initializeMaxID, err)
 	}
 
 	// 残ったtenantのうち、max_idより大きいcompetition, player, player_scoreを削除
@@ -1311,13 +1332,13 @@ func initializeHandler(c echo.Context) error {
 			}
 			defer tenantDB.Close()
 			if _, err := tenantDB.ExecContext(ctx, "DELETE FROM competition WHERE id > ?", initializeMaxID); err != nil {
-				return fmt.Errorf("error Delete competition: tenant=%s %w", tn, err)
+				return fmt.Errorf("error Delete competition: tenant=%s id > %d, %w", tn, initializeMaxID, err)
 			}
 			if _, err := tenantDB.ExecContext(ctx, "DELETE FROM player WHERE id > ?", initializeMaxID); err != nil {
-				return fmt.Errorf("error Delete player: tenant=%s %w", tn, err)
+				return fmt.Errorf("error Delete player: tenant=%s id > %d, %w", tn, initializeMaxID, err)
 			}
 			if _, err := tenantDB.ExecContext(ctx, "DELETE FROM player_score WHERE id > ?", initializeMaxID); err != nil {
-				return fmt.Errorf("error Delete player: tenant=%s %w", tn, err)
+				return fmt.Errorf("error Delete player: tenant=%s id > %d, %w", tn, initializeMaxID, err)
 			}
 			return nil
 		}()
