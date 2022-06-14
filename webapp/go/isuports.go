@@ -1025,7 +1025,7 @@ func playerHandler(c echo.Context) error {
 
 	vp, err := retrievePlayer(c.Request().Context(), tenantDB, v.playerID)
 	if err != nil {
-		return fmt.Errorf("error retrievePlayer: %w", err)
+		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
 	}
 	if vp.IsDisqualified {
 		return errNotPermitted
@@ -1132,7 +1132,7 @@ func competitionRankingHandler(c echo.Context) error {
 
 	vp, err := retrievePlayer(c.Request().Context(), tenantDB, v.playerID)
 	if err != nil {
-		return fmt.Errorf("error retrievePlayer: %w", err)
+		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
 	}
 	if vp.IsDisqualified {
 		return errNotPermitted
@@ -1229,7 +1229,7 @@ func competitionsHandler(c echo.Context) error {
 
 	vp, err := retrievePlayer(c.Request().Context(), tenantDB, v.playerID)
 	if err != nil {
-		return fmt.Errorf("error retrievePlayer: %w", err)
+		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
 	}
 	if vp.IsDisqualified {
 		return errNotPermitted
