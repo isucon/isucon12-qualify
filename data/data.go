@@ -259,7 +259,7 @@ func CreateTenant(isFirst bool) *isuports.TenantRow {
 			Epoch.Add(time.Duration(id)*time.Hour*3),
 			Epoch.Add(time.Duration(id+1)*time.Hour*3),
 		)
-		name = fake.Internet().Slug()
+		name = fmt.Sprintf("%s-%d", fake.Internet().Slug(), id)
 		displayName = fake.Company().Name()
 	}
 	tenant := isuports.TenantRow{
