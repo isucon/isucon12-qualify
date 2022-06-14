@@ -25,15 +25,6 @@ func (sc *Scenario) OrganizerScenarioWorker(step *isucandar.BenchmarkStep, p int
 	return w, nil
 }
 
-type CompetitionData struct {
-	ID    int64
-	Title string
-}
-type PlayerData struct {
-	Name        string
-	DisplayName string
-}
-
 func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
 	report := timeReporter("新規追加: 主催者シナリオ")
 	defer report()
@@ -51,7 +42,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 	admin := Account{
 		Role:       AccountRoleAdmin,
 		TenantName: "admin",
-		PlayerName: "admin",
+		PlayerID:   "admin",
 		Option:     sc.Option,
 	}
 	if err := admin.SetJWT(sc.RawKey); err != nil {
@@ -85,7 +76,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 	organizer := Account{
 		Role:       AccountRoleOrganizer,
 		TenantName: tenantName,
-		PlayerName: "organizer",
+		PlayerID:   "organizer",
 		Option:     sc.Option,
 	}
 
@@ -130,7 +121,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 					}
 					for _, rp := range r.Data.Players {
 						players[rp.DisplayName] = &isuports.PlayerRow{
-							Name:           rp.Name,
+							ID:             rp.ID,
 							DisplayName:    rp.DisplayName,
 							IsDisqualified: rp.IsDisqualified,
 						}
@@ -147,9 +138,9 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 
 		// 大会結果入稿 x 1
 		{
-			csv := "player_name,score"
+			csv := "player_id,score"
 			for _, player := range players {
-				csv += fmt.Sprintf("\n%s,%d", player.Name, data.CreateScore())
+				csv += fmt.Sprintf("\n%s,%d", player.ID, data.CreateScore())
 			}
 			res, err := PostOrganizerCompetitionResultAction(ctx, comp.ID, []byte(csv), orgAg)
 			v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
@@ -174,7 +165,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 				if index%100 > 5 {
 					continue
 				}
-				res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, player.Name, orgAg)
+				res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, player.ID, orgAg)
 				v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200),
 					WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
 						_ = r

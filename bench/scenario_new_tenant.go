@@ -36,7 +36,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	admin := &Account{
 		Role:       AccountRoleAdmin,
 		TenantName: "admin",
-		PlayerName: "admin",
+		PlayerID:   "admin",
 		Option:     sc.Option,
 	}
 	if err := admin.SetJWT(sc.RawKey); err != nil {
@@ -63,7 +63,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	organizer := Account{
 		Role:       AccountRoleOrganizer,
 		TenantName: tenant.Name,
-		PlayerName: "organizer",
+		PlayerID:   "organizer",
 		Option:     sc.Option,
 	}
 
@@ -88,7 +88,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
 				for _, pl := range r.Data.Players {
 					players[pl.DisplayName] = &PlayerData{
-						Name:        pl.Name,
+						ID:          pl.ID,
 						DisplayName: pl.DisplayName,
 					}
 				}
@@ -134,7 +134,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 			}
 			if err := sc.tenantPlayerScenario(ctx, step, &tenantPlayerScenarioData{
 				tenantName:    tenant.Name,
-				playerName:    player.Name,
+				playerID:      player.ID,
 				competitionID: comp.ID,
 			}); err != nil {
 				return err
@@ -146,8 +146,8 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 			var score ScoreRows
 			for _, player := range players {
 				score = append(score, &ScoreRow{
-					PlayerName: player.Name,
-					Score:      rand.Intn(1000),
+					PlayerID: player.ID,
+					Score:    rand.Intn(1000),
 				})
 			}
 			csv := score.CSV()
@@ -190,7 +190,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 			if index%100 > 5 {
 				continue
 			}
-			res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, player.Name, orgAg)
+			res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, player.ID, orgAg)
 			v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
 					_ = r
@@ -227,15 +227,15 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 
 type tenantPlayerScenarioData struct {
 	tenantName    string
-	playerName    string
-	competitionID int64
+	playerID      string
+	competitionID string
 }
 
 func (sc *Scenario) tenantPlayerScenario(ctx context.Context, step *isucandar.BenchmarkStep, data *tenantPlayerScenarioData) error {
 	player := Account{
 		Role:       AccountRolePlayer,
 		TenantName: data.tenantName,
-		PlayerName: data.playerName,
+		PlayerID:   data.playerID,
 		Option:     sc.Option,
 	}
 	if err := player.SetJWT(sc.RawKey); err != nil {
@@ -247,7 +247,7 @@ func (sc *Scenario) tenantPlayerScenario(ctx context.Context, step *isucandar.Be
 	}
 
 	{
-		res, err := GetPlayerAction(ctx, data.playerName, playerAg)
+		res, err := GetPlayerAction(ctx, data.playerID, playerAg)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				_ = r

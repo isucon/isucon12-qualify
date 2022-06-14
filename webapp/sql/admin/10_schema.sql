@@ -5,9 +5,9 @@ DROP TABLE IF EXISTS `id_generator`;
 DROP TABLE IF EXISTS `visit_history`;
 
 CREATE TABLE `tenant` (
-  `id` BIGINT UNSIGNED NOT NULL,
-  `name` VARCHAR(256) NOT NULL,
-  `display_name` VARCHAR(256) NOT NULL,
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(255) NOT NULL,
+  `display_name` VARCHAR(255) NOT NULL,
   `created_at` DATETIME(6) NOT NULL,
   `updated_at` DATETIME(6) NOT NULL,
   PRIMARY KEY (`id`),
@@ -15,16 +15,16 @@ CREATE TABLE `tenant` (
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;
 
 CREATE TABLE `id_generator` (
-  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
   `stub` CHAR(1) NOT NULL DEFAULT '',
   PRIMARY KEY  (`id`),
   UNIQUE KEY `stub` (`stub`)
 ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4;
 
 CREATE TABLE `visit_history` (
-  `player_name` VARCHAR(256) NOT NULL,
+  `player_id` VARCHAR(255) NOT NULL,
   `tenant_id` BIGINT UNSIGNED NOT NULL,
-  `competition_id` BIGINT UNSIGNED NOT NULL,
+  `competition_id` VARCHAR(255) NOT NULL,
   `created_at` DATETIME(6) NOT NULL,
   `updated_at` DATETIME(6) NOT NULL,
   INDEX `tenant_id_idx` (`tenant_id`)

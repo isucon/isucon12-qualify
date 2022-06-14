@@ -9,7 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
-	"strings"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -37,18 +37,18 @@ var hugeTenantScale = 25                                          // 1個だけ�
 var tenantID int64
 
 // テナントIDは連番で生成
-var genTenantID = func() int64 {
+var GenTenantID = func() int64 {
 	return atomic.AddInt64(&tenantID, 1)
 }
 
 var tenantDBSchemaFilePath = "../webapp/sql/tenant/10_schema.sql"
 var adminDBSchemaFilePath = "../webapp/sql/admin/10_schema.sql"
 
-type benchmarkerSource struct {
+type BenchmarkerSource struct {
 	TenantName     string `json:"tenant_name"`
-	CompetitionID  int64  `json:"competition_id"`
+	CompetitionID  string `json:"competition_id"`
 	IsFinished     bool   `json:"is_finished"`
-	PlayerName     string `json:"player_name"`
+	PlayerID       string `json:"player_id"`
 	IsDisqualified bool   `json:"is_disqualified"`
 }
 
@@ -59,11 +59,22 @@ func init() {
 }
 
 func Run(tenantsNum int) error {
+	v := os.Getenv("ISUPORTS_DATA_HUGE_TENANT_SCALE")
+	if v != "" {
+		var err error
+		hugeTenantScale, err = strconv.Atoi(v)
+		if err != nil {
+			return fmt.Errorf("error failed strconv.Atoi", err)
+		}
+	}
+
 	log.Println("tenantsNum", tenantsNum)
+	log.Println("hugeTenantScale", hugeTenantScale)
 	log.Println("epoch", Epoch)
 
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("mysql -uisucon -pisucon --host 127.0.0.1 isuports < %s", adminDBSchemaFilePath))
-	if err := cmd.Run(); err != nil {
+	if out, err := cmd.CombinedOutput(); err != nil {
+		log.Println(string(out))
 		return err
 	}
 
@@ -72,7 +83,7 @@ func Run(tenantsNum int) error {
 		return err
 	}
 	defer db.Close()
-	benchSrcs := make([]*benchmarkerSource, 0)
+	benchSrcs := make([]*BenchmarkerSource, 0)
 	for i := 0; i < tenantsNum; i++ {
 		log.Println("create tenant")
 		tenant := CreateTenant(i == 0)
@@ -85,7 +96,8 @@ func Run(tenantsNum int) error {
 		if err := storeAdmin(db, tenant, visitHistroies); err != nil {
 			return err
 		}
-		benchSrcs = append(benchSrcs, lo.Samples(b, 1000)...)
+		samples := len(players)
+		benchSrcs = append(benchSrcs, lo.Samples(b, samples)...)
 	}
 	if err := storeMaxID(db); err != nil {
 		return err
@@ -164,8 +176,8 @@ func storeAdmin(db *sqlx.DB, tenant *isuports.TenantRow, visitHistories []*isupo
 	for i, _ := range visitHistories {
 		if i > 0 && i%1000 == 0 || i == len(visitHistories)-1 {
 			if _, err := tx.NamedExec(
-				`INSERT INTO visit_history (player_name, tenant_id, competition_id, created_at, updated_at)
-				VALUES(:player_name, :tenant_id, :competition_id, :created_at, :updated_at)`,
+				`INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at)
+				VALUES(:player_id, :tenant_id, :competition_id, :created_at, :updated_at)`,
 				visitHistories[from:i],
 			); err != nil {
 				return err
@@ -188,7 +200,8 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	log.Println("store tenant", tenant.ID)
 	os.Remove(tenant.Name + ".db")
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("sqlite3 %s.db < %s", tenant.Name, tenantDBSchemaFilePath))
-	if err := cmd.Run(); err != nil {
+	if out, err := cmd.CombinedOutput(); err != nil {
+		log.Println(string(out))
 		return err
 	}
 	db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s.db?mode=rw&_journal_mode=OFF", tenant.Name))
@@ -204,8 +217,8 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	defer tx.Rollback()
 
 	if _, err = tx.NamedExec(
-		`INSERT INTO player (id, name, display_name, is_disqualified, created_at, updated_at)
-		 VALUES (:id, :name, :display_name, :is_disqualified, :created_at, :updated_at)`,
+		`INSERT INTO player (id, display_name, is_disqualified, created_at, updated_at)
+		 VALUES (:id, :display_name, :is_disqualified, :created_at, :updated_at)`,
 		players,
 	); err != nil {
 		return err
@@ -221,8 +234,8 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	for i, _ := range pss {
 		if i > 0 && i%1000 == 0 || i == len(pss)-1 {
 			if _, err := tx.NamedExec(
-				`INSERT INTO player_score (id, player_id, competition_id, score, created_at, updated_at)
-				VALUES(:id, :player_id, :competition_id, :score, :created_at, :updated_at)`,
+				`INSERT INTO player_score (player_id, competition_id, score, created_at, updated_at)
+				VALUES(:player_id, :competition_id, :score, :created_at, :updated_at)`,
 				pss[from:i],
 			); err != nil {
 				return err
@@ -234,7 +247,7 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 }
 
 func CreateTenant(isFirst bool) *isuports.TenantRow {
-	id := genTenantID()
+	id := GenTenantID()
 	var created time.Time
 	var name, displayName string
 	if isFirst {
@@ -246,9 +259,7 @@ func CreateTenant(isFirst bool) *isuports.TenantRow {
 			Epoch.Add(time.Duration(id)*time.Hour*3),
 			Epoch.Add(time.Duration(id+1)*time.Hour*3),
 		)
-		name = strings.ToLower(
-			UniqueRandomString(fake.IntBetween(2, 8)) + "-" + UniqueRandomString(fake.IntBetween(4, 16)),
-		)
+		name = fmt.Sprintf("%s-%d", fake.Internet().Slug(), id)
 		displayName = fake.Company().Name()
 	}
 	tenant := isuports.TenantRow{
@@ -266,7 +277,7 @@ func CreatePlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 	if tenant.ID == 1 {
 		playersNum = playersNumByTenant * hugeTenantScale
 	}
-	log.Println("create players", playersNum, "for tenant", tenant.ID)
+	log.Printf("create %d players for tenant %s", playersNum, tenant.Name)
 	players := make([]*isuports.PlayerRow, 0, playersNum)
 	for i := 0; i < playersNum; i++ {
 		players = append(players, CreatePlayer(tenant))
@@ -280,8 +291,7 @@ func CreatePlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	player := isuports.PlayerRow{
-		ID:             GenID(created),
-		Name:           RandomString(fake.IntBetween(8, 16)),
+		ID:             strconv.FormatInt(GenID(created), 10),
 		DisplayName:    fake.Person().Name(),
 		IsDisqualified: rand.Intn(100) < disqualifiedRate,
 		CreatedAt:      created,
@@ -306,7 +316,7 @@ func CreateCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	isFinished := rand.Intn(100) < 50
 	competition := isuports.CompetitionRow{
-		ID:        GenID(created),
+		ID:        strconv.FormatInt(GenID(created), 10),
 		Title:     fake.Music().Name(),
 		CreatedAt: created,
 	}
@@ -326,10 +336,10 @@ func CreatePlayerData(
 	tenant *isuports.TenantRow,
 	players []*isuports.PlayerRow,
 	competitions []*isuports.CompetitionRow,
-) ([]*isuports.PlayerScoreRow, []*isuports.VisitHistoryRow, []*benchmarkerSource) {
+) ([]*isuports.PlayerScoreRow, []*isuports.VisitHistoryRow, []*BenchmarkerSource) {
 	scores := make([]*isuports.PlayerScoreRow, 0, len(players)*len(competitions))
 	visits := make([]*isuports.VisitHistoryRow, 0, len(players)*len(competitions)*visitsByCompetition)
-	bench := make([]*benchmarkerSource, 0, len(players)*len(competitions))
+	bench := make([]*BenchmarkerSource, 0, len(players)*len(competitions))
 	for _, c := range competitions {
 		for _, p := range players {
 			if c.FinishedAt.Valid && p.CreatedAt.After(c.FinishedAt.Time) {
@@ -348,24 +358,23 @@ func CreatePlayerData(
 				visitedAt := fake.Time().TimeBetween(created, lastVisitedAt)
 				visits = append(visits, &isuports.VisitHistoryRow{
 					TenantID:      tenant.ID,
-					PlayerName:    p.Name,
+					PlayerID:      p.ID,
 					CompetitionID: c.ID,
 					CreatedAt:     visitedAt,
 					UpdatedAt:     visitedAt,
 				})
 			}
 			scores = append(scores, &isuports.PlayerScoreRow{
-				ID:            GenID(created),
 				PlayerID:      p.ID,
 				CompetitionID: c.ID,
 				Score:         CreateScore(),
 				CreatedAt:     created,
 				UpdatedAt:     created,
 			})
-			bench = append(bench, &benchmarkerSource{
+			bench = append(bench, &BenchmarkerSource{
 				TenantName:     tenant.Name,
 				CompetitionID:  c.ID,
-				PlayerName:     p.Name,
+				PlayerID:       p.ID,
 				IsFinished:     c.FinishedAt.Valid,
 				IsDisqualified: p.IsDisqualified,
 			})

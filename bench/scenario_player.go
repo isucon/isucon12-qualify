@@ -33,7 +33,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	player := Account{
 		Role:       AccountRolePlayer,
 		TenantName: data.TenantName,
-		PlayerName: data.PlayerName,
+		PlayerID:   data.PlayerID,
 		Option:     sc.Option,
 	}
 	if err := player.SetJWT(sc.RawKey); err != nil {
@@ -46,7 +46,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 
 	// 失格の参加者は403 forbidden
 	if data.IsDisqualified {
-		res, err := GetPlayerAction(ctx, data.PlayerName, playerAg)
+		res, err := GetPlayerAction(ctx, data.PlayerID, playerAg)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(403))
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
@@ -57,7 +57,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	}
 
 	{
-		res, err := GetPlayerAction(ctx, data.PlayerName, playerAg)
+		res, err := GetPlayerAction(ctx, data.PlayerID, playerAg)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				_ = r
