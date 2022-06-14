@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -34,6 +35,12 @@ var disqualifiedRate = 10                                         // player失�
 var visitsByCompetition = 75                                      // 1大会のplayerごとの訪問数
 var maxID int64                                                   // webapp初期化時の起点ID
 var hugeTenantScale = 25                                          // 1個だけある巨大テナント データサイズ倍数
+var tenantID int64
+
+// テナントIDは連番で生成
+var genTenantID = func() int64 {
+	return atomic.AddInt64(&tenantID, 1)
+}
 
 var tenantDBSchemaFilePath = "../webapp/sql/tenant/10_schema.sql"
 var adminDBSchemaFilePath = "../webapp/sql/admin/10_schema.sql"
@@ -228,19 +235,27 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 }
 
 func CreateTenant(isFirst bool) *isuports.TenantRow {
-	created := Epoch
-	var id int64
+	id := genTenantID()
+	var created time.Time
+	var name, displayName string
 	if isFirst {
-		id = 1
+		// これだけ特別
+		created = Epoch
+		name, displayName = "isucon", "ISUCONglomerate"
 	} else {
-		id = GenID(created)
+		created = fake.Time().TimeBetween(
+			Epoch.Add(time.Duration(id)*time.Hour*3),
+			Epoch.Add(time.Duration(id+1)*time.Hour*3),
+		)
+		name = strings.ToLower(
+			UniqueRandomString(fake.IntBetween(2, 8)) + "-" + UniqueRandomString(fake.IntBetween(4, 16)),
+		)
+		displayName = fake.Company().Name()
 	}
 	tenant := isuports.TenantRow{
-		ID: id,
-		Name: strings.ToLower(
-			UniqueRandomString(fake.IntBetween(2, 8)) + "-" + UniqueRandomString(fake.IntBetween(4, 16)),
-		),
-		DisplayName: fake.Company().Name(),
+		ID:          id,
+		Name:        name,
+		DisplayName: displayName,
 		CreatedAt:   created,
 		UpdatedAt:   fake.Time().TimeBetween(created, Now()),
 	}
