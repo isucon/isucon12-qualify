@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -189,7 +188,8 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	log.Println("store tenant", tenant.ID)
 	os.Remove(tenant.Name + ".db")
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("sqlite3 %s.db < %s", tenant.Name, tenantDBSchemaFilePath))
-	if err := cmd.Run(); err != nil {
+	if out, err := cmd.CombinedOutput(); err != nil {
+		log.Println(string(out))
 		return err
 	}
 	db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s.db?mode=rw&_journal_mode=OFF", tenant.Name))
@@ -247,9 +247,7 @@ func CreateTenant(isFirst bool) *isuports.TenantRow {
 			Epoch.Add(time.Duration(id)*time.Hour*3),
 			Epoch.Add(time.Duration(id+1)*time.Hour*3),
 		)
-		name = strings.ToLower(
-			UniqueRandomString(fake.IntBetween(2, 8)) + "-" + UniqueRandomString(fake.IntBetween(4, 16)),
-		)
+		name = fake.Internet().Slug()
 		displayName = fake.Company().Name()
 	}
 	tenant := isuports.TenantRow{
