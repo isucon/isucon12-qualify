@@ -2,7 +2,7 @@ builder: go.* *.go ../webapp/go/* cmd/builder/*
 	@go build -o builder cmd/builder/main.go
 
 build: builder
-	@./builder 39
+	@./builder 100
 	mysqldump -uisucon -pisucon --host 127.0.0.1 -B isuports --no-tablespaces > 90_data.sql
 
 build-for-local: builder
