@@ -19,4 +19,5 @@ install:
 	cp *.db ../webapp/tenant_db/
 	cp *.db ../initial_data/
 	cp *.sql ../webapp/sql/admin/
+	cp *.sql ../initial_data/
 	cp *.json ../bench/
