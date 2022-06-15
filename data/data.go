@@ -234,8 +234,8 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	for i, _ := range pss {
 		if i > 0 && i%1000 == 0 || i == len(pss)-1 {
 			if _, err := tx.NamedExec(
-				`INSERT INTO player_score (player_id, competition_id, score, created_at, updated_at)
-				VALUES(:player_id, :competition_id, :score, :created_at, :updated_at)`,
+				`INSERT INTO player_score (id, player_id, competition_id, score, created_at, updated_at)
+				VALUES(:id, :player_id, :competition_id, :score, :created_at, :updated_at)`,
 				pss[from:i],
 			); err != nil {
 				return err
