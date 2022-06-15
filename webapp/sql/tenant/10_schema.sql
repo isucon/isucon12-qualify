@@ -19,10 +19,11 @@ CREATE TABLE player (
 );
 
 CREATE TABLE player_score (
+  id INTEGER PRIMARY KEY,
   player_id TEXT NOT NULL,
   competition_id TEXT NOT NULL,
   score INTEGER NOT NULL,
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
-  PRIMARY KEY (player_id, competition_id)
+  UNIQUE (player_id, competition_id)
 );
