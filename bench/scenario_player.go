@@ -86,6 +86,9 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		if !v.IsEmpty() {
 			return v
 		}
+
+		// 失格にした後は反映まで少し猶予をもたせる
+		time.Sleep(time.Millisecond * 300)
 	}
 
 	// 失格の参加者は403 forbidden
