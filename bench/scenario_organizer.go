@@ -73,7 +73,9 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 				return nil
 			}),
 		)
-		if !v.IsEmpty() {
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
+		} else {
 			return v
 		}
 	}

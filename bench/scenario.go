@@ -184,11 +184,11 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
-	// 参加者シナリオ
-	// playerCase, err := s.PlayerScenarioWorker(step, 1)
-	// if err != nil {
-	// 	return err
-	// }
+	// 初期データプレイヤー整合性チェックシナリオ
+	playerCase, err := s.PlayerScenarioWorker(step, 1)
+	if err != nil {
+		return err
+	}
 	// admin billingを見るシナリオ
 	adminBillingCase, err := s.AdminBillingScenarioWorker(step, 1)
 	if err != nil {
@@ -204,7 +204,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	workers := []*worker.Worker{
 		newTenantCase,
 		organizerCase,
-		// playerCase,
+		playerCase,
 		adminBillingCase,
 	}
 	for _, w := range workers {
@@ -221,7 +221,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 		s.loadAdjustor(ctx, step,
 			newTenantCase,
 			organizerCase,
-			// playerCase,
+			// playerCase, // player scenarioは並列増やさない TODO: 調整
 		)
 	}()
 	wg.Wait()

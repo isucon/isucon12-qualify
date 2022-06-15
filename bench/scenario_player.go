@@ -2,13 +2,16 @@ package bench
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/isucon/isucandar"
+	"github.com/isucon/isucandar/agent"
 	"github.com/isucon/isucandar/worker"
 )
 
-// TODO: NewTenantScenarioで大量に叩くので不要かも
+// 負荷をかけるより整合性チェックをメインにしたい
+// - 失格にする前後で/player/...が403になること
 
 func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
@@ -29,7 +32,7 @@ func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32)
 }
 
 func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
-	report := timeReporter("大会参加者シナリオ")
+	report := timeReporter("大会参加者の整合性チェックシナリオ")
 	defer report()
 	scTag := ScenarioTag("PlayerScenario")
 	ContestantLogger.Printf("%s start\n", scTag)
@@ -50,8 +53,52 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		return err
 	}
 
+	// 失格じゃないPlayerならすべて正しく閲覧できることを確認
+	if !data.IsDisqualified {
+		if err := sc.playerScenarioRequest(ctx, step, playerAg, data); err != nil {
+			return err
+		}
+
+		// 失格にする
+		organizer := Account{
+			Role:       AccountRoleOrganizer,
+			TenantName: data.TenantName,
+			PlayerID:   "organizer",
+			Option:     sc.Option,
+		}
+		if err := organizer.SetJWT(sc.RawKey); err != nil {
+			return err
+		}
+		orgAg, err := organizer.GetAgent()
+		if err != nil {
+			return err
+		}
+
+		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, data.PlayerID, orgAg)
+		v := ValidateResponse("プレイヤーを失格にする", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
+				if !r.Data.Player.IsDisqualified {
+					return fmt.Errorf("プレイヤーが失格になっていません player.id: %s", r.Data.Player.ID)
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+
 	// 失格の参加者は403 forbidden
-	if data.IsDisqualified {
+	if err := sc.playerScenarioRequestDisqualify(ctx, step, playerAg, data); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (sc *Scenario) playerScenarioRequestDisqualify(ctx context.Context, step *isucandar.BenchmarkStep, playerAg *agent.Agent, data *InitialDataRow) error {
+	scTag := ScenarioTag("PlayerScenario")
+	{
 		res, err := GetPlayerAction(ctx, data.PlayerID, playerAg)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(403))
 		if v.IsEmpty() {
@@ -59,9 +106,30 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		} else {
 			return v
 		}
-		return nil
 	}
+	{
+		res, err := GetPlayerCompetitionRankingAction(ctx, data.CompetitionID, "", playerAg)
+		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(403))
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
+		} else {
+			return v
+		}
+	}
+	{
+		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
+		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(403))
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+		} else {
+			return v
+		}
+	}
+	return nil
+}
 
+func (sc *Scenario) playerScenarioRequest(ctx context.Context, step *isucandar.BenchmarkStep, playerAg *agent.Agent, data *InitialDataRow) error {
+	scTag := ScenarioTag("PlayerScenario")
 	{
 		res, err := GetPlayerAction(ctx, data.PlayerID, playerAg)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
@@ -104,8 +172,5 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			return v
 		}
 	}
-
-	// 300ms待つ
-	time.Sleep(time.Millisecond * 300)
 	return nil
 }

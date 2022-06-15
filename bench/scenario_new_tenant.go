@@ -32,8 +32,9 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	scTag := ScenarioTag("NewTenantScenario")
 	ContestantLogger.Printf("%s start\n", scTag)
 
-	playerNum := 100 // 1テナント当たりの作成する参加者数
-	errorLimit := 30 // 許容するエラー数
+	addPlayerTimes := 20 // PlayersAddを叩く回数
+	addPlayerNum := 5    // 1度のPlayersAddで追加するプレイヤー数
+	errorLimit := 30     // 許容するエラー数
 
 	admin := &Account{
 		Role:       AccountRoleAdmin,
@@ -77,30 +78,31 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		return err
 	}
 
-	// 参加者登録 x N
-	players := make(map[string]*PlayerData, playerNum)
-
+	// 参加者登録 addPlayerNum * addPlayerTimes
+	players := make(map[string]*PlayerData, addPlayerNum*addPlayerTimes)
 	{
-		playerDisplayNames := make([]string, playerNum)
-		for i := 0; i < playerNum; i++ {
-			playerDisplayNames = append(playerDisplayNames, data.RandomString(16))
-		}
-		res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
-		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
-				for _, pl := range r.Data.Players {
-					players[pl.DisplayName] = &PlayerData{
-						ID:          pl.ID,
-						DisplayName: pl.DisplayName,
+		for times := 0; times < addPlayerTimes; times++ {
+			playerDisplayNames := make([]string, addPlayerNum)
+			for i := 0; i < addPlayerNum; i++ {
+				playerDisplayNames = append(playerDisplayNames, data.RandomString(16))
+			}
+			res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
+			v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200),
+				WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
+					for _, pl := range r.Data.Players {
+						players[pl.DisplayName] = &PlayerData{
+							ID:          pl.ID,
+							DisplayName: pl.DisplayName,
+						}
 					}
-				}
-				return nil
-			}),
-		)
-		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
-		} else {
-			return v
+					return nil
+				}),
+			)
+			if v.IsEmpty() {
+				sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
+			} else {
+				return v
+			}
 		}
 	}
 
@@ -108,7 +110,6 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	comp := &CompetitionData{
 		Title: data.RandomString(24),
 	}
-	// 大会の作成
 	{
 		res, err := PostOrganizerCompetitonsAddAction(ctx, comp.Title, orgAg)
 		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200),
@@ -133,7 +134,11 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 				playerID:      player.ID,
 				competitionID: comp.ID,
 			}); err != nil {
-				step.AddError(err)
+				// ctxが終了のエラーのみならループ終了
+				if ve, ok := err.(ValidationError); ok && ve.Canceled {
+					return nil
+				}
+				AdminLogger.Printf("[NewTenantScenario] %v", err)
 				errorCount++
 			}
 		}

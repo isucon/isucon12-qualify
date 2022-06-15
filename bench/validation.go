@@ -27,7 +27,7 @@ const (
 type ValidationError struct {
 	Errors   []error
 	Title    string
-	canceled bool
+	Canceled bool
 }
 
 // error インターフェースを満たす Error メソッド
@@ -44,8 +44,9 @@ func (v ValidationError) Error() string {
 }
 
 // ValidationError が空かを判定
+// NOTE: contextのキャンセルによって返されるValidationErrorは、IsEmptyはfalseでErrorsは空
 func (v ValidationError) IsEmpty() bool {
-	if v.canceled {
+	if v.Canceled {
 		return false
 	}
 	return len(v.Errors) == 0
@@ -65,7 +66,7 @@ func ValidateResponse(title string, step *isucandar.BenchmarkStep, res *http.Res
 	if err != nil {
 		if failure.Is(err, context.DeadlineExceeded) || failure.Is(err, context.Canceled) {
 			// ベンチが終了したタイミングのerrは無視してよい
-			ve.canceled = true
+			ve.Canceled = true
 			return ve
 		}
 		// リクエストがエラーだったらそれ以上の検証はしない(できない)
