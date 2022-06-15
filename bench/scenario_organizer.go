@@ -3,6 +3,7 @@ package bench
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
@@ -12,7 +13,10 @@ import (
 
 func (sc *Scenario) OrganizerScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		sc.OrganizerScenario(ctx, step)
+		if err := sc.OrganizerScenario(ctx, step); err != nil {
+			AdminLogger.Printf("[OrganizerScenario]: %v", err)
+			time.Sleep(SleepOnError)
+		}
 	},
 		// // 無限回繰り返す
 		worker.WithInfinityLoop(),

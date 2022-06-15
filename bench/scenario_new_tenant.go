@@ -3,6 +3,7 @@ package bench
 import (
 	"context"
 	"math/rand"
+	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
@@ -13,7 +14,10 @@ var scTag = ScenarioTag("NewTenantScenario")
 
 func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		sc.NewTenantScenario(ctx, step)
+		if err := sc.NewTenantScenario(ctx, step); err != nil {
+			AdminLogger.Printf("[NewTenantScenario] %v", err)
+			time.Sleep(SleepOnError)
+		}
 	},
 		// 無限回繰り返す
 		worker.WithInfinityLoop(),

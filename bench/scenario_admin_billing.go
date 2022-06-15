@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
@@ -9,7 +10,10 @@ import (
 
 func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		sc.AdminBillingScenario(ctx, step)
+		if err := sc.AdminBillingScenario(ctx, step); err != nil {
+			AdminLogger.Printf("[AdminBillingScenario]: %s", err)
+			time.Sleep(SleepOnError)
+		}
 	},
 		// 無限回繰り返す
 		worker.WithInfinityLoop(),

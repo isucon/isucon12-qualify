@@ -21,8 +21,13 @@ import (
 )
 
 var (
-	Debug     = false
+	Debug = false
+
+	// これ以上エラーが出たら打ち切り
 	MaxErrors = 30
+
+	// エラーが発生したらこの時間だけSleepする(暴発防止)
+	SleepOnError = time.Second
 )
 
 const (
