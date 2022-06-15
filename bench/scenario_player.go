@@ -20,9 +20,11 @@ func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32)
 			time.Sleep(SleepOnError)
 		}
 	},
-		// // 無限回繰り返す
+		// 無限回繰り返す
 		worker.WithInfinityLoop(),
-		worker.WithUnlimitedParallelism(),
+		// worker.WithUnlimitedParallelism(),
+		// 10並列くらいを最大にする TODO: 要調整
+		worker.WithMaxParallelism(10),
 	)
 	if err != nil {
 		return nil, err
@@ -54,7 +56,10 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	}
 
 	// 失格じゃないPlayerならすべて正しく閲覧できることを確認
-	if !data.IsDisqualified {
+	_, ok := sc.DisqualifiedPlayer[data.PlayerID]
+	if !data.IsDisqualified && !ok {
+		sc.DisqualifiedPlayer[data.PlayerID] = struct{}{}
+
 		if err := sc.playerScenarioRequest(ctx, step, playerAg, data); err != nil {
 			return err
 		}
@@ -88,7 +93,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		}
 
 		// 失格にした後は反映まで少し猶予をもたせる
-		time.Sleep(time.Millisecond * 300)
+		time.Sleep(time.Millisecond * 100)
 	}
 
 	// 失格の参加者は403 forbidden

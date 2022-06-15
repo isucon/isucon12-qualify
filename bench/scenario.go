@@ -89,8 +89,9 @@ type Scenario struct {
 
 	ScenarioScoreMap sync.Map // map[string]*int64
 
-	InitialData InitialDataRows
-	RawKey      *rsa.PrivateKey
+	InitialData        InitialDataRows
+	DisqualifiedPlayer map[string]struct{}
+	RawKey             *rsa.PrivateKey
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -100,6 +101,7 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	s.ScenarioScoreMap = sync.Map{}
+	s.DisqualifiedPlayer = map[string]struct{}{}
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(s.Option.TargetURL)
@@ -221,7 +223,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 		s.loadAdjustor(ctx, step,
 			newTenantCase,
 			organizerCase,
-			// playerCase, // player scenarioは並列増やさない TODO: 調整
+			playerCase,
 		)
 	}()
 	wg.Wait()
@@ -248,7 +250,7 @@ func (s *Scenario) loadAdjustor(ctx context.Context, step *isucandar.BenchmarkSt
 			step.Cancel()
 			return
 		}
-		addParallels := int32(1)
+		addParallels := int32(0)
 		if diff := total - prevErrors; diff > 0 {
 			ContestantLogger.Printf("エラーが%d件増えました(現在%d件)", diff, total)
 		} else {
