@@ -66,6 +66,8 @@ func tenantDBPath(name string) string {
 
 func connectToTenantDB(name string) (*sqlx.DB, error) {
 	p := tenantDBPath(name)
+	// sqlite3-with-trace は initializeSQLLogger() で設定されるクエリログ出力機能付きドライバ
+	// 必要ない場合は sqlite3 に変更する
 	return sqlx.Open("sqlite3-with-trace", fmt.Sprintf("file:%s?mode=rw", p))
 }
 
@@ -122,6 +124,8 @@ func Run() {
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
 
+	// sqliteのクエリログを出力する設定
+	// 環境変数 ISUCON_SQLITE_TRACE_FILE を設定すると、そのファイルにクエリログをJSON形式で出力する
 	sqlLogger, err := initializeSQLLogger()
 	if err != nil {
 		e.Logger.Panicf("error initializeSQLLogger: %s", err)

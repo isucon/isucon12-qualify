@@ -19,13 +19,15 @@ func initializeSQLLogger() (io.Closer, error) {
 		traceLogFile io.WriteCloser
 		enc          *json.Encoder
 	)
-	if traceFilePath := getEnv("ISUCON_SQLITE_TRACE_FILE", "sqlite-trace.log"); traceFilePath != "" {
+	if traceFilePath := getEnv("ISUCON_SQLITE_TRACE_FILE", ""); traceFilePath != "" {
 		var err error
 		traceLogFile, err = os.OpenFile(traceFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
 			return nil, fmt.Errorf("cannot open ISUCON_SQLITE_TRACE_FILE: %w", err)
 		}
 		enc = json.NewEncoder(traceLogFile)
+	} else {
+		return io.NopCloser(nil), nil
 	}
 	sql.Register("sqlite3-with-trace", proxy.NewProxyContext(&sqlite3.SQLiteDriver{}, &proxy.HooksContext{
 		PreExec: func(_ context.Context, _ *proxy.Stmt, _ []driver.NamedValue) (interface{}, error) {
