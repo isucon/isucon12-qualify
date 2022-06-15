@@ -929,7 +929,7 @@ func competitionResultHandler(c echo.Context) error {
 		); err != nil {
 			ttx.Rollback()
 			return fmt.Errorf(
-				"error Replace player_score: playerID=%s, competitionID=%s, score=%d, createdAt=%s, updatedAt=%s, %w",
+				"error Replace player_score: id=%s, playerID=%s, competitionID=%s, score=%d, createdAt=%s, updatedAt=%s, %w",
 				id, player.ID, competitionID, score, now, now, err,
 			)
 		}
