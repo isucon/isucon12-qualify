@@ -365,6 +365,7 @@ func CreatePlayerData(
 				})
 			}
 			scores = append(scores, &isuports.PlayerScoreRow{
+				ID:            GenID(created),
 				PlayerID:      p.ID,
 				CompetitionID: c.ID,
 				Score:         CreateScore(),
