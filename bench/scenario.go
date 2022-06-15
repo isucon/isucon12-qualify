@@ -21,8 +21,13 @@ import (
 )
 
 var (
-	Debug     = false
+	Debug = false
+
+	// これ以上エラーが出たら打ち切り
 	MaxErrors = 30
+
+	// エラーが発生したらこの時間だけSleepする(暴発防止)
+	SleepOnError = time.Second
 )
 
 const (
@@ -189,9 +194,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
-	// _ = organizerCase
-	// _ = playerCase
-	// _ = adminBillingCase
+	AdminLogger.Printf("%d workers", len([]*worker.Worker{newTenantCase, organizerCase, playerCase, adminBillingCase}))
 
 	workers := []*worker.Worker{
 		newTenantCase,

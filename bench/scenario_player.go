@@ -12,7 +12,10 @@ import (
 
 func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		sc.PlayerScenario(ctx, step)
+		if err := sc.PlayerScenario(ctx, step); err != nil {
+			AdminLogger.Printf("[PlayerScenario]: %v", err)
+			time.Sleep(SleepOnError)
+		}
 	},
 		// // 無限回繰り返す
 		worker.WithInfinityLoop(),

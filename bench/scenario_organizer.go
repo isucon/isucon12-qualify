@@ -3,6 +3,7 @@ package bench
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
@@ -12,7 +13,10 @@ import (
 
 func (sc *Scenario) OrganizerScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		sc.OrganizerScenario(ctx, step)
+		if err := sc.OrganizerScenario(ctx, step); err != nil {
+			AdminLogger.Printf("[OrganizerScenario]: %v", err)
+			time.Sleep(SleepOnError)
+		}
 	},
 		// // 無限回繰り返す
 		worker.WithInfinityLoop(),
@@ -89,6 +93,36 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 		return err
 	}
 
+	// 参加者登録
+	var playerDisplayNames []string
+	players := make(map[string]*isuports.PlayerRow)
+	for _, p := range data.CreatePlayers(tenant) {
+		playerDisplayNames = append(playerDisplayNames, p.DisplayName)
+	}
+	{
+		res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
+		v := ValidateResponse("参加者追加", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
+				if len(r.Data.Players) != len(playerDisplayNames) {
+					return fmt.Errorf("作成された参加者の数が違います got: %d expect: %d", len(r.Data.Players), len(playerDisplayNames))
+				}
+				for _, rp := range r.Data.Players {
+					players[rp.DisplayName] = &isuports.PlayerRow{
+						ID:             rp.ID,
+						DisplayName:    rp.DisplayName,
+						IsDisqualified: rp.IsDisqualified,
+					}
+				}
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
+		} else {
+			return v
+		}
+	}
+
 	comps := data.CreateCompetitions(tenant)
 	for _, comp := range comps {
 		// 大会の作成
@@ -106,35 +140,6 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionsAdd, scTag)
 		} else {
 			return v
-		}
-
-		var playerDisplayNames []string
-		players := make(map[string]*isuports.PlayerRow)
-		for _, p := range data.CreatePlayers(tenant) {
-			playerDisplayNames = append(playerDisplayNames, p.DisplayName)
-		}
-		{
-			res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
-			v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
-					if len(r.Data.Players) != len(playerDisplayNames) {
-						return fmt.Errorf("作成された大会参加者の数が違います got: %d expect: %d", len(r.Data.Players), len(playerDisplayNames))
-					}
-					for _, rp := range r.Data.Players {
-						players[rp.DisplayName] = &isuports.PlayerRow{
-							ID:             rp.ID,
-							DisplayName:    rp.DisplayName,
-							IsDisqualified: rp.IsDisqualified,
-						}
-					}
-					return nil
-				}),
-			)
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
-			} else {
-				return v
-			}
 		}
 
 		// 大会結果入稿 x 1
@@ -156,61 +161,59 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 				return v
 			}
 		}
+	}
 
-		// 参加者を失格状態にする x N
-		{
-			index := 0
-			for _, player := range players {
-				// 5%の人は失格
-				index++
-				if index%100 > 5 {
-					continue
-				}
-				res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, player.ID, orgAg)
-				v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200),
-					WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
-						_ = r
-						return nil
-					}),
-				)
-				if v.IsEmpty() {
-					sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
-				} else {
-					return v
-				}
-			}
+	// 参加者を失格状態にする
+	var i int
+	for _, player := range players {
+		// 5%の人は失格
+		i++
+		if i%100 > 5 {
+			continue
 		}
-
-		// テナント請求ダッシュボードの閲覧 x 1
-		{
-			res, err := GetOrganizerBillingAction(ctx, orgAg)
-			v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPIBilling) error {
-					_ = r
-					return nil
-				}),
-			)
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
-			} else {
-				return v
-			}
+		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, player.ID, orgAg)
+		v := ValidateResponse("参加者を失格にする", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
+				_ = r
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
+		} else {
+			return v
 		}
+	}
 
-		// 大会結果確定 x 1
-		{
-			res, err := PostOrganizerCompetitionFinishAction(ctx, comp.ID, orgAg)
-			v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
-					_ = r
-					return nil
-				}),
-			)
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionFinish, scTag)
-			} else {
-				return v
-			}
+	// テナント請求ダッシュボードの閲覧 x 1
+	{
+		res, err := GetOrganizerBillingAction(ctx, orgAg)
+		v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIBilling) error {
+				_ = r
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
+		} else {
+			return v
+		}
+	}
+
+	// 大会結果確定
+	for _, comp := range comps {
+		res, err := PostOrganizerCompetitionFinishAction(ctx, comp.ID, orgAg)
+		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
+				_ = r
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionFinish, scTag)
+		} else {
+			return v
 		}
 	}
 
