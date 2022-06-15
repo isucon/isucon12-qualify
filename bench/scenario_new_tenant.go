@@ -2,7 +2,6 @@ package bench
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -17,9 +16,8 @@ func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int
 			time.Sleep(SleepOnError)
 		}
 	},
-	// 無限回繰り返す
-	// worker.WithInfinityLoop(),
-	// worker.WithUnlimitedParallelism(),
+		worker.WithInfinityLoop(),
+		worker.WithUnlimitedParallelism(),
 	)
 	if err != nil {
 		return nil, err
@@ -28,15 +26,14 @@ func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int
 	return w, nil
 }
 
-// 30エラー出るまでPlayerがリクエストを続ける
 func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
 	report := timeReporter("新規テナントシナリオ")
 	defer report()
 	scTag := ScenarioTag("NewTenantScenario")
 	ContestantLogger.Printf("%s start\n", scTag)
 
-	playerNum := 100     // 1テナント当たりの作成する参加者数
-	returnErrorNum := 30 // 指定エラー数が出るまでリクエストを続ける
+	playerNum := 100 // 1テナント当たりの作成する参加者数
+	errorLimit := 30 // 許容するエラー数
 
 	admin := &Account{
 		Role:       AccountRoleAdmin,
@@ -128,21 +125,20 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	// 大会のランキングを参照するプレイヤーたち
-	var errors []error
-	for len(errors) < returnErrorNum {
+	errorCount := 0
+	for errorCount < errorLimit {
 		for _, player := range players {
 			if err := sc.tenantPlayerScenario(ctx, step, &tenantPlayerScenarioData{
 				tenantName:    tenant.Name,
 				playerID:      player.ID,
 				competitionID: comp.ID,
 			}); err != nil {
-				errors = append(errors, err)
-				break
+				step.AddError(err)
+				errorCount++
 			}
-			time.Sleep(time.Millisecond * 300) // TODO: 流石に回りすぎるのでちょっとsleepを入れる
 		}
 	}
-	return fmt.Errorf("%+s", errors)
+	return nil
 
 	// 大会結果入稿 x 1
 	// {
