@@ -27,7 +27,7 @@ func initializeSQLLogger() (io.Closer, error) {
 		}
 		enc = json.NewEncoder(traceLogFile)
 	} else {
-		return io.NopCloser(nil), nil
+		enc = json.NewEncoder(io.Discard)
 	}
 	sql.Register("sqlite3-with-trace", proxy.NewProxyContext(&sqlite3.SQLiteDriver{}, &proxy.HooksContext{
 		PreExec: func(_ context.Context, _ *proxy.Stmt, _ []driver.NamedValue) (interface{}, error) {
