@@ -47,6 +47,7 @@ func (o Option) NewTransport() *http.Transport {
 	trs := agent.DefaultTransport.Clone()
 	trs.DialContext = dialContextFunc
 	trs.Dial = dialFunc
+	trs.IdleConnTimeout = 5 * time.Second // 大量にclientができるので永続接続は短め
 	return trs
 }
 
@@ -63,7 +64,7 @@ func (o Option) NewAgent(targetURL string, forInitialize bool) (*agent.Agent, er
 	} else {
 		agentOptions = append(agentOptions, agent.WithTimeout(o.RequestTimeout))
 	}
-
+	// AdminLogger.Println("new agent for:", targetURL)
 	// オプションに従って agent.Agent を生成
 	return agent.NewAgent(agentOptions...)
 }
