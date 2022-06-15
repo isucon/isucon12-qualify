@@ -36,6 +36,7 @@ const (
 
 var (
 	tenantNameRegexp = regexp.MustCompile(`^[a-z][a-z0-9-]{0,61}[a-z0-9]$`)
+	sqliteDriverName = "sqlite3"
 )
 
 func getEnv(key string, defaultValue string) string {
@@ -66,7 +67,7 @@ func tenantDBPath(name string) string {
 
 func connectToTenantDB(name string) (*sqlx.DB, error) {
 	p := tenantDBPath(name)
-	return sqlx.Open("sqlite3-with-trace", fmt.Sprintf("file:%s?mode=rw", p))
+	return sqlx.Open(sqliteDriverName, fmt.Sprintf("file:%s?mode=rw", p))
 }
 
 func getTenantName(c echo.Context) (string, error) {
@@ -122,7 +123,13 @@ func Run() {
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
 
-	sqlLogger, err := initializeSQLLogger()
+	// sqliteのクエリログを出力する設定
+	// 環境変数 ISUCON_SQLITE_TRACE_FILE を設定すると、そのファイルにクエリログをJSON形式で出力する
+	var (
+		sqlLogger io.Closer
+		err       error
+	)
+	sqliteDriverName, sqlLogger, err = initializeSQLLogger()
 	if err != nil {
 		e.Logger.Panicf("error initializeSQLLogger: %s", err)
 	}
