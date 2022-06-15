@@ -14,7 +14,7 @@ import (
 	proxy "github.com/shogo82148/go-sql-proxy"
 )
 
-func initializeSQLLogger() (io.Closer, error) {
+func initializeSQLLogger() (string, io.Closer, error) {
 	var (
 		traceLogFile io.WriteCloser
 		enc          *json.Encoder
@@ -23,13 +23,14 @@ func initializeSQLLogger() (io.Closer, error) {
 		var err error
 		traceLogFile, err = os.OpenFile(traceFilePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 		if err != nil {
-			return nil, fmt.Errorf("cannot open ISUCON_SQLITE_TRACE_FILE: %w", err)
+			return "", nil, fmt.Errorf("cannot open ISUCON_SQLITE_TRACE_FILE: %w", err)
 		}
 		enc = json.NewEncoder(traceLogFile)
 	} else {
-		enc = json.NewEncoder(io.Discard)
+		return "sqlite3", io.NopCloser(nil), nil
 	}
-	sql.Register("sqlite3-with-trace", proxy.NewProxyContext(&sqlite3.SQLiteDriver{}, &proxy.HooksContext{
+	driverName := "sqlite3-with-trace"
+	sql.Register(driverName, proxy.NewProxyContext(&sqlite3.SQLiteDriver{}, &proxy.HooksContext{
 		PreExec: func(_ context.Context, _ *proxy.Stmt, _ []driver.NamedValue) (interface{}, error) {
 			return time.Now(), nil
 		},
@@ -74,5 +75,5 @@ func initializeSQLLogger() (io.Closer, error) {
 			return nil
 		},
 	}))
-	return traceLogFile, nil
+	return driverName, traceLogFile, nil
 }
