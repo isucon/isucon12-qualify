@@ -46,19 +46,29 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		return err
 	}
 
-	// ランダムで初期データから取るとid=1を引いて一つも結果を取らないことがあるので
-	// ページングなしで順に辿っていく
-	res, err := GetAdminTenantsBillingAction(ctx, "", adminAg)
-	v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
-		WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
-			_ = r
-			return nil
-		}),
-	)
-	if v.IsEmpty() {
-		sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
-	} else {
-		return v
+	// 1ページ目から最後まで辿る
+	beforeTenantID := "" // 最初はbeforeが空
+	completed := false
+	for !completed {
+		res, err := GetAdminTenantsBillingAction(ctx, beforeTenantID, adminAg)
+		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
+				if len(r.Data.Tenants) == 0 {
+					completed = true
+					return nil
+				}
+				for _, tenant := range r.Data.Tenants {
+					AdminLogger.Printf("%s: %d yen", tenant.Name, tenant.BillingYen)
+				}
+				beforeTenantID = r.Data.Tenants[len(r.Data.Tenants)-1].ID
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
+		} else {
+			return v
+		}
 	}
 
 	return nil
