@@ -6,6 +6,7 @@ require (
 	github.com/isucon/isucandar v0.0.0-20220322062028-6dd56dc57d72
 	github.com/isucon/isucon12-qualify/data v0.0.0-00010101000000-000000000000
 	github.com/isucon/isucon12-qualify/webapp/go v0.0.0-00010101000000-000000000000
+	github.com/k0kubun/pp/v3 v3.1.0
 	github.com/lestrrat-go/jwx/v2 v2.0.2
 )
 
