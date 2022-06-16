@@ -70,17 +70,6 @@ func connectToTenantDB(name string) (*sqlx.DB, error) {
 	return sqlx.Open(sqliteDriverName, fmt.Sprintf("file:%s?mode=rw", p))
 }
 
-func getTenantName(c echo.Context) (string, error) {
-	baseHost := getEnv("ISUCON_BASE_HOSTNAME", ".t.isucon.dev")
-	host := c.Request().Host
-	if !strings.HasSuffix(host, baseHost) {
-		return "", fmt.Errorf("host is not contains %s: %s", baseHost, host)
-	}
-	tenantName := strings.TrimSuffix(host, baseHost)
-
-	return tenantName, nil
-}
-
 func createTenantDB(name string) error {
 	p := tenantDBPath(name)
 
@@ -221,12 +210,14 @@ var (
 	errNotPermitted = errors.New("this role is not permitted")
 )
 
+// アクセスしてきた人の情報
 type Viewer struct {
 	role       Role
 	playerID   string
 	tenantName string
 }
 
+// リクエストヘッダをパースしてViewerを返す
 func parseViewer(c echo.Context) (*Viewer, error) {
 	cookie, err := c.Request().Cookie(cookieName)
 	if err != nil {
@@ -278,10 +269,17 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		return nil, fmt.Errorf("token is invalid, aud field is few or too many: %s", tokenStr)
 	}
 
+	// JWTに入っているテナント名とHostヘッダのテナント名が一致しているか確認
+	baseHost := getEnv("ISUCON_BASE_HOSTNAME", ".t.isucon.dev")
+	tenantName := strings.TrimSuffix(c.Request().Host, baseHost)
+	if tenantName != aud[0] {
+		return nil, fmt.Errorf("token is invalid, tenant name is not match with %s: %s", c.Request().Host, tokenStr)
+	}
+
 	v := &Viewer{
 		role:       r,
 		playerID:   token.Subject(),
-		tenantName: aud[0],
+		tenantName: tenantName,
 	}
 	return v, nil
 }
@@ -603,17 +601,14 @@ type PlayersAddHandlerResult struct {
 
 func playersAddHandler(c echo.Context) error {
 	ctx := context.Background()
-	if v, err := parseViewer(c); err != nil {
+	v, err := parseViewer(c)
+	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
 		return errNotPermitted
 	}
 
-	tenantName, err := getTenantName(c)
-	if err != nil {
-		return fmt.Errorf("error getTenantName: %w", err)
-	}
-	tenantDB, err := connectToTenantDB(tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantName)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -679,17 +674,14 @@ type PlayerDisqualifiedHandlerResult struct {
 
 func playerDisqualifiedHandler(c echo.Context) error {
 	ctx := context.Background()
-	if v, err := parseViewer(c); err != nil {
+	v, err := parseViewer(c)
+	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
 		return errNotPermitted
 	}
 
-	tenantName, err := getTenantName(c)
-	if err != nil {
-		return fmt.Errorf("error getTenantName: %w", err)
-	}
-	tenantDB, err := connectToTenantDB(tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantName)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -738,17 +730,14 @@ type CompetitionsAddHandlerResult struct {
 
 func competitionsAddHandler(c echo.Context) error {
 	ctx := context.Background()
-	if v, err := parseViewer(c); err != nil {
+	v, err := parseViewer(c)
+	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
 		return errNotPermitted
 	}
 
-	tenantName, err := getTenantName(c)
-	if err != nil {
-		return fmt.Errorf("error getTenantName: %w", err)
-	}
-	tenantDB, err := connectToTenantDB(tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantName)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -787,17 +776,14 @@ func competitionsAddHandler(c echo.Context) error {
 
 func competitionFinishHandler(c echo.Context) error {
 	ctx := context.Background()
-	if v, err := parseViewer(c); err != nil {
+	v, err := parseViewer(c)
+	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
 		return errNotPermitted
 	}
 
-	tenantName, err := getTenantName(c)
-	if err != nil {
-		return fmt.Errorf("error getTenantName: %w", err)
-	}
-	tenantDB, err := connectToTenantDB(tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantName)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -828,17 +814,14 @@ func competitionFinishHandler(c echo.Context) error {
 
 func competitionResultHandler(c echo.Context) error {
 	ctx := context.Background()
-	if v, err := parseViewer(c); err != nil {
+	v, err := parseViewer(c)
+	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
 		return errNotPermitted
 	}
 
-	tenantName, err := getTenantName(c)
-	if err != nil {
-		return fmt.Errorf("error getTenantName: %w", err)
-	}
-	tenantDB, err := connectToTenantDB(tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantName)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -951,17 +934,14 @@ type BillingHandlerResult struct {
 
 func billingHandler(c echo.Context) error {
 	ctx := context.Background()
-	if v, err := parseViewer(c); err != nil {
+	v, err := parseViewer(c)
+	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
 		return errNotPermitted
 	}
 
-	tenantName, err := getTenantName(c)
-	if err != nil {
-		return fmt.Errorf("error getTenantName: %w", err)
-	}
-	tenantDB, err := connectToTenantDB(tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantName)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -972,9 +952,9 @@ func billingHandler(c echo.Context) error {
 		ctx,
 		&t,
 		"SELECT * FROM tenant WHERE name = ?",
-		tenantName,
+		v.tenantName,
 	); err != nil {
-		return fmt.Errorf("error Select tenant: name=%s, %w", tenantName, err)
+		return fmt.Errorf("error Select tenant: name=%s, %w", v.tenantName, err)
 	}
 
 	cs := []CompetitionRow{}
@@ -1026,11 +1006,7 @@ func playerHandler(c echo.Context) error {
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
 
-	tenantName, err := getTenantName(c)
-	if err != nil {
-		return fmt.Errorf("error getTenantName: %w", err)
-	}
-	tenantDB, err := connectToTenantDB(tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantName)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -1125,11 +1101,7 @@ func competitionRankingHandler(c echo.Context) error {
 		return echo.ErrBadRequest
 	}
 
-	tenantName, err := getTenantName(c)
-	if err != nil {
-		return fmt.Errorf("error getTenantName: %w", err)
-	}
-	tenantDB, err := connectToTenantDB(tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantName)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -1230,11 +1202,7 @@ func competitionsHandler(c echo.Context) error {
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
 
-	tenantName, err := getTenantName(c)
-	if err != nil {
-		return fmt.Errorf("error getTenantName: %w", err)
-	}
-	tenantDB, err := connectToTenantDB(tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantName)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
