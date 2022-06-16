@@ -56,6 +56,14 @@ func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantID string, ag
 	return ag.Do(ctx, req)
 }
 
+func GetOrganizerPlayersListAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.GET("/organizer/api/players")
+	if err != nil {
+		return nil, err
+	}
+	return ag.Do(ctx, req)
+}
+
 func PostOrganizerPlayersAddAction(ctx context.Context, playerDisplayNames []string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
 	for _, displayName := range playerDisplayNames {

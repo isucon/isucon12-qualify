@@ -103,7 +103,49 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 					if pl.IsDisqualified {
 						return fmt.Errorf("新規追加されたプレイヤーは失格になっていない必要があります player.id: %s", pl.ID)
 					}
+					var ok bool
+					for _, n := range playerDisplayNames {
+						if n == pl.DisplayName {
+							ok = true
+							break
+						}
+					}
+					if !ok {
+						return fmt.Errorf("新規追加したプレイヤーのDisplayNameが見つかりません")
+					}
 					playerIDs = append(playerIDs, pl.ID)
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+		// NOTE: 不正リクエストチェックなし
+	}
+
+	// プレイヤー一覧取得
+	{
+		res, err := GetOrganizerPlayersListAction(ctx, orgAg)
+		v := ValidateResponse("テナントのプレイヤー一覧取得", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayersList) error {
+				if len(playerIDs) != len(r.Data.Players) {
+					return fmt.Errorf("プレイヤー数が違います (want: %d, got: %d)", playerNum, len(r.Data.Players))
+				}
+				for _, pl := range r.Data.Players {
+					if pl.IsDisqualified {
+						return fmt.Errorf("新規追加されたプレイヤーは失格になっていない必要があります player.id: %s", pl.ID)
+					}
+					var ok bool
+					for _, id := range playerIDs {
+						if id == pl.ID {
+							ok = true
+							break
+						}
+					}
+					if !ok {
+						return fmt.Errorf("新規追加されたプレイヤーが一覧に含まれていません: id:%s display_name:%s", pl.ID, pl.DisplayName)
+					}
 				}
 				return nil
 			}),

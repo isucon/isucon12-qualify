@@ -132,6 +132,7 @@ func Run() {
 
 	// for tenant endpoint
 	// 参加者操作
+	e.GET("/organizer/api/players", playersListHandler)
 	e.POST("/organizer/api/players/add", playersAddHandler)
 	e.POST("/organizer/api/player/:player_id/disqualified", playerDisqualifiedHandler)
 	// 大会操作
@@ -593,6 +594,51 @@ type PlayerDetail struct {
 	ID             string `json:"id"`
 	DisplayName    string `json:"display_name"`
 	IsDisqualified bool   `json:"is_disqualified"`
+}
+
+type PlayersListHandlerResult struct {
+	Players []PlayerDetail `json:"players"`
+}
+
+func playersListHandler(c echo.Context) error {
+	ctx := context.Background()
+	v, err := parseViewer(c)
+	if err != nil {
+		return fmt.Errorf("error parseViewer: %w", err)
+	} else if v.role != RoleOrganizer {
+		return errNotPermitted
+	}
+
+	tenantDB, err := connectToTenantDB(v.tenantName)
+	if err != nil {
+		return fmt.Errorf("error connectToTenantDB: %w", err)
+	}
+	defer tenantDB.Close()
+
+	var pls []PlayerRow
+	if err := tenantDB.SelectContext(
+		ctx,
+		&pls,
+		"SELECT * FROM player ORDER BY created_at DESC",
+	); err != nil {
+		return fmt.Errorf("error Select player: %w", err)
+	}
+	var pds []PlayerDetail
+	for _, p := range pls {
+		pds = append(pds, PlayerDetail{
+			ID:             p.ID,
+			DisplayName:    p.DisplayName,
+			IsDisqualified: p.IsDisqualified,
+		})
+	}
+
+	res := PlayersListHandlerResult{
+		Players: pds,
+	}
+	if err := c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res}); err != nil {
+		return fmt.Errorf("error c.JSON: %w", err)
+	}
+	return nil
 }
 
 type PlayersAddHandlerResult struct {
@@ -1152,7 +1198,8 @@ func competitionRankingHandler(c echo.Context) error {
 	if err := tenantDB.SelectContext(
 		ctx,
 		&pss,
-		"SELECT * FROM player_score WHERE competition_id = ? ORDER BY score DESC",
+		// スコアが同じ場合はスコア登録日時が早いほうが上
+		"SELECT * FROM player_score WHERE competition_id = ? ORDER BY score DESC, created_at ASC",
 		competitionID,
 	); err != nil {
 		return fmt.Errorf("error Select player_score: competitionID=%s, %w", competitionID, err)

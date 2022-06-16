@@ -153,7 +153,7 @@ func (r ResponseAPIBase) ErrorMessage() string {
 
 type ResponseAPI interface {
 	ResponseAPIBase |
-		ResponseAPITenantsAdd | ResponseAPITenantsBilling | ResponseAPIPlayersAdd |
+		ResponseAPITenantsAdd | ResponseAPITenantsBilling | ResponseAPIPlayersAdd | ResponseAPIPlayersList |
 		ResponseAPIPlayerDisqualified | ResponseAPICompetitionsAdd | ResponseAPIBilling |
 		ResponseAPIPlayer | ResponseAPICompetitionRanking | ResponseAPICompetitions |
 		ResponseAPIInitialize | ResponseAPICompetitionRankingFinish | ResponseAPICompetitionResult
@@ -238,6 +238,12 @@ type ResponseAPIPlayersAdd struct {
 	ResponseAPIBase
 	Data isuports.PlayersAddHandlerResult `json:"data"`
 }
+
+type ResponseAPIPlayersList struct {
+	ResponseAPIBase
+	Data isuports.PlayersListHandlerResult `json:"data"`
+}
+
 type ResponseAPIPlayerDisqualified struct {
 	ResponseAPIBase
 	Data isuports.PlayerDisqualifiedHandlerResult `json:"data"`
