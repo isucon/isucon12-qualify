@@ -12,7 +12,7 @@ CREATE TABLE competition (
 );
 
 CREATE TABLE player (
-  id VARCHAR(255) PRIMARY KEY,
+  id VARCHAR(255) NOT NULL PRIMARY KEY,
   tenant_id BIGINT NOT NULL,
   display_name TEXT NOT NULL,
   is_disqualified INTEGER NOT NULL,
@@ -21,7 +21,7 @@ CREATE TABLE player (
 );
 
 CREATE TABLE player_score (
-  id VARCHAR(255) PRIMARY KEY,
+  id VARCHAR(255) NOT NULL PRIMARY KEY,
   tenant_id BIGINT NOT NULL,
   player_id VARCHAR(255) NOT NULL,
   competition_id VARCHAR(255) NOT NULL,
