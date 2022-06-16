@@ -574,7 +574,7 @@ func tenantsBillingHandler(c echo.Context) error {
 	if err := centerDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY id DESC"); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
-	tenantBillings := make([]TenantWithBilling, 0, len(ts))
+	tenantBillings := make([]TenantWithBilling, 0, len(ts)
 	for _, t := range ts {
 		if beforeID != 0 && beforeID <= t.ID {
 			continue
@@ -593,7 +593,8 @@ func tenantsBillingHandler(c echo.Context) error {
 		if err := tenantDB.SelectContext(
 			ctx,
 			&cs,
-			"SELECT * FROM competition",
+			"SELECT * FROM competition WHERE tenant_id=?",
+			t.ID,
 		); err != nil {
 			return fmt.Errorf("error Select competition: %w", err)
 		}
