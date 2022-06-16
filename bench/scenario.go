@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/isucon/isucandar/failure"
 	"github.com/isucon/isucandar/score"
 	"github.com/isucon/isucandar/worker"
+	"github.com/k0kubun/pp/v3"
 )
 
 var (
@@ -89,8 +89,9 @@ type Scenario struct {
 
 	ScenarioScoreMap sync.Map // map[string]*int64
 
-	InitialData InitialDataRows
-	RawKey      *rsa.PrivateKey
+	InitialData        InitialDataRows
+	DisqualifiedPlayer map[string]struct{}
+	RawKey             *rsa.PrivateKey
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -100,6 +101,7 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	s.ScenarioScoreMap = sync.Map{}
+	s.DisqualifiedPlayer = map[string]struct{}{}
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(s.Option.TargetURL)
@@ -184,7 +186,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
-	// 参加者シナリオ
+	// 初期データプレイヤー整合性チェックシナリオ
 	playerCase, err := s.PlayerScenarioWorker(step, 1)
 	if err != nil {
 		return err
@@ -194,7 +196,12 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
-	AdminLogger.Printf("%d workers", len([]*worker.Worker{newTenantCase, organizerCase, playerCase, adminBillingCase}))
+	AdminLogger.Printf("%d workers", len([]*worker.Worker{
+		newTenantCase,
+		organizerCase,
+		// playerCase,
+		adminBillingCase,
+	}))
 
 	workers := []*worker.Worker{
 		newTenantCase,
@@ -243,7 +250,7 @@ func (s *Scenario) loadAdjustor(ctx context.Context, step *isucandar.BenchmarkSt
 			step.Cancel()
 			return
 		}
-		addParallels := int32(1)
+		addParallels := int32(0)
 		if diff := total - prevErrors; diff > 0 {
 			ContestantLogger.Printf("エラーが%d件増えました(現在%d件)", diff, total)
 		} else {
@@ -299,6 +306,7 @@ func (sc *Scenario) AddScoreByScenario(step *isucandar.BenchmarkStep, scoreTag s
 
 // シナリオ毎のスコア表示
 func (sc *Scenario) PrintScenarioScoreMap() {
+	ssmap := map[string]int64{}
 	sc.ScenarioScoreMap.Range(func(key, value any) bool {
 		tag, okKey := key.(string)
 		scorePtr, okVal := value.(*int64)
@@ -306,9 +314,10 @@ func (sc *Scenario) PrintScenarioScoreMap() {
 			log.Printf("error failed ScenarioScoreMap.Load type assertion: key(%s)\n", key)
 			return false
 		}
-
 		scoreVal := atomic.LoadInt64(scorePtr)
-		ContestantLogger.Println(string(tag) + ": " + strconv.FormatInt(scoreVal, 10))
+		ssmap[string(tag)] = scoreVal
+
 		return true
 	})
+	AdminLogger.Println(pp.Sprint(ssmap))
 }

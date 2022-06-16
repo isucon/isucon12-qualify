@@ -33,6 +33,7 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 	report := timeReporter("新規追加: 主催者シナリオ")
 	defer report()
 	scTag := ScenarioTag("OrganizerScenario")
+	AdminLogger.Printf("%s start\n", scTag)
 
 	// 各テナント
 	//  大会の作成 x N
@@ -72,7 +73,9 @@ func (sc *Scenario) OrganizerScenario(ctx context.Context, step *isucandar.Bench
 				return nil
 			}),
 		)
-		if !v.IsEmpty() {
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
+		} else {
 			return v
 		}
 	}

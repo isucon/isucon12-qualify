@@ -9,6 +9,7 @@ import (
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucon12-qualify/bench"
+	"github.com/k0kubun/pp/v3"
 )
 
 const (
@@ -99,6 +100,7 @@ func main() {
 	score, addition, deduction := SumScore(result)
 	bench.ContestantLogger.Printf("SCORE: %d (+%d %d)", score, addition, -deduction)
 	bench.ContestantLogger.Printf("RESULT: %#v", result.Score.Breakdown())
+	bench.AdminLogger.Printf("%s", pp.Sprint(result.Score.Breakdown()))
 
 	// 0点以下(fail)ならエラーで終了
 	if option.ExitErrorOnFail && score <= 0 {
