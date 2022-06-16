@@ -37,7 +37,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	report := timeReporter("大会参加者の整合性チェックシナリオ")
 	defer report()
 	scTag := ScenarioTag("PlayerScenario")
-	ContestantLogger.Printf("%s start\n", scTag)
+	AdminLogger.Printf("%s start\n", scTag)
 
 	// 初期データから一人選ぶ
 	data := sc.InitialData.Choise()

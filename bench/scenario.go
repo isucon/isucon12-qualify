@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,6 +17,7 @@ import (
 	"github.com/isucon/isucandar/failure"
 	"github.com/isucon/isucandar/score"
 	"github.com/isucon/isucandar/worker"
+	"github.com/k0kubun/pp/v3"
 )
 
 var (
@@ -306,6 +306,7 @@ func (sc *Scenario) AddScoreByScenario(step *isucandar.BenchmarkStep, scoreTag s
 
 // シナリオ毎のスコア表示
 func (sc *Scenario) PrintScenarioScoreMap() {
+	ssmap := map[string]int64{}
 	sc.ScenarioScoreMap.Range(func(key, value any) bool {
 		tag, okKey := key.(string)
 		scorePtr, okVal := value.(*int64)
@@ -313,9 +314,10 @@ func (sc *Scenario) PrintScenarioScoreMap() {
 			log.Printf("error failed ScenarioScoreMap.Load type assertion: key(%s)\n", key)
 			return false
 		}
-
 		scoreVal := atomic.LoadInt64(scorePtr)
-		ContestantLogger.Println(string(tag) + ": " + strconv.FormatInt(scoreVal, 10))
+		ssmap[string(tag)] = scoreVal
+
 		return true
 	})
+	AdminLogger.Println(pp.Sprint(ssmap))
 }

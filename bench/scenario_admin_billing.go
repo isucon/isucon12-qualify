@@ -34,7 +34,7 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 	defer report()
 
 	scTag := ScenarioTag("AdminBillingScenario")
-	ContestantLogger.Printf("%s start\n", scTag)
+	AdminLogger.Printf("%s start\n", scTag)
 
 	admin := &Account{
 		Role:       AccountRoleAdmin,

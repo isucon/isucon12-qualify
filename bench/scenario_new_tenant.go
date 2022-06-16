@@ -30,7 +30,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	report := timeReporter("新規テナントシナリオ")
 	defer report()
 	scTag := ScenarioTag("NewTenantScenario")
-	ContestantLogger.Printf("%s start\n", scTag)
+	AdminLogger.Printf("%s start\n", scTag)
 
 	addPlayerTimes := 20 // PlayersAddを叩く回数
 	addPlayerNum := 5    // 1度のPlayersAddで追加するプレイヤー数
@@ -224,7 +224,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	// 	}
 	// }
 
-	ContestantLogger.Println("NewTenantScenario end")
+	AdminLogger.Println("NewTenantScenario end")
 	return nil
 }
 
