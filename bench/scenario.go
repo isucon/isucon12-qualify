@@ -186,6 +186,11 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
+	// 初期データテナントシナリオ
+	existingTenantCase, err := s.ExistingTenantScenarioWorker(step, 1)
+	if err != nil {
+		return err
+	}
 	// 初期データプレイヤー整合性チェックシナリオ
 	playerCase, err := s.PlayerScenarioWorker(step, 1)
 	if err != nil {
@@ -207,6 +212,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 		newTenantCase,
 		organizerCase,
 		playerCase,
+		existingTenantCase,
 		adminBillingCase,
 	}
 	for _, w := range workers {
@@ -223,6 +229,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 		s.loadAdjustor(ctx, step,
 			newTenantCase,
 			organizerCase,
+			existingTenantCase,
 			playerCase,
 		)
 	}()
