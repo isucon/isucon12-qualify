@@ -302,7 +302,13 @@ func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 }
 
 func CreateCompetitions(tenant *isuports.TenantRow) []*isuports.CompetitionRow {
-	num := fake.IntBetween(competitionsNumByTenant/10, competitionsNumByTenant)
+	var num int
+	if tenant.ID == 1 {
+		num = competitionsNumByTenant
+	} else {
+		num = fake.IntBetween(competitionsNumByTenant/10, competitionsNumByTenant)
+	}
+	log.Printf("create %d competitions for tenant %s", num, tenant.Name)
 	rows := make([]*isuports.CompetitionRow, 0, num)
 	for i := 0; i < num; i++ {
 		rows = append(rows, CreateCompetition(tenant))
