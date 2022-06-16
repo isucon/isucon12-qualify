@@ -368,7 +368,7 @@ func tenantsAddHandler(c echo.Context) error {
 		return echo.ErrBadRequest
 	}
 
-	ctx := c.Request().Context()
+	ctx := context.Background()
 	tx, err := centerDB.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("error centerDB.BeginTxx: %w", err)
@@ -518,7 +518,7 @@ func tenantsBillingHandler(c echo.Context) error {
 		return echo.ErrNotFound
 	}
 
-	ctx := c.Request().Context()
+	ctx := context.Background()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleAdmin {
@@ -602,7 +602,7 @@ type PlayersAddHandlerResult struct {
 }
 
 func playersAddHandler(c echo.Context) error {
-	ctx := c.Request().Context()
+	ctx := context.Background()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
@@ -678,7 +678,7 @@ type PlayerDisqualifiedHandlerResult struct {
 }
 
 func playerDisqualifiedHandler(c echo.Context) error {
-	ctx := c.Request().Context()
+	ctx := context.Background()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
@@ -737,7 +737,7 @@ type CompetitionsAddHandlerResult struct {
 }
 
 func competitionsAddHandler(c echo.Context) error {
-	ctx := c.Request().Context()
+	ctx := context.Background()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
@@ -786,7 +786,7 @@ func competitionsAddHandler(c echo.Context) error {
 }
 
 func competitionFinishHandler(c echo.Context) error {
-	ctx := c.Request().Context()
+	ctx := context.Background()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
@@ -827,7 +827,7 @@ func competitionFinishHandler(c echo.Context) error {
 }
 
 func competitionResultHandler(c echo.Context) error {
-	ctx := c.Request().Context()
+	ctx := context.Background()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
@@ -950,7 +950,7 @@ type BillingHandlerResult struct {
 }
 
 func billingHandler(c echo.Context) error {
-	ctx := c.Request().Context()
+	ctx := context.Background()
 	if v, err := parseViewer(c); err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
@@ -1019,7 +1019,7 @@ type PlayerHandlerResult struct {
 }
 
 func playerHandler(c echo.Context) error {
-	ctx := c.Request().Context()
+	ctx := context.Background()
 
 	v, err := parseViewer(c)
 	if err != nil {
@@ -1114,7 +1114,7 @@ type CompetitionRankingHandlerResult struct {
 }
 
 func competitionRankingHandler(c echo.Context) error {
-	ctx := c.Request().Context()
+	ctx := context.Background()
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
@@ -1143,7 +1143,7 @@ func competitionRankingHandler(c echo.Context) error {
 		return fmt.Errorf("error retrieveCompetition: %w", err)
 	}
 
-	vp, err := retrievePlayer(c.Request().Context(), tenantDB, v.playerID)
+	vp, err := retrievePlayer(ctx, tenantDB, v.playerID)
 	if err != nil {
 		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
 	}
@@ -1223,7 +1223,7 @@ type CompetitionsHandlerResult struct {
 }
 
 func competitionsHandler(c echo.Context) error {
-	ctx := c.Request().Context()
+	ctx := context.Background()
 
 	v, err := parseViewer(c)
 	if err != nil {
@@ -1240,7 +1240,7 @@ func competitionsHandler(c echo.Context) error {
 	}
 	defer tenantDB.Close()
 
-	vp, err := retrievePlayer(c.Request().Context(), tenantDB, v.playerID)
+	vp, err := retrievePlayer(ctx, tenantDB, v.playerID)
 	if err != nil {
 		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
 	}
