@@ -126,6 +126,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	// 大会のランキングを参照するプレイヤーたち
+	// TODO: 要調整 一定回数見たらforを抜けて大会のcloseをしたいかも
 	errorCount := 0
 	for errorCount < errorLimit {
 		for _, player := range players {
@@ -145,6 +146,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 	return nil
 
+	// TODO: 一旦スキップ、この辺りはorganizer scenarioでも確認しているのでどこまでやるか
 	// 大会結果入稿 x 1
 	// {
 	// 	var score ScoreRows
