@@ -10,7 +10,7 @@ import (
 
 func (sc *Scenario) ExistingTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		if err := sc.OrganizerScenario(ctx, step); err != nil {
+		if err := sc.ExistingTenantScenario(ctx, step); err != nil {
 			AdminLogger.Printf("[OrganizerScenario]: %v", err)
 			time.Sleep(SleepOnError)
 		}
