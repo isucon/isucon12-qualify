@@ -834,7 +834,7 @@ func competitionsAddHandler(c echo.Context) error {
 	); err != nil {
 		return fmt.Errorf(
 			"error Insert competition: id=%s, tenant_id=%d, title=%s, finishedAt=null, createdAt=%s, updatedAt=%s, %w",
-			id, title, now, now, err,
+			id, v.tenantID, title, now, now, err,
 		)
 	}
 
