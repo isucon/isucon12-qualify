@@ -307,11 +307,11 @@ type PlayerRow struct {
 }
 
 func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id string) (*PlayerRow, error) {
-	var c PlayerRow
-	if err := tenantDB.GetContext(ctx, &c, "SELECT * FROM player WHERE id = ?", id); err != nil {
+	var p PlayerRow
+	if err := tenantDB.GetContext(ctx, &p, "SELECT * FROM player WHERE id = ?", id); err != nil {
 		return nil, fmt.Errorf("error Select player: id=%s, %w", id, err)
 	}
-	return &c, nil
+	return &p, nil
 }
 
 type CompetitionRow struct {
@@ -1115,28 +1115,28 @@ func competitionRankingHandler(c echo.Context) error {
 		return fmt.Errorf("error retrieveCompetition: %w", err)
 	}
 
-	vp, err := retrievePlayer(ctx, tenantDB, v.playerID)
+	player, err := retrievePlayer(ctx, tenantDB, v.playerID)
 	if err != nil {
 		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
 	}
-	if vp.IsDisqualified {
+	if player.IsDisqualified {
 		return errNotPermitted
 	}
 
 	now := time.Now()
-	var t TenantRow
-	if err := centerDB.GetContext(ctx, &t, "SELECT * FROM tenant WHERE name = ?", v.tenantName); err != nil {
+	var tenant TenantRow
+	if err := centerDB.GetContext(ctx, &tenant, "SELECT * FROM tenant WHERE name = ?", v.tenantName); err != nil {
 		return fmt.Errorf("error Select tenant: name=%s, %w", v.tenantName, err)
 	}
 
 	if _, err := centerDB.ExecContext(
 		ctx,
 		"INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-		vp.ID, t.ID, competitionID, now, now,
+		player.ID, tenant.ID, competitionID, now, now,
 	); err != nil {
 		return fmt.Errorf(
 			"error Insert visit_history: playerID=%s, tenantID=%d, competitionID=%s, createdAt=%s, updatedAt=%s, %w",
-			vp.ID, t.ID, competitionID, now, now, err,
+			player.ID, tenant.ID, competitionID, now, now, err,
 		)
 	}
 
@@ -1152,27 +1152,27 @@ func competitionRankingHandler(c echo.Context) error {
 	if err := tenantDB.SelectContext(
 		ctx,
 		&pss,
-		"SELECT * FROM player_score WHERE competition_id = ? ORDER BY score DESC, player_id DESC",
+		"SELECT * FROM player_score WHERE competition_id = ? ORDER BY score DESC",
 		competitionID,
 	); err != nil {
 		return fmt.Errorf("error Select player_score: competitionID=%s, %w", competitionID, err)
 	}
-	crs := make([]CompetitionRank, 0, len(pss))
+	ranks := make([]CompetitionRank, 0, len(pss))
 	for i, ps := range pss {
-		co, err := retrievePlayer(ctx, tenantDB, ps.PlayerID)
+		p, err := retrievePlayer(ctx, tenantDB, ps.PlayerID)
 		if err != nil {
 			return fmt.Errorf("error retrievePlayer: %w", err)
 		}
 		if int64(i) < rankAfter {
 			continue
 		}
-		crs = append(crs, CompetitionRank{
+		ranks = append(ranks, CompetitionRank{
 			Rank:              int64(i + 1),
 			Score:             ps.Score,
-			PlayerID:          co.ID,
-			PlayerDisplayName: co.DisplayName,
+			PlayerID:          p.ID,
+			PlayerDisplayName: p.DisplayName,
 		})
-		if len(crs) >= 100 {
+		if len(ranks) >= 100 {
 			break
 		}
 	}
@@ -1180,7 +1180,7 @@ func competitionRankingHandler(c echo.Context) error {
 	res := SuccessResult{
 		Success: true,
 		Data: CompetitionRankingHandlerResult{
-			Ranks: crs,
+			Ranks: ranks,
 		},
 	}
 	if err := c.JSON(http.StatusOK, res); err != nil {
