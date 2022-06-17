@@ -199,6 +199,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
+
 	AdminLogger.Printf("%d workers", len([]*worker.Worker{
 		newTenantCase,
 		existingTenantCase,
@@ -208,7 +209,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 
 	workers := []*worker.Worker{
 		newTenantCase,
-		// playerCase,
+		playerCase,
 		existingTenantCase,
 		adminBillingCase,
 	}
@@ -225,6 +226,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 		defer wg.Done()
 		s.loadAdjustor(ctx, step,
 			existingTenantCase,
+			newTenantCase,
 		)
 	}()
 	wg.Wait()
