@@ -33,6 +33,11 @@ func (sc *Scenario) ExistingTenantScenario(ctx context.Context, step *isucandar.
 	AdminLogger.Printf("%s start\n", scTag)
 
 	data := sc.InitialData.Choise()
+	// 初期データの一番思いデータにあたったら再抽選する
+	if data.TenantName == "isucon" {
+		AdminLogger.Printf("かわいそうに... (%v)", data)
+		data = sc.InitialData.Choise()
+	}
 	organizer := Account{
 		Role:       AccountRoleOrganizer,
 		TenantName: data.TenantName,
@@ -64,6 +69,7 @@ func (sc *Scenario) ExistingTenantScenario(ctx context.Context, step *isucandar.
 			return v
 		}
 	}
+	AdminLogger.Printf("%s end\n", scTag)
 
 	return nil
 }

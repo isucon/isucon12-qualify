@@ -72,9 +72,12 @@ var ResultScoreMap = map[score.ScoreTag]int64{
 	ScorePOSTOrganizerCompetitionFinish:  1,
 	ScorePOSTOrganizerCompetitionResult:  1,
 	ScoreGETOrganizerBilling:             1,
-	ScoreGETPlayerDetails:                1,
-	ScoreGETPlayerRanking:                1,
-	ScoreGETPlayerCompetitions:           1,
+
+	// TODO: 要調整 Player類はどうしても爆速で回るので加点はなし
+	// エラーが発生したら減点、MaxErrors数発生したらbench打ち切り
+	ScoreGETPlayerDetails:      0,
+	ScoreGETPlayerRanking:      0,
+	ScoreGETPlayerCompetitions: 0,
 }
 
 type TenantData struct {
@@ -198,13 +201,14 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	}
 	AdminLogger.Printf("%d workers", len([]*worker.Worker{
 		newTenantCase,
-		// playerCase,
+		existingTenantCase,
+		playerCase,
 		adminBillingCase,
 	}))
 
 	workers := []*worker.Worker{
 		newTenantCase,
-		playerCase,
+		// playerCase,
 		existingTenantCase,
 		adminBillingCase,
 	}
@@ -282,7 +286,6 @@ func getEnv(key string, defaultValue string) string {
 // どのシナリオから加算されたスコアかをカウントしならがスコアを追加する
 type ScenarioTag string
 
-// AddScoreByScenarioが呼び出された回数はカウントされるが、AddScoreがResultに反映されるかは別なようなのでスコアはズレる
 func (sc *Scenario) AddScoreByScenario(step *isucandar.BenchmarkStep, scoreTag score.ScoreTag, scenarioTag ScenarioTag) {
 	key := fmt.Sprintf("%s", scenarioTag)
 	value, ok := sc.ScenarioScoreMap.Load(key)

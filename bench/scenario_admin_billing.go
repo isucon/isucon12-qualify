@@ -2,7 +2,6 @@ package bench
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -18,8 +17,7 @@ func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p 
 			time.Sleep(SleepOnError)
 		}
 	},
-		// 3回までエラーを許容する
-		worker.WithLoopCount(3),
+		worker.WithInfinityLoop(),
 		worker.WithMaxParallelism(1),
 	)
 	if err != nil {
@@ -50,36 +48,29 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		return err
 	}
 
-	var beforeTenantID string
-	var completed bool
-	// エラーが出るまで最初から最後にたどるのを繰り返す
-	for {
-		// 1ページ目から最後まで辿る
-		beforeTenantID = "" // 最初はbeforeが空
-		completed = false
-		for !completed {
-			res, err := GetAdminTenantsBillingAction(ctx, beforeTenantID, adminAg)
-			v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
-					if len(r.Data.Tenants) == 0 {
-						completed = true
-						return nil
-					}
-					for _, tenant := range r.Data.Tenants {
-						AdminLogger.Printf("%s: %d yen", tenant.Name, tenant.BillingYen)
-					}
-					beforeTenantID = r.Data.Tenants[len(r.Data.Tenants)-1].ID
+	// 1ページ目から最後まで辿る
+	beforeTenantID := "" // 最初はbeforeが空
+	completed := false
+	for !completed {
+		res, err := GetAdminTenantsBillingAction(ctx, beforeTenantID, adminAg)
+		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
+				if len(r.Data.Tenants) == 0 {
+					completed = true
 					return nil
-				}),
-			)
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
-			} else {
-				return v
-			}
+				}
+				for _, tenant := range r.Data.Tenants {
+					AdminLogger.Printf("%s: %d yen", tenant.Name, tenant.BillingYen)
+				}
+				beforeTenantID = r.Data.Tenants[len(r.Data.Tenants)-1].ID
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
+		} else {
+			return v
 		}
 	}
-
-	// 何らかの理由でエラーを出さずforを抜けた場合
-	return fmt.Errorf("AdminBillingScenario 謎の終了")
+	return nil
 }
