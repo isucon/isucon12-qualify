@@ -132,23 +132,23 @@ func Run() {
 
 	// for tenant endpoint
 	// 参加者操作
-	e.GET("/organizer/api/players", playersListHandler)
-	e.POST("/organizer/api/players/add", playersAddHandler)
-	e.POST("/organizer/api/player/:player_id/disqualified", playerDisqualifiedHandler)
+	e.GET("/api/organizer/players", playersListHandler)
+	e.POST("/api/organizer/players/add", playersAddHandler)
+	e.POST("/api/organizer/player/:player_id/disqualified", playerDisqualifiedHandler)
 	// 大会操作
-	e.POST("/organizer/api/competitions/add", competitionsAddHandler)
-	e.POST("/organizer/api/competition/:competition_id/finish", competitionFinishHandler)
-	e.POST("/organizer/api/competition/:competition_id/result", competitionResultHandler)
+	e.POST("/api/organizer/competitions/add", competitionsAddHandler)
+	e.POST("/api/organizer/competition/:competition_id/finish", competitionFinishHandler)
+	e.POST("/api/organizer/competition/:competition_id/result", competitionResultHandler)
 	// テナント操作
-	e.GET("/organizer/api/billing", billingHandler)
+	e.GET("/api/organizer/billing", billingHandler)
 	// 参加者からの閲覧
-	e.GET("/player/api/player/:player_id", playerHandler)
-	e.GET("/player/api/competition/:competition_id/ranking", competitionRankingHandler)
-	e.GET("/player/api/competitions", competitionsHandler)
+	e.GET("/api/player/player/:player_id", playerHandler)
+	e.GET("/api/player/competition/:competition_id/ranking", competitionRankingHandler)
+	e.GET("/api/player/competitions", competitionsHandler)
 
 	// for admin endpoint
-	e.POST("/admin/api/tenants/add", tenantsAddHandler)
-	e.GET("/admin/api/tenants/billing", tenantsBillingHandler)
+	e.POST("/api/admin/tenants/add", tenantsAddHandler)
+	e.GET("/api/admin/tenants/billing", tenantsBillingHandler)
 
 	e.HTTPErrorHandler = errorResponseHandler
 
