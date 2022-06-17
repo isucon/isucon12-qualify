@@ -5,17 +5,15 @@ services:
     image: nginx:1.22
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/tls:/etc/nginx/tls
       #- ./public:/public
     ports:
-      - "80:80"
+      - "443:443"
     network_mode: host
     restart: always
 
   blackauth:
     build: ./blackauth/
-    environment:
-      ISUCON_BASE_HOSTNAME: .t.isucon.dev
-      ISUCON_ADMIN_HOSTNAME: admin.t.isucon.dev
     ports:
       - "3001:3001"
     init: true
