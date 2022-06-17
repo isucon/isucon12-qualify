@@ -52,4 +52,4 @@ jobs:
         working-directory: ./bench
         run: |
           make
-          ./bench -target-addr 127.0.0.1:3000
+          ./bench -target-addr 127.0.0.1:3000 -target-url http://t.isucon.dev
