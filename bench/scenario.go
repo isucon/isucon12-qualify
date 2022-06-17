@@ -181,11 +181,6 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
-	// 主催者(テナントオーナー)シナリオ
-	organizerCase, err := s.OrganizerScenarioWorker(step, 1)
-	if err != nil {
-		return err
-	}
 	// 初期データテナントシナリオ
 	existingTenantCase, err := s.ExistingTenantScenarioWorker(step, 1)
 	if err != nil {
@@ -203,14 +198,12 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	}
 	AdminLogger.Printf("%d workers", len([]*worker.Worker{
 		newTenantCase,
-		organizerCase,
 		// playerCase,
 		adminBillingCase,
 	}))
 
 	workers := []*worker.Worker{
 		newTenantCase,
-		organizerCase,
 		playerCase,
 		existingTenantCase,
 		adminBillingCase,
@@ -227,10 +220,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	go func() {
 		defer wg.Done()
 		s.loadAdjustor(ctx, step,
-			newTenantCase,
-			organizerCase,
 			existingTenantCase,
-			playerCase,
 		)
 	}()
 	wg.Wait()
@@ -257,15 +247,13 @@ func (s *Scenario) loadAdjustor(ctx context.Context, step *isucandar.BenchmarkSt
 			step.Cancel()
 			return
 		}
-		addParallels := int32(0)
 		if diff := total - prevErrors; diff > 0 {
 			ContestantLogger.Printf("エラーが%d件増えました(現在%d件)", diff, total)
 		} else {
 			ContestantLogger.Println("並列数を1追加します")
-			addParallels = 1
-		}
-		for _, w := range workers {
-			w.AddParallelism(addParallels)
+			for _, w := range workers {
+				w.AddParallelism(1)
+			}
 		}
 		prevErrors = total
 	}

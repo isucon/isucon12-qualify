@@ -128,7 +128,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	// 大会のランキングを参照するプレイヤーたち
 	// TODO: 要調整 一定回数見たらforを抜けて大会のcloseをしたいかも
 	errorCount := 0
-	for errorCount < errorLimit {
+	for loopCount := 0; errorCount < errorLimit && loopCount < 100; loopCount++ {
 		for _, player := range players {
 			if err := sc.tenantPlayerScenario(ctx, step, &tenantPlayerScenarioData{
 				tenantName:    tenant.Name,
@@ -211,20 +211,20 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	// }
 
 	// テナント請求ダッシュボードの閲覧 x 1
-	// {
-	// 	res, err := GetOrganizerBillingAction(ctx, orgAg)
-	// 	v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
-	// 		WithSuccessResponse(func(r ResponseAPIBilling) error {
-	// 			_ = r
-	// 			return nil
-	// 		}),
-	// 	)
-	// 	if v.IsEmpty() {
-	// 		sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
-	// 	} else {
-	// 		return v
-	// 	}
-	// }
+	{
+		res, err := GetOrganizerBillingAction(ctx, orgAg)
+		v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIBilling) error {
+				_ = r
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
+		} else {
+			return v
+		}
+	}
 
 	AdminLogger.Println("NewTenantScenario end")
 	return nil
@@ -252,20 +252,20 @@ func (sc *Scenario) tenantPlayerScenario(ctx context.Context, step *isucandar.Be
 		return err
 	}
 
-	{
-		res, err := GetPlayerAction(ctx, data.playerID, playerAg)
-		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPIPlayer) error {
-				_ = r
-				return nil
-			}),
-		)
-		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
-		} else {
-			return v
-		}
-	}
+	// {
+	// 	res, err := GetPlayerAction(ctx, data.playerID, playerAg)
+	// 	v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
+	// 		WithSuccessResponse(func(r ResponseAPIPlayer) error {
+	// 			_ = r
+	// 			return nil
+	// 		}),
+	// 	)
+	// 	if v.IsEmpty() {
+	// 		sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+	// 	} else {
+	// 		return v
+	// 	}
+	// }
 	{
 		res, err := GetPlayerCompetitionRankingAction(ctx, data.competitionID, "", playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
@@ -280,20 +280,20 @@ func (sc *Scenario) tenantPlayerScenario(ctx context.Context, step *isucandar.Be
 			return v
 		}
 	}
-	{
-		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
-		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPICompetitions) error {
-				_ = r
-				return nil
-			}),
-		)
-		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
-		} else {
-			return v
-		}
-	}
+	// {
+	// 	res, err := GetPlayerCompetitionsAction(ctx, playerAg)
+	// 	v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
+	// 		WithSuccessResponse(func(r ResponseAPICompetitions) error {
+	// 			_ = r
+	// 			return nil
+	// 		}),
+	// 	)
+	// 	if v.IsEmpty() {
+	// 		sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+	// 	} else {
+	// 		return v
+	// 	}
+	// }
 
 	return nil
 }
