@@ -493,26 +493,22 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 		billingMap[vh.PlayerID] = 10
 	}
 
-	pss := []PlayerScoreRow{}
+	scoredPlayerIDs := []string{}
 	if err := tenantDB.SelectContext(
 		ctx,
-		&pss,
-		"SELECT * FROM player_score WHERE competition_id = ?",
-		comp.ID,
+		&scoredPlayerIDs,
+		"SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?",
+		tenantID, comp.ID,
 	); err != nil && err != sql.ErrNoRows {
-		return nil, fmt.Errorf("error Select count player_score: competitionID=%s, %w", competitonID, err)
+		return nil, fmt.Errorf("error Select count player_score: tenantID=%d, competitionID=%s, %w", tenantID, competitonID, err)
 	}
-	for _, ps := range pss {
-		player, err := retrievePlayer(ctx, tenantDB, ps.PlayerID)
-		if err != nil {
-			return nil, fmt.Errorf("error retrievePlayer: %w", err)
-		}
-		if _, ok := billingMap[player.ID]; ok {
+	for _, pid := range scoredPlayerIDs {
+		if _, ok := billingMap[pid]; ok {
 			// scoreに登録されているplayerでアクセスした人 * 100
-			billingMap[player.ID] = 100
+			billingMap[pid] = 100
 		} else {
 			// scoreに登録されているplayerでアクセスしていない人 * 50
-			billingMap[player.ID] = 50
+			billingMap[pid] = 50
 		}
 	}
 
@@ -526,7 +522,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 	return &BillingReport{
 		CompetitionID:    comp.ID,
 		CompetitionTitle: comp.Title,
-		PlayerCount:      int64(len(pss)),
+		PlayerCount:      int64(len(scoredPlayerIDs)),
 		BillingYen:       billingYen,
 	}, nil
 }
