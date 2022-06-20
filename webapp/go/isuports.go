@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1069,9 +1068,8 @@ func billingHandler(c echo.Context) error {
 }
 
 type PlayerScoreDetail struct {
-	CompetitionCreatedAt time.Time `json:"-"`
-	CompetitionTitle     string    `json:"competition_title"`
-	Score                int64     `json:"score"`
+	CompetitionTitle string `json:"competition_title"`
+	Score            int64  `json:"score"`
 }
 
 type PlayerHandlerResult struct {
@@ -1114,16 +1112,30 @@ func playerHandler(c echo.Context) error {
 		}
 		return fmt.Errorf("error retrievePlayer: %w", err)
 	}
-	pss := []PlayerScoreRow{}
+	cs := []CompetitionRow{}
 	if err := tenantDB.SelectContext(
 		ctx,
-		&pss,
-		"SELECT * FROM player_score WHERE tenant_id = ? AND player_id = ? ORDER BY competition_id ASC",
-		v.tenantID,
-		p.ID,
-	); err != nil {
-		return fmt.Errorf("error Select player_score: tenant_id=%d, playerID=%s, %w", v.tenantID, p.ID, err)
+		&cs,
+		"SELECT * FROM competition ORDER BY created_at ASC",
+	); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("error Select competition: %w", err)
 	}
+	pss := make([]PlayerScoreRow, 0, len(cs))
+	for _, c := range cs {
+		ps := PlayerScoreRow{}
+		if err := tenantDB.SelectContext(
+			ctx,
+			&ps,
+			// 最後にCSVに登場したスコアを採用する = row_numberが一番行もの
+			"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_number DESC LIMIT 1",
+			v.tenantID,
+			p.ID,
+		); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("error Select player_score: tenantID=%d, competitionID=%s, playerID=%s, %w", v.tenantID, c.ID, p.ID, err)
+		}
+		pss = append(pss, ps)
+	}
+
 	psds := make([]PlayerScoreDetail, 0, len(pss))
 	for _, ps := range pss {
 		comp, err := retrieveCompetition(ctx, tenantDB, ps.CompetitionID)
@@ -1131,16 +1143,10 @@ func playerHandler(c echo.Context) error {
 			return fmt.Errorf("error retrieveCompetition: %w", err)
 		}
 		psds = append(psds, PlayerScoreDetail{
-			CompetitionCreatedAt: comp.CreatedAt,
-			CompetitionTitle:     comp.Title,
-			Score:                ps.Score,
+			CompetitionTitle: comp.Title,
+			Score:            ps.Score,
 		})
 	}
-	// 大会作成日時で降順ソートする
-	sort.Slice(psds, func(i, j int) bool {
-		psd1, psd2 := psds[i], psds[j]
-		return psd1.CompetitionCreatedAt.After(psd2.CompetitionCreatedAt)
-	})
 
 	res := SuccessResult{
 		Success: true,
