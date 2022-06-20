@@ -1241,23 +1241,32 @@ func competitionRankingHandler(c echo.Context) error {
 		ctx,
 		&pss,
 		// スコアが同じ場合はスコア登録日時が早いほうが上
-		"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY score DESC, created_at ASC",
+		"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY score DESC, row_number DESC, created_at ASC",
 		tenant.ID,
 		competitionID,
 	); err != nil {
 		return fmt.Errorf("error Select player_score: competitionID=%s, %w", competitionID, err)
 	}
 	ranks := make([]CompetitionRank, 0, len(pss))
-	for i, ps := range pss {
+	scoredPlayerSet := make(map[string]struct{}, len(pss))
+	var rank int64
+	for _, ps := range pss {
+		// player_scoreが同一player_id内ではrow_numberの降順で整列利用されているので
+		// 現れたのが2回目以降のplayer_idはより大きいrow_numberでスコアが出ているとみなせる
+		if _, ok := scoredPlayerSet[ps.PlayerID]; ok {
+			continue
+		}
+		scoredPlayerSet[ps.PlayerID] = struct{}{}
+		rank++
+		if rank <= rankAfter {
+			continue
+		}
 		p, err := retrievePlayer(ctx, tenantDB, ps.PlayerID)
 		if err != nil {
 			return fmt.Errorf("error retrievePlayer: %w", err)
 		}
-		if int64(i) < rankAfter {
-			continue
-		}
 		ranks = append(ranks, CompetitionRank{
-			Rank:              int64(i + 1),
+			Rank:              rank,
 			Score:             ps.Score,
 			PlayerID:          p.ID,
 			PlayerDisplayName: p.DisplayName,
