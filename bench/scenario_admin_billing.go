@@ -2,7 +2,6 @@ package bench
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -12,14 +11,15 @@ import (
 // ずっと/admin/billingを見続けるシナリオ
 // 指定回数エラーが出るまで繰り返し、並列動作はしない
 func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
+	scTag := ScenarioTag("AdminBillingScenario")
+
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		if err := sc.AdminBillingScenario(ctx, step); err != nil {
-			AdminLogger.Printf("[AdminBillingScenario]: %s", err)
+		if err := sc.AdminBillingScenario(ctx, step, scTag); err != nil {
+			sc.ScenarioError(scTag, err)
 			time.Sleep(SleepOnError)
 		}
 	},
-		// 3回までエラーを許容する
-		worker.WithLoopCount(3),
+		worker.WithInfinityLoop(),
 		worker.WithMaxParallelism(1),
 	)
 	if err != nil {
@@ -29,18 +29,19 @@ func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p 
 	return w, nil
 }
 
-func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
+func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag) error {
 	report := timeReporter("admin billingを見続けるシナリオ")
 	defer report()
 
-	scTag := ScenarioTag("AdminBillingScenario")
-	AdminLogger.Printf("%s start\n", scTag)
+	sc.ScenarioStart(scTag)
 
+	opt := sc.Option
+	opt.RequestTimeout = time.Second * 60 // AdminBillingのみタイムアウトを60秒まで許容
 	admin := &Account{
 		Role:       AccountRoleAdmin,
 		TenantName: "admin",
 		PlayerID:   "admin",
-		Option:     sc.Option,
+		Option:     opt,
 	}
 	if err := admin.SetJWT(sc.RawKey); err != nil {
 		return err
@@ -50,36 +51,29 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		return err
 	}
 
-	var beforeTenantID string
-	var completed bool
-	// エラーが出るまで最初から最後にたどるのを繰り返す
-	for {
-		// 1ページ目から最後まで辿る
-		beforeTenantID = "" // 最初はbeforeが空
-		completed = false
-		for !completed {
-			res, err := GetAdminTenantsBillingAction(ctx, beforeTenantID, adminAg)
-			v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
-					if len(r.Data.Tenants) == 0 {
-						completed = true
-						return nil
-					}
-					for _, tenant := range r.Data.Tenants {
-						AdminLogger.Printf("%s: %d yen", tenant.Name, tenant.BillingYen)
-					}
-					beforeTenantID = r.Data.Tenants[len(r.Data.Tenants)-1].ID
+	// 1ページ目から最後まで辿る
+	beforeTenantID := "" // 最初はbeforeが空
+	completed := false
+	for !completed {
+		res, err := GetAdminTenantsBillingAction(ctx, beforeTenantID, adminAg)
+		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
+				if len(r.Data.Tenants) == 0 {
+					completed = true
 					return nil
-				}),
-			)
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
-			} else {
-				return v
-			}
+				}
+				for _, tenant := range r.Data.Tenants {
+					AdminLogger.Printf("%s: %d yen", tenant.Name, tenant.BillingYen)
+				}
+				beforeTenantID = r.Data.Tenants[len(r.Data.Tenants)-1].ID
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
+		} else {
+			return v
 		}
 	}
-
-	// 何らかの理由でエラーを出さずforを抜けた場合
-	return fmt.Errorf("AdminBillingScenario 謎の終了")
+	return nil
 }

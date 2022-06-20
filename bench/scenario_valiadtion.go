@@ -20,7 +20,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	defer ContestantLogger.Printf("[ValidationScenario] 整合性チェックを終了します")
 
 	// 検証で作成する参加者数 結果のScoreも同数作成する
-	playerNum := 200
+	playerNum := 20
 
 	// SaaS管理者, 主催者, 参加者のagent作成
 	admin := Account{

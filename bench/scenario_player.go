@@ -14,9 +14,11 @@ import (
 // - 失格にする前後で/player/...が403になること
 
 func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
+	scTag := ScenarioTag("PlayerScenario")
+
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		if err := sc.PlayerScenario(ctx, step); err != nil {
-			AdminLogger.Printf("[PlayerScenario]: %v", err)
+		if err := sc.PlayerScenario(ctx, step, scTag); err != nil {
+			sc.ScenarioError(scTag, err)
 			time.Sleep(SleepOnError)
 		}
 	},
@@ -33,11 +35,10 @@ func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32)
 	return w, nil
 }
 
-func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
+func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag) error {
 	report := timeReporter("大会参加者の整合性チェックシナリオ")
 	defer report()
-	scTag := ScenarioTag("PlayerScenario")
-	AdminLogger.Printf("%s start\n", scTag)
+	sc.ScenarioStart(scTag)
 
 	// 初期データから一人選ぶ
 	data := sc.InitialData.Choise()
@@ -88,7 +89,9 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 				return nil
 			}),
 		)
-		if !v.IsEmpty() {
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
+		} else {
 			return v
 		}
 

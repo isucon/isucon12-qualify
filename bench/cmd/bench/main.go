@@ -14,7 +14,7 @@ import (
 
 const (
 	DefaultTargetURL                = "https://t.isucon.dev"
-	DefaultRequestTimeout           = time.Second * 15
+	DefaultRequestTimeout           = time.Second * 30
 	DefaultInitializeRequestTimeout = time.Second * 30
 	DefaultDuration                 = time.Minute
 )
@@ -97,6 +97,7 @@ func main() {
 
 	// スコア表示
 	scenario.PrintScenarioScoreMap()
+	scenario.PrintScenarioCount()
 	score, addition, deduction := SumScore(result)
 	bench.ContestantLogger.Printf("SCORE: %d (+%d %d)", score, addition, -deduction)
 	bench.ContestantLogger.Printf("RESULT: %#v", result.Score.Breakdown())
