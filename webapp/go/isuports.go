@@ -361,6 +361,7 @@ type PlayerScoreRow struct {
 	PlayerID      string    `db:"player_id"`
 	CompetitionID string    `db:"competition_id"`
 	Score         int64     `db:"score"`
+	RowNumber     int64     `db:"row_number"`
 	CreatedAt     time.Time `db:"created_at"`
 	UpdatedAt     time.Time `db:"updated_at"`
 }
