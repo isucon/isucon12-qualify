@@ -199,12 +199,12 @@ func storeMaxID(db *sqlx.DB) error {
 func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, competitions []*isuports.CompetitionRow, pss []*isuports.PlayerScoreRow) error {
 	log.Println("store tenant", tenant.ID)
 	os.Remove(tenant.Name + ".db")
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("sqlite3 %s.db < %s", tenant.Name, tenantDBSchemaFilePath))
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("sqlite3 %d.db < %s", tenant.ID, tenantDBSchemaFilePath))
 	if out, err := cmd.CombinedOutput(); err != nil {
 		log.Println(string(out))
 		return err
 	}
-	db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s.db?mode=rw&_journal_mode=OFF", tenant.Name))
+	db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%d.db?mode=rw&_journal_mode=OFF", tenant.ID))
 	if err != nil {
 		return err
 	}
@@ -217,15 +217,15 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	defer tx.Rollback()
 
 	if _, err = tx.NamedExec(
-		`INSERT INTO player (id, display_name, is_disqualified, created_at, updated_at)
-		 VALUES (:id, :display_name, :is_disqualified, :created_at, :updated_at)`,
+		`INSERT INTO player (tenant_id, id, display_name, is_disqualified, created_at, updated_at)
+		 VALUES (:tenant_id, :id, :display_name, :is_disqualified, :created_at, :updated_at)`,
 		players,
 	); err != nil {
 		return err
 	}
 	if _, err := tx.NamedExec(
-		`INSERT INTO competition (id, title, finished_at, created_at, updated_at)
-		VALUES(:id, :title, :finished_at, :created_at, :updated_at)`,
+		`INSERT INTO competition (tenant_id, id, title, finished_at, created_at, updated_at)
+		VALUES(:tenant_id, :id, :title, :finished_at, :created_at, :updated_at)`,
 		competitions,
 	); err != nil {
 		return err
@@ -234,8 +234,8 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	for i, _ := range pss {
 		if i > 0 && i%1000 == 0 || i == len(pss)-1 {
 			if _, err := tx.NamedExec(
-				`INSERT INTO player_score (id, player_id, competition_id, score, created_at, updated_at)
-				VALUES(:id, :player_id, :competition_id, :score, :created_at, :updated_at)`,
+				`INSERT INTO player_score (tenant_id, id, player_id, competition_id, score, created_at, updated_at)
+				VALUES(:tenant_id, :id, :player_id, :competition_id, :score, :created_at, :updated_at)`,
 				pss[from:i],
 			); err != nil {
 				return err
@@ -291,6 +291,7 @@ func CreatePlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	player := isuports.PlayerRow{
+		TenantID:       tenant.ID,
 		ID:             strconv.FormatInt(GenID(created), 10),
 		DisplayName:    fake.Person().Name(),
 		IsDisqualified: rand.Intn(100) < disqualifiedRate,
@@ -301,7 +302,13 @@ func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 }
 
 func CreateCompetitions(tenant *isuports.TenantRow) []*isuports.CompetitionRow {
-	num := fake.IntBetween(competitionsNumByTenant/10, competitionsNumByTenant)
+	var num int
+	if tenant.ID == 1 {
+		num = competitionsNumByTenant
+	} else {
+		num = fake.IntBetween(competitionsNumByTenant/10, competitionsNumByTenant)
+	}
+	log.Printf("create %d competitions for tenant %s", num, tenant.Name)
 	rows := make([]*isuports.CompetitionRow, 0, num)
 	for i := 0; i < num; i++ {
 		rows = append(rows, CreateCompetition(tenant))
@@ -316,6 +323,7 @@ func CreateCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
 	isFinished := rand.Intn(100) < 50
 	competition := isuports.CompetitionRow{
+		TenantID:  tenant.ID,
 		ID:        strconv.FormatInt(GenID(created), 10),
 		Title:     fake.Music().Name(),
 		CreatedAt: created,
@@ -365,6 +373,7 @@ func CreatePlayerData(
 				})
 			}
 			scores = append(scores, &isuports.PlayerScoreRow{
+				TenantID:      tenant.ID,
 				ID:            GenID(created),
 				PlayerID:      p.ID,
 				CompetitionID: c.ID,

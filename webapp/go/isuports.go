@@ -60,18 +60,18 @@ func connectCenterDB() (*sqlx.DB, error) {
 	return sqlx.Open("mysql", dsn)
 }
 
-func tenantDBPath(name string) string {
+func tenantDBPath(id int64) string {
 	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "../tenant_db")
-	return filepath.Join(tenantDBDir, name+".db")
+	return filepath.Join(tenantDBDir, fmt.Sprintf("%d.db", id))
 }
 
-func connectToTenantDB(name string) (*sqlx.DB, error) {
-	p := tenantDBPath(name)
+func connectToTenantDB(id int64) (*sqlx.DB, error) {
+	p := tenantDBPath(id)
 	return sqlx.Open(sqliteDriverName, fmt.Sprintf("file:%s?mode=rw", p))
 }
 
-func createTenantDB(name string) error {
-	p := tenantDBPath(name)
+func createTenantDB(id int64) error {
+	p := tenantDBPath(id)
 
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("sqlite3 %s < %s", p, tenantDBSchemaFilePath))
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -216,6 +216,7 @@ type Viewer struct {
 	role       Role
 	playerID   string
 	tenantName string
+	tenantID   int64
 }
 
 // リクエストヘッダをパースしてViewerを返す
@@ -277,10 +278,31 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		return nil, fmt.Errorf("token is invalid, tenant name is not match with %s: %s", c.Request().Host, tokenStr)
 	}
 
+	// SaaS管理者用ドメイン
+	if r == RoleAdmin && tenantName == "admin" {
+		return &Viewer{
+			role:       r,
+			playerID:   token.Subject(),
+			tenantName: "admin",
+		}, nil
+	}
+
+	// テナントの存在確認
+	var tenant TenantRow
+	if err := centerDB.GetContext(
+		context.Background(),
+		&tenant,
+		"SELECT * FROM tenant WHERE name = ?",
+		tenantName,
+	); err != nil {
+		return nil, fmt.Errorf("error Select tenant: name=%s, %w", tenantName, err)
+	}
+
 	v := &Viewer{
 		role:       r,
 		playerID:   token.Subject(),
-		tenantName: tenantName,
+		tenantName: tenant.Name,
+		tenantID:   tenant.ID,
 	}
 	return v, nil
 }
@@ -300,6 +322,7 @@ type dbOrTx interface {
 }
 
 type PlayerRow struct {
+	TenantID       int64     `db:"tenant_id"`
 	ID             string    `db:"id"`
 	DisplayName    string    `db:"display_name"`
 	IsDisqualified bool      `db:"is_disqualified"`
@@ -316,6 +339,7 @@ func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id string) (*PlayerRow
 }
 
 type CompetitionRow struct {
+	TenantID   int64        `db:"tenant_id"`
 	ID         string       `db:"id"`
 	Title      string       `db:"title"`
 	FinishedAt sql.NullTime `db:"finished_at"`
@@ -332,6 +356,7 @@ func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id string) (*Comp
 }
 
 type PlayerScoreRow struct {
+	TenantID      int64     `db:"tenant_id"`
 	ID            int64     `db:"id"`
 	PlayerID      string    `db:"player_id"`
 	CompetitionID string    `db:"competition_id"`
@@ -350,12 +375,12 @@ type TenantsAddHandlerResult struct {
 }
 
 func tenantsAddHandler(c echo.Context) error {
-	if c.Request().Host != getEnv("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
-		return echo.ErrNotFound
-	}
-
-	if v, err := parseViewer(c); err != nil {
+	v, err := parseViewer(c)
+	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
+	} else if v.tenantName != "admin" {
+		// admin: SaaS管理者用の特別なテナント名
+		return echo.ErrNotFound
 	} else if v.role != RoleAdmin {
 		return errNotPermitted
 	}
@@ -373,7 +398,7 @@ func tenantsAddHandler(c echo.Context) error {
 		return fmt.Errorf("error centerDB.BeginTxx: %w", err)
 	}
 	now := time.Now()
-	_, err = tx.ExecContext(
+	insertRes, err := tx.ExecContext(
 		ctx,
 		"INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)",
 		name, displayName, now, now,
@@ -390,9 +415,14 @@ func tenantsAddHandler(c echo.Context) error {
 		)
 	}
 
-	if err := createTenantDB(name); err != nil {
+	id, err := insertRes.LastInsertId()
+	if err != nil {
 		tx.Rollback()
-		return fmt.Errorf("error createTenantDB: name=%s %w", name, err)
+		return fmt.Errorf("error get LastInsertId: %w", err)
+	}
+	if err := createTenantDB(id); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("error createTenantDB: id=%d name=%s %w", id, name, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("error tx.Commit: %w", err)
@@ -554,7 +584,7 @@ func tenantsBillingHandler(c echo.Context) error {
 			Name:        t.Name,
 			DisplayName: t.DisplayName,
 		}
-		tenantDB, err := connectToTenantDB(t.Name)
+		tenantDB, err := connectToTenantDB(t.ID)
 		if err != nil {
 			return fmt.Errorf("error connectToTenantDB: %w", err)
 		}
@@ -563,7 +593,8 @@ func tenantsBillingHandler(c echo.Context) error {
 		if err := tenantDB.SelectContext(
 			ctx,
 			&cs,
-			"SELECT * FROM competition",
+			"SELECT * FROM competition WHERE tenant_id=?",
+			t.ID,
 		); err != nil {
 			return fmt.Errorf("error Select competition: %w", err)
 		}
@@ -609,7 +640,7 @@ func playersListHandler(c echo.Context) error {
 		return errNotPermitted
 	}
 
-	tenantDB, err := connectToTenantDB(v.tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -619,7 +650,8 @@ func playersListHandler(c echo.Context) error {
 	if err := tenantDB.SelectContext(
 		ctx,
 		&pls,
-		"SELECT * FROM player ORDER BY created_at DESC",
+		"SELECT * FROM player WHERE tenant_id=? ORDER BY created_at DESC",
+		v.tenantID,
 	); err != nil {
 		return fmt.Errorf("error Select player: %w", err)
 	}
@@ -654,7 +686,7 @@ func playersAddHandler(c echo.Context) error {
 		return errNotPermitted
 	}
 
-	tenantDB, err := connectToTenantDB(v.tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -681,8 +713,8 @@ func playersAddHandler(c echo.Context) error {
 
 		if _, err := ttx.ExecContext(
 			ctx,
-			"INSERT INTO player (id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-			id, displayName, false, now, now,
+			"INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+			id, v.tenantID, displayName, false, now, now,
 		); err != nil {
 			ttx.Rollback()
 			return fmt.Errorf(
@@ -727,7 +759,7 @@ func playerDisqualifiedHandler(c echo.Context) error {
 		return errNotPermitted
 	}
 
-	tenantDB, err := connectToTenantDB(v.tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -783,7 +815,7 @@ func competitionsAddHandler(c echo.Context) error {
 		return errNotPermitted
 	}
 
-	tenantDB, err := connectToTenantDB(v.tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -798,12 +830,12 @@ func competitionsAddHandler(c echo.Context) error {
 	}
 	if _, err := tenantDB.ExecContext(
 		ctx,
-		"INSERT INTO competition (id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-		id, title, sql.NullTime{}, now, now,
+		"INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+		id, v.tenantID, title, sql.NullTime{}, now, now,
 	); err != nil {
 		return fmt.Errorf(
-			"error Insert competition: id=%s, title=%s, finishedAt=null, createdAt=%s, updatedAt=%s, %w",
-			id, title, now, now, err,
+			"error Insert competition: id=%s, tenant_id=%d, title=%s, finishedAt=null, createdAt=%s, updatedAt=%s, %w",
+			id, v.tenantID, title, now, now, err,
 		)
 	}
 
@@ -829,7 +861,7 @@ func competitionFinishHandler(c echo.Context) error {
 		return errNotPermitted
 	}
 
-	tenantDB, err := connectToTenantDB(v.tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -867,7 +899,7 @@ func competitionResultHandler(c echo.Context) error {
 		return errNotPermitted
 	}
 
-	tenantDB, err := connectToTenantDB(v.tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -953,13 +985,13 @@ func competitionResultHandler(c echo.Context) error {
 		}
 		if _, err := ttx.ExecContext(
 			ctx,
-			"REPLACE INTO player_score (id, player_id, competition_id, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-			id, player.ID, competitionID, score, now, now,
+			"REPLACE INTO player_score (id, tenant_id, player_id, competition_id, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			id, v.tenantID, player.ID, competitionID, score, now, now,
 		); err != nil {
 			ttx.Rollback()
 			return fmt.Errorf(
-				"error Replace player_score: id=%s, playerID=%s, competitionID=%s, score=%d, createdAt=%s, updatedAt=%s, %w",
-				id, player.ID, competitionID, score, now, now, err,
+				"error Replace player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, createdAt=%s, updatedAt=%s, %w",
+				id, v.tenantID, player.ID, competitionID, score, now, now, err,
 			)
 		}
 	}
@@ -987,7 +1019,7 @@ func billingHandler(c echo.Context) error {
 		return errNotPermitted
 	}
 
-	tenantDB, err := connectToTenantDB(v.tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -997,8 +1029,8 @@ func billingHandler(c echo.Context) error {
 	if err := centerDB.GetContext(
 		ctx,
 		&t,
-		"SELECT * FROM tenant WHERE name = ?",
-		v.tenantName,
+		"SELECT * FROM tenant WHERE id = ?",
+		v.tenantID,
 	); err != nil {
 		return fmt.Errorf("error Select tenant: name=%s, %w", v.tenantName, err)
 	}
@@ -1007,7 +1039,8 @@ func billingHandler(c echo.Context) error {
 	if err := tenantDB.SelectContext(
 		ctx,
 		&cs,
-		"SELECT * FROM competition ORDER BY created_at DESC",
+		"SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC",
+		v.tenantID,
 	); err != nil {
 		return fmt.Errorf("error Select competition: %w", err)
 	}
@@ -1052,7 +1085,7 @@ func playerHandler(c echo.Context) error {
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
 
-	tenantDB, err := connectToTenantDB(v.tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -1083,10 +1116,11 @@ func playerHandler(c echo.Context) error {
 	if err := tenantDB.SelectContext(
 		ctx,
 		&pss,
-		"SELECT * FROM player_score WHERE player_id = ? ORDER BY competition_id ASC",
+		"SELECT * FROM player_score WHERE tenant_id = ? AND player_id = ? ORDER BY competition_id ASC",
+		v.tenantID,
 		p.ID,
 	); err != nil {
-		return fmt.Errorf("error Select player_score: playerID=%s, %w", p.ID, err)
+		return fmt.Errorf("error Select player_score: tenant_id=%d, playerID=%s, %w", v.tenantID, p.ID, err)
 	}
 	psds := make([]PlayerScoreDetail, 0, len(pss))
 	for _, ps := range pss {
@@ -1147,7 +1181,7 @@ func competitionRankingHandler(c echo.Context) error {
 		return echo.ErrBadRequest
 	}
 
-	tenantDB, err := connectToTenantDB(v.tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -1171,8 +1205,8 @@ func competitionRankingHandler(c echo.Context) error {
 
 	now := time.Now()
 	var tenant TenantRow
-	if err := centerDB.GetContext(ctx, &tenant, "SELECT * FROM tenant WHERE name = ?", v.tenantName); err != nil {
-		return fmt.Errorf("error Select tenant: name=%s, %w", v.tenantName, err)
+	if err := centerDB.GetContext(ctx, &tenant, "SELECT * FROM tenant WHERE id = ?", v.tenantID); err != nil {
+		return fmt.Errorf("error Select tenant: id=%d, %w", v.tenantID, err)
 	}
 
 	if _, err := centerDB.ExecContext(
@@ -1199,7 +1233,8 @@ func competitionRankingHandler(c echo.Context) error {
 		ctx,
 		&pss,
 		// スコアが同じ場合はスコア登録日時が早いほうが上
-		"SELECT * FROM player_score WHERE competition_id = ? ORDER BY score DESC, created_at ASC",
+		"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY score DESC, created_at ASC",
+		tenant.ID,
 		competitionID,
 	); err != nil {
 		return fmt.Errorf("error Select player_score: competitionID=%s, %w", competitionID, err)
@@ -1249,7 +1284,7 @@ func competitionsHandler(c echo.Context) error {
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
 
-	tenantDB, err := connectToTenantDB(v.tenantName)
+	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
 	}
@@ -1267,7 +1302,8 @@ func competitionsHandler(c echo.Context) error {
 	if err := tenantDB.SelectContext(
 		ctx,
 		&cs,
-		"SELECT * FROM competition ORDER BY created_at DESC",
+		"SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC",
+		v.tenantID,
 	); err != nil {
 		return fmt.Errorf("error Select competition: %w", err)
 	}
