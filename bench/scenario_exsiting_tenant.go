@@ -2,10 +2,12 @@ package bench
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
+	"github.com/isucon/isucon12-qualify/data"
 )
 
 func (sc *Scenario) ExistingTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32, isHeavyTenant bool) (*worker.Worker, error) {
@@ -68,7 +70,90 @@ func (sc *Scenario) ExistingTenantScenario(ctx context.Context, step *isucandar.
 		return err
 	}
 
-	// テナント請求ダッシュボードの閲覧 x 1
+	// Player作成、大会作成、スコア入稿、大会終了、billing閲覧
+	playerNum := 100
+	players := make(map[string]*PlayerData, playerNum)
+	{
+		playerDisplayNames := make([]string, playerNum)
+		for i := 0; i < playerNum; i++ {
+			playerDisplayNames = append(playerDisplayNames, data.RandomString(16))
+		}
+
+		res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
+		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
+				for _, pl := range r.Data.Players {
+					players[pl.DisplayName] = &PlayerData{
+						ID:          pl.ID,
+						DisplayName: pl.DisplayName,
+					}
+				}
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
+		} else {
+			return v
+		}
+	}
+
+	var competitionID string
+	{
+		res, err := PostOrganizerCompetitonsAddAction(ctx, data.RandomString(16), orgAg)
+		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
+				competitionID = r.Data.Competition.ID
+				return nil
+			}))
+
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionsAdd, scTag)
+		} else {
+			return v
+		}
+	}
+
+	{
+		var score ScoreRows
+		for _, player := range players {
+			score = append(score, &ScoreRow{
+				PlayerID: player.ID,
+				Score:    rand.Int() % 1000,
+			})
+		}
+		csv := score.CSV()
+		res, err := PostOrganizerCompetitionResultAction(ctx, competitionID, []byte(csv), orgAg)
+		v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+				_ = r // responseは空
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionResult, scTag)
+		} else {
+			return v
+		}
+	}
+
+	{
+		res, err := PostOrganizerCompetitionFinishAction(ctx, competitionID, orgAg)
+		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
+				_ = r // responseは空
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionFinish, scTag)
+		} else {
+			return v
+		}
+	}
+
+	// テナント請求ダッシュボードの閲覧
+	// NOTE: playerのrankingアクセスがないのでvisit_historyを見に行くようなものは上で作ったものに関して影響がほぼない.初期データで作成された分のみ
 	{
 		res, err := GetOrganizerBillingAction(ctx, orgAg)
 		v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
