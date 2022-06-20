@@ -11,9 +11,11 @@ import (
 )
 
 func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
+	scTag := ScenarioTag("NewTenantScenario")
+
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		if err := sc.NewTenantScenario(ctx, step); err != nil {
-			AdminLogger.Printf("[NewTenantScenario] %v", err)
+		if err := sc.NewTenantScenario(ctx, step, scTag); err != nil {
+			sc.ScenarioError(scTag, err)
 			time.Sleep(SleepOnError)
 		}
 	},
@@ -27,10 +29,9 @@ func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int
 	return w, nil
 }
 
-func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
+func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag) error {
 	report := timeReporter("新規テナントシナリオ")
 	defer report()
-	scTag := ScenarioTag("NewTenantScenario")
 	sc.ScenarioStart(scTag)
 
 	addPlayerTimes := 20 // PlayersAddを叩く回数
@@ -61,7 +62,6 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	if v.IsEmpty() {
 		sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
 	} else {
-		sc.ScenarioError(scTag)
 		return v
 	}
 
@@ -103,7 +103,6 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
 			} else {
-				sc.ScenarioError(scTag)
 				return v
 			}
 		}
@@ -124,7 +123,6 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionsAdd, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -182,7 +180,6 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionResult, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -199,7 +196,6 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionFinish, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -216,7 +212,6 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -257,7 +252,6 @@ func (sc *Scenario) tenantPlayerScenario(ctx context.Context, step *isucandar.Be
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -272,7 +266,6 @@ func (sc *Scenario) tenantPlayerScenario(ctx context.Context, step *isucandar.Be
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -287,7 +280,6 @@ func (sc *Scenario) tenantPlayerScenario(ctx context.Context, step *isucandar.Be
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}

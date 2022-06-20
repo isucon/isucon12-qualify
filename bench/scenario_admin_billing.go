@@ -11,9 +11,11 @@ import (
 // ずっと/admin/billingを見続けるシナリオ
 // 指定回数エラーが出るまで繰り返し、並列動作はしない
 func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
+	scTag := ScenarioTag("AdminBillingScenario")
+
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		if err := sc.AdminBillingScenario(ctx, step); err != nil {
-			AdminLogger.Printf("[AdminBillingScenario]: %s", err)
+		if err := sc.AdminBillingScenario(ctx, step, scTag); err != nil {
+			sc.ScenarioError(scTag, err)
 			time.Sleep(SleepOnError)
 		}
 	},
@@ -27,18 +29,19 @@ func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p 
 	return w, nil
 }
 
-func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
+func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag) error {
 	report := timeReporter("admin billingを見続けるシナリオ")
 	defer report()
 
-	scTag := ScenarioTag("AdminBillingScenario")
 	sc.ScenarioStart(scTag)
 
+	opt := sc.Option
+	opt.RequestTimeout = time.Second * 60
 	admin := &Account{
 		Role:       AccountRoleAdmin,
 		TenantName: "admin",
 		PlayerID:   "admin",
-		Option:     sc.Option,
+		Option:     opt,
 	}
 	if err := admin.SetJWT(sc.RawKey); err != nil {
 		return err
@@ -69,7 +72,6 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}

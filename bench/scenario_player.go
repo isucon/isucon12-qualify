@@ -14,9 +14,11 @@ import (
 // - 失格にする前後で/player/...が403になること
 
 func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
+	scTag := ScenarioTag("PlayerScenario")
+
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		if err := sc.PlayerScenario(ctx, step); err != nil {
-			AdminLogger.Printf("[PlayerScenario]: %v", err)
+		if err := sc.PlayerScenario(ctx, step, scTag); err != nil {
+			sc.ScenarioError(scTag, err)
 			time.Sleep(SleepOnError)
 		}
 	},
@@ -33,10 +35,9 @@ func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32)
 	return w, nil
 }
 
-func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
+func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag) error {
 	report := timeReporter("大会参加者の整合性チェックシナリオ")
 	defer report()
-	scTag := ScenarioTag("PlayerScenario")
 	sc.ScenarioStart(scTag)
 
 	// 初期データから一人選ぶ
@@ -91,7 +92,6 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 
@@ -115,7 +115,6 @@ func (sc *Scenario) playerScenarioRequestDisqualify(ctx context.Context, step *i
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -125,7 +124,6 @@ func (sc *Scenario) playerScenarioRequestDisqualify(ctx context.Context, step *i
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -135,7 +133,6 @@ func (sc *Scenario) playerScenarioRequestDisqualify(ctx context.Context, step *i
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -155,7 +152,6 @@ func (sc *Scenario) playerScenarioRequest(ctx context.Context, step *isucandar.B
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -170,7 +166,6 @@ func (sc *Scenario) playerScenarioRequest(ctx context.Context, step *isucandar.B
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -185,7 +180,6 @@ func (sc *Scenario) playerScenarioRequest(ctx context.Context, step *isucandar.B
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
 		} else {
-			sc.ScenarioError(scTag)
 			return v
 		}
 	}
