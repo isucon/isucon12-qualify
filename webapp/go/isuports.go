@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -1240,38 +1241,46 @@ func competitionRankingHandler(c echo.Context) error {
 	if err := tenantDB.SelectContext(
 		ctx,
 		&pss,
-		// スコアが同じ場合はスコア登録日時が早いほうが上
-		"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY score DESC, row_number DESC, created_at ASC",
+		"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_number DESC",
 		tenant.ID,
 		competitionID,
 	); err != nil {
-		return fmt.Errorf("error Select player_score: competitionID=%s, %w", competitionID, err)
+		return fmt.Errorf("error Select player_score: tenantID=%d, competitionID=%s, %w", tenant.ID, competitionID, err)
 	}
 	ranks := make([]CompetitionRank, 0, len(pss))
 	scoredPlayerSet := make(map[string]struct{}, len(pss))
-	var rank int64
 	for _, ps := range pss {
-		// player_scoreが同一player_id内ではrow_numberの降順で整列利用されているので
+		// player_scoreが同一player_id内ではrow_numberの降順でソートされているので
 		// 現れたのが2回目以降のplayer_idはより大きいrow_numberでスコアが出ているとみなせる
 		if _, ok := scoredPlayerSet[ps.PlayerID]; ok {
 			continue
 		}
 		scoredPlayerSet[ps.PlayerID] = struct{}{}
-		rank++
-		if rank <= rankAfter {
-			continue
-		}
 		p, err := retrievePlayer(ctx, tenantDB, ps.PlayerID)
 		if err != nil {
 			return fmt.Errorf("error retrievePlayer: %w", err)
 		}
 		ranks = append(ranks, CompetitionRank{
-			Rank:              rank,
 			Score:             ps.Score,
 			PlayerID:          p.ID,
 			PlayerDisplayName: p.DisplayName,
 		})
-		if len(ranks) >= 100 {
+	}
+	sort.Slice(ranks, func(i, j int) bool {
+		return ranks[i].Score > ranks[j].Score
+	})
+	pagedRanks := make([]CompetitionRank, 0, 100)
+	for i, rank := range ranks {
+		if int64(i) < rankAfter {
+			continue
+		}
+		pagedRanks = append(pagedRanks, CompetitionRank{
+			Rank:              int64(i + 1),
+			Score:             rank.Score,
+			PlayerID:          rank.PlayerID,
+			PlayerDisplayName: rank.PlayerDisplayName,
+		})
+		if len(pagedRanks) > 100 {
 			break
 		}
 	}
@@ -1279,7 +1288,7 @@ func competitionRankingHandler(c echo.Context) error {
 	res := SuccessResult{
 		Success: true,
 		Data: CompetitionRankingHandlerResult{
-			Ranks: ranks,
+			Ranks: pagedRanks,
 		},
 	}
 	if err := c.JSON(http.StatusOK, res); err != nil {
