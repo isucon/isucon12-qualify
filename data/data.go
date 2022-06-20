@@ -374,6 +374,7 @@ func CreatePlayerData(
 				})
 			}
 			for i := 0; i < fake.IntBetween(scoresByCompetition-(scoresByCompetition/10), scoresByCompetition+(scoresByCompetition/10)); i++ {
+				created := fake.Time().TimeBetween(c.CreatedAt, end)
 				competitionScores = append(competitionScores, &isuports.PlayerScoreRow{
 					TenantID:      tenant.ID,
 					ID:            GenID(created),
@@ -392,8 +393,8 @@ func CreatePlayerData(
 				IsDisqualified: p.IsDisqualified,
 			})
 		}
-		rand.Shuffle(len(competitionScores), func(i, j int) {
-			competitionScores[i], competitionScores[j] = competitionScores[j], competitionScores[i]
+		sort.Slice(competitionScores, func(i, j int) bool {
+			return competitionScores[i].CreatedAt.Before(competitionScores[j].CreatedAt)
 		})
 		for i := range competitionScores {
 			competitionScores[i].RowNumber = int64(i + 1)
