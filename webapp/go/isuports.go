@@ -954,7 +954,9 @@ func competitionResultHandler(c echo.Context) error {
 	); err != nil {
 		return fmt.Errorf("error Delete player_score: competitionID=%s, %w", competitionID, err)
 	}
+	var rowNumber int64
 	for {
+		rowNumber++
 		row, err := r.Read()
 		if err != nil {
 			if err == io.EOF {
@@ -985,13 +987,13 @@ func competitionResultHandler(c echo.Context) error {
 		}
 		if _, err := ttx.ExecContext(
 			ctx,
-			"REPLACE INTO player_score (id, tenant_id, player_id, competition_id, score, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			id, v.tenantID, player.ID, competitionID, score, now, now,
+			"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			id, v.tenantID, player.ID, competitionID, score, rowNumber, now, now,
 		); err != nil {
 			ttx.Rollback()
 			return fmt.Errorf(
-				"error Replace player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, createdAt=%s, updatedAt=%s, %w",
-				id, v.tenantID, player.ID, competitionID, score, now, now, err,
+				"error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNumber=%d, createdAt=%s, updatedAt=%s, %w",
+				id, v.tenantID, player.ID, competitionID, score, rowNumber, now, now, err,
 			)
 		}
 	}
