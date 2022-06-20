@@ -14,7 +14,7 @@ import (
 
 const (
 	DefaultTargetURL                = "https://t.isucon.dev"
-	DefaultRequestTimeout           = time.Second * 15
+	DefaultRequestTimeout           = time.Second * 30
 	DefaultInitializeRequestTimeout = time.Second * 30
 	DefaultDuration                 = time.Minute
 )
