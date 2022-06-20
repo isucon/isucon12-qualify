@@ -70,11 +70,10 @@ var ResultScoreMap = map[score.ScoreTag]int64{
 	ScorePOSTOrganizerCompetitionResult:  1,
 	ScoreGETOrganizerBilling:             1,
 
-	// TODO: 要調整 Player類はどうしても爆速で回るので加点はなし
-	// エラーが発生したら減点、MaxErrors数発生したらbench打ち切り
-	ScoreGETPlayerDetails:      0,
-	ScoreGETPlayerRanking:      0,
-	ScoreGETPlayerCompetitions: 0,
+	// TODO: 要調整 初期から万単位がでるので*1/100みたいなのをしたい
+	ScoreGETPlayerDetails:      1,
+	ScoreGETPlayerRanking:      1,
+	ScoreGETPlayerCompetitions: 1,
 }
 
 type TenantData struct {
