@@ -373,7 +373,7 @@ func CreatePlayerData(
 					UpdatedAt:     visitedAt,
 				})
 			}
-			for i := 0; i < fake.IntBetween(scoresByCompetition/10, scoresByCompetition); i++ {
+			for i := 0; i < fake.IntBetween(scoresByCompetition-(scoresByCompetition/10), scoresByCompetition+(scoresByCompetition/10)); i++ {
 				competitionScores = append(competitionScores, &isuports.PlayerScoreRow{
 					TenantID:      tenant.ID,
 					ID:            GenID(created),
