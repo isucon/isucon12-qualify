@@ -218,9 +218,26 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		if !v.IsEmpty() {
 			return v
 		}
-		// TODO: 不正リクエストチェック
+
+		// 不正リクエストチェック
 		// - 存在しない大会
+		res, err = PostOrganizerCompetitionResultAction(ctx, "nonexisting-competition", []byte(csv), orgAg)
+		v = ValidateResponse("大会結果CSV入稿: 不正リクエスト(存在しない大会)", step, res, err, WithStatusCode(400))
+		if !v.IsEmpty() {
+			return v
+		}
+
 		// - 存在しないプレイヤーが含まれるCSVを入稿
+		invalidScore := ScoreRows{&ScoreRow{
+			PlayerID: "not-exist-player",
+			Score:    1,
+		}}
+		invalidCSV := invalidScore.CSV()
+		res, err = PostOrganizerCompetitionResultAction(ctx, competitionId, []byte(invalidCSV), orgAg)
+		v = ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(400))
+		if !v.IsEmpty() {
+			return v
+		}
 	}
 	{
 		res, err := PostOrganizerCompetitionFinishAction(ctx, competitionId, orgAg)
