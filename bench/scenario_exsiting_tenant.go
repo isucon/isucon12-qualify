@@ -8,10 +8,10 @@ import (
 	"github.com/isucon/isucandar/worker"
 )
 
-func (sc *Scenario) ExistingTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
+func (sc *Scenario) ExistingTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32, isHeavyTenant bool) (*worker.Worker, error) {
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		if err := sc.ExistingTenantScenario(ctx, step); err != nil {
-			AdminLogger.Printf("[OrganizerScenario]: %v", err)
+		if err := sc.ExistingTenantScenario(ctx, step, isHeavyTenant); err != nil {
+			AdminLogger.Printf("[ExistingTenantScenario]: %v", err)
 			time.Sleep(SleepOnError)
 		}
 	},
@@ -26,21 +26,32 @@ func (sc *Scenario) ExistingTenantScenarioWorker(step *isucandar.BenchmarkStep, 
 	return w, nil
 }
 
-func (sc *Scenario) ExistingTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
+func (sc *Scenario) ExistingTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep, isHeavyTenant bool) error {
 	report := timeReporter("既存テナントシナリオ")
 	defer report()
-	scTag := ScenarioTag("ExistingTenantScenario")
-	AdminLogger.Printf("%s start\n", scTag)
+	var scTag ScenarioTag
 
-	data := sc.InitialData.Choise()
-	// 初期データの一番思いデータにあたったら再抽選する
-	if data.TenantName == "isucon" {
-		AdminLogger.Printf("かわいそうに... (%v)", data)
-		data = sc.InitialData.Choise()
+	// isHeavyTenantに応じて重いデータかそれ以外を引く
+	var tenantName string
+	if isHeavyTenant {
+		scTag = "ExistingTenantScenario_HevaryTenant"
+		tenantName = "isucon"
+	} else {
+		scTag = "ExistingTenantScenario"
+		var data *InitialDataRow
+		for {
+			data = sc.InitialData.Choise()
+			if data.TenantName != "isucon" {
+				break
+			}
+		}
+		tenantName = data.TenantName
 	}
+	sc.ScenarioStart(scTag)
+
 	organizer := Account{
 		Role:       AccountRoleOrganizer,
-		TenantName: data.TenantName,
+		TenantName: tenantName,
 		PlayerID:   "organizer",
 		Option:     sc.Option,
 	}
@@ -69,7 +80,6 @@ func (sc *Scenario) ExistingTenantScenario(ctx context.Context, step *isucandar.
 			return v
 		}
 	}
-	AdminLogger.Printf("%s end\n", scTag)
 
 	return nil
 }

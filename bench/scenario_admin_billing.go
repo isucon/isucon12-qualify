@@ -32,7 +32,7 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 	defer report()
 
 	scTag := ScenarioTag("AdminBillingScenario")
-	AdminLogger.Printf("%s start\n", scTag)
+	sc.ScenarioStart(scTag)
 
 	admin := &Account{
 		Role:       AccountRoleAdmin,
@@ -69,6 +69,7 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
 		} else {
+			sc.ScenarioError(scTag)
 			return v
 		}
 	}

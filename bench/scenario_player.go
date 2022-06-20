@@ -37,7 +37,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	report := timeReporter("大会参加者の整合性チェックシナリオ")
 	defer report()
 	scTag := ScenarioTag("PlayerScenario")
-	// AdminLogger.Printf("%s start\n", scTag)
+	sc.ScenarioStart(scTag)
 
 	// 初期データから一人選ぶ
 	data := sc.InitialData.Choise()
@@ -91,6 +91,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
 		} else {
+			sc.ScenarioError(scTag)
 			return v
 		}
 
@@ -114,6 +115,7 @@ func (sc *Scenario) playerScenarioRequestDisqualify(ctx context.Context, step *i
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
+			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -123,6 +125,7 @@ func (sc *Scenario) playerScenarioRequestDisqualify(ctx context.Context, step *i
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
 		} else {
+			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -132,6 +135,7 @@ func (sc *Scenario) playerScenarioRequestDisqualify(ctx context.Context, step *i
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
 		} else {
+			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -151,6 +155,7 @@ func (sc *Scenario) playerScenarioRequest(ctx context.Context, step *isucandar.B
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
+			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -165,6 +170,7 @@ func (sc *Scenario) playerScenarioRequest(ctx context.Context, step *isucandar.B
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
 		} else {
+			sc.ScenarioError(scTag)
 			return v
 		}
 	}
@@ -179,6 +185,7 @@ func (sc *Scenario) playerScenarioRequest(ctx context.Context, step *isucandar.B
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
 		} else {
+			sc.ScenarioError(scTag)
 			return v
 		}
 	}
