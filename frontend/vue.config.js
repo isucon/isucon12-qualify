@@ -7,5 +7,11 @@ module.exports = defineConfig({
       key: '../nginx/tls/key.pem',
       cert: '../nginx/tls/fullchain.pem',
     },
+    proxy: {
+      '/api': {
+        target: 'https://127.0.0.1:443',
+        secure: false, // Do NOT check upstream cert's CN
+      },
+    },
   },
 });

@@ -1,15 +1,66 @@
 <template>
   <div class="lp">
-    ログインしてないときにみるLPだよ
+    <h2>管理画面へのログイン</h2>
+    <form
+      @submit.prevent="handleSubmit"
+    >
+      <label for="account">
+        アカウント
+      </label>
+      <input
+        v-model="account"
+        type="text"
+        name="account"
+        id="account"
+        placeholder="admin"
+      />
+      <input
+        type="submit"
+        value="認証する"
+      />
+    </form>
   </div>
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue'
+import { ref, defineComponent } from 'vue'
+import { useRouter } from 'vue-router'
+import axios from 'axios'
 
 export default defineComponent({
   setup() {
-    return {}
+    const router = useRouter()
+
+    const account = ref('')
+    const handleSubmit = async () => {
+      console.log('handleSubmit')
+      try {
+        const res = await axios.post('/api/admin/login', {
+          name: account,
+        })
+
+        if (res.status != 200) {
+          window.alert('Failed to Login: status=' + res.status)
+          return
+        }
+
+        router.push('/admin/')
+
+      } catch (e: any) {
+        window.alert('Failed to Login: ' + e)
+      }
+    }
+
+    return {
+      account,
+      handleSubmit,
+    }
   },
 })
 </script>
+
+<style scoped>
+.lp {
+  text-align: center;
+}
+</style>
