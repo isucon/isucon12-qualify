@@ -35,11 +35,13 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 
 	sc.ScenarioStart(scTag)
 
+	opt := sc.Option
+	opt.RequestTimeout = time.Second * 60 // AdminBillingのみタイムアウトを60秒まで許容
 	admin := &Account{
 		Role:       AccountRoleAdmin,
 		TenantName: "admin",
 		PlayerID:   "admin",
-		Option:     sc.Option,
+		Option:     opt,
 	}
 	if err := admin.SetJWT(sc.RawKey); err != nil {
 		return err
