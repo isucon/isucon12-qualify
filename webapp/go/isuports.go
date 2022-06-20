@@ -984,7 +984,7 @@ func competitionResultHandler(c echo.Context) error {
 		}
 		if _, err := ttx.ExecContext(
 			ctx,
-			"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+			"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 			id, v.tenantID, player.ID, competitionID, score, rowNumber, now, now,
 		); err != nil {
 			ttx.Rollback()
@@ -1121,12 +1121,13 @@ func playerHandler(c echo.Context) error {
 	pss := make([]PlayerScoreRow, 0, len(cs))
 	for _, c := range cs {
 		ps := PlayerScoreRow{}
-		if err := tenantDB.SelectContext(
+		if err := tenantDB.GetContext(
 			ctx,
 			&ps,
 			// 最後にCSVに登場したスコアを採用する = row_numberが一番行もの
 			"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_number DESC LIMIT 1",
 			v.tenantID,
+			c.ID,
 			p.ID,
 		); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return fmt.Errorf("error Select player_score: tenantID=%d, competitionID=%s, playerID=%s, %w", v.tenantID, c.ID, p.ID, err)
@@ -1277,7 +1278,7 @@ func competitionRankingHandler(c echo.Context) error {
 			PlayerID:          rank.PlayerID,
 			PlayerDisplayName: rank.PlayerDisplayName,
 		})
-		if len(pagedRanks) > 100 {
+		if len(pagedRanks) >= 100 {
 			break
 		}
 	}
