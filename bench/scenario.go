@@ -210,11 +210,12 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
+	_ = existingHeavryTenantCase
 
 	AdminLogger.Printf("%d workers", len([]*worker.Worker{
 		newTenantCase,
 		existingTenantCase,
-		existingHeavryTenantCase,
+		// existingHeavryTenantCase,
 		playerCase,
 		adminBillingCase,
 	}))
@@ -223,7 +224,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 		newTenantCase,
 		playerCase,
 		existingTenantCase,
-		existingHeavryTenantCase,
+		// existingHeavryTenantCase,
 		adminBillingCase,
 	}
 	for _, w := range workers {
