@@ -349,7 +349,7 @@ func CreatePlayerData(
 	visits := make([]*isuports.VisitHistoryRow, 0, len(players)*len(competitions)*visitsByCompetition)
 	bench := make([]*BenchmarkerSource, 0, len(players)*len(competitions))
 	for _, c := range competitions {
-		competitionScores := make([]*isuports.PlayerScoreRow, len(players)*100)
+		competitionScores := make([]*isuports.PlayerScoreRow, 0, len(players)*100)
 		for _, p := range players {
 			if c.FinishedAt.Valid && p.CreatedAt.After(c.FinishedAt.Time) {
 				// 大会が終わったあとに登録したplayerはデータがない
