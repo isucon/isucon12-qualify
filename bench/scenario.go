@@ -6,18 +6,15 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
-	"log"
 	"net/url"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/failure"
 	"github.com/isucon/isucandar/score"
 	"github.com/isucon/isucandar/worker"
-	"github.com/k0kubun/pp/v3"
 )
 
 var (
@@ -72,9 +69,11 @@ var ResultScoreMap = map[score.ScoreTag]int64{
 	ScorePOSTOrganizerCompetitionFinish:  1,
 	ScorePOSTOrganizerCompetitionResult:  1,
 	ScoreGETOrganizerBilling:             1,
-	ScoreGETPlayerDetails:                1,
-	ScoreGETPlayerRanking:                1,
-	ScoreGETPlayerCompetitions:           1,
+
+	// TODO: 要調整 初期から万単位がでるので*1/100みたいなのをしたい
+	ScoreGETPlayerDetails:      1,
+	ScoreGETPlayerRanking:      1,
+	ScoreGETPlayerCompetitions: 1,
 }
 
 type TenantData struct {
@@ -87,7 +86,9 @@ type Scenario struct {
 	Option Option
 	Errors failure.Errors
 
-	ScenarioScoreMap sync.Map // map[string]*int64
+	ScenarioScoreMap   sync.Map // map[string]*int64
+	ScenarioCountMap   map[ScenarioTag][]int
+	ScenarioCountMutex sync.Mutex
 
 	InitialData        InitialDataRows
 	DisqualifiedPlayer map[string]struct{}
@@ -101,6 +102,8 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 	s.ScenarioScoreMap = sync.Map{}
+	s.ScenarioCountMap = make(map[ScenarioTag][]int)
+	s.ScenarioCountMutex = sync.Mutex{}
 	s.DisqualifiedPlayer = map[string]struct{}{}
 
 	// GET /initialize 用ユーザーエージェントの生成
@@ -181,11 +184,18 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
-	// 主催者(テナントオーナー)シナリオ
-	organizerCase, err := s.OrganizerScenarioWorker(step, 1)
+	// 既存テナントシナリオ
+	existingTenantCase, err := s.ExistingTenantScenarioWorker(step, 1, false)
 	if err != nil {
 		return err
 	}
+
+	// 既存テナントシナリオ(重いデータ)
+	existingHeavryTenantCase, err := s.ExistingTenantScenarioWorker(step, 1, true)
+	if err != nil {
+		return err
+	}
+
 	// 初期データプレイヤー整合性チェックシナリオ
 	playerCase, err := s.PlayerScenarioWorker(step, 1)
 	if err != nil {
@@ -196,17 +206,21 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
+	_ = existingHeavryTenantCase
+
 	AdminLogger.Printf("%d workers", len([]*worker.Worker{
 		newTenantCase,
-		organizerCase,
-		// playerCase,
+		existingTenantCase,
+		existingHeavryTenantCase,
+		playerCase,
 		adminBillingCase,
 	}))
 
 	workers := []*worker.Worker{
 		newTenantCase,
-		organizerCase,
 		playerCase,
+		existingTenantCase,
+		existingHeavryTenantCase,
 		adminBillingCase,
 	}
 	for _, w := range workers {
@@ -221,9 +235,8 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	go func() {
 		defer wg.Done()
 		s.loadAdjustor(ctx, step,
+			existingTenantCase,
 			newTenantCase,
-			organizerCase,
-			playerCase,
 		)
 	}()
 	wg.Wait()
@@ -250,15 +263,13 @@ func (s *Scenario) loadAdjustor(ctx context.Context, step *isucandar.BenchmarkSt
 			step.Cancel()
 			return
 		}
-		addParallels := int32(0)
 		if diff := total - prevErrors; diff > 0 {
 			ContestantLogger.Printf("エラーが%d件増えました(現在%d件)", diff, total)
 		} else {
 			ContestantLogger.Println("並列数を1追加します")
-			addParallels = 1
-		}
-		for _, w := range workers {
-			w.AddParallelism(addParallels)
+			for _, w := range workers {
+				w.AddParallelism(1)
+			}
 		}
 		prevErrors = total
 	}
@@ -282,42 +293,4 @@ func getEnv(key string, defaultValue string) string {
 		return val
 	}
 	return defaultValue
-}
-
-// どのシナリオから加算されたスコアかをカウントしならがスコアを追加する
-type ScenarioTag string
-
-// AddScoreByScenarioが呼び出された回数はカウントされるが、AddScoreがResultに反映されるかは別なようなのでスコアはズレる
-func (sc *Scenario) AddScoreByScenario(step *isucandar.BenchmarkStep, scoreTag score.ScoreTag, scenarioTag ScenarioTag) {
-	key := fmt.Sprintf("%s", scenarioTag)
-	value, ok := sc.ScenarioScoreMap.Load(key)
-	if ok {
-		if ptr, ok := value.(*int64); ok {
-			atomic.AddInt64(ptr, ResultScoreMap[scoreTag])
-		} else {
-			log.Printf("error failed ScenarioScoreMap.Load type assertion: key(%s)\n", key)
-		}
-	} else {
-		n := ResultScoreMap[scoreTag]
-		sc.ScenarioScoreMap.Store(key, &n)
-	}
-	step.AddScore(scoreTag)
-}
-
-// シナリオ毎のスコア表示
-func (sc *Scenario) PrintScenarioScoreMap() {
-	ssmap := map[string]int64{}
-	sc.ScenarioScoreMap.Range(func(key, value any) bool {
-		tag, okKey := key.(string)
-		scorePtr, okVal := value.(*int64)
-		if !okKey || !okVal {
-			log.Printf("error failed ScenarioScoreMap.Load type assertion: key(%s)\n", key)
-			return false
-		}
-		scoreVal := atomic.LoadInt64(scorePtr)
-		ssmap[string(tag)] = scoreVal
-
-		return true
-	})
-	AdminLogger.Println(pp.Sprint(ssmap))
 }
