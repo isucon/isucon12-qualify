@@ -220,21 +220,21 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 
 		// 不正リクエストチェック
-		// - 存在しない大会
+		// 存在しない大会
 		res, err = PostOrganizerCompetitionResultAction(ctx, "nonexisting-competition", []byte(csv), orgAg)
-		v = ValidateResponse("大会結果CSV入稿: 不正リクエスト(存在しない大会)", step, res, err, WithStatusCode(400))
+		v = ValidateResponse("大会結果CSV入稿: 不正リクエスト(存在しない大会)", step, res, err, WithStatusCode(404))
 		if !v.IsEmpty() {
 			return v
 		}
 
-		// - 存在しないプレイヤーが含まれるCSVを入稿
+		// 存在しないプレイヤーが含まれるCSVを入稿
 		invalidScore := ScoreRows{&ScoreRow{
 			PlayerID: "not-exist-player",
 			Score:    1,
 		}}
 		invalidCSV := invalidScore.CSV()
 		res, err = PostOrganizerCompetitionResultAction(ctx, competitionId, []byte(invalidCSV), orgAg)
-		v = ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(400))
+		v = ValidateResponse("大会結果CSV入稿: 不正リクエスト(存在しないプレイヤー)", step, res, err, WithStatusCode(400))
 		if !v.IsEmpty() {
 			return v
 		}
@@ -250,8 +250,15 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		if !v.IsEmpty() {
 			return v
 		}
-		// TODO: 不正リクエストチェック
-		// - 存在しない大会
+	}
+	// 不正リクエストチェック
+	// 存在しない大会
+	{
+		res, err := PostOrganizerCompetitionFinishAction(ctx, "nonexisting-competition", orgAg)
+		v := ValidateResponse("大会終了: 不正リクエスト(存在しない大会)", step, res, err, WithStatusCode(404))
+		if !v.IsEmpty() {
+			return v
+		}
 	}
 	{
 		res, err := GetOrganizerBillingAction(ctx, orgAg)
@@ -263,6 +270,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 				if competitionId != r.Data.Reports[0].CompetitionID {
 					return fmt.Errorf("対象の大会のIDが違います (want: %s, got: %s)", competitionId, r.Data.Reports[0].CompetitionID)
 				}
+				// TODO: 固定値確認
 				return nil
 			}),
 		)
@@ -304,8 +312,15 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		if !v.IsEmpty() {
 			return v
 		}
-		// TODO: 不正リクエストチェック
-		// - 存在しないプレイヤー
+	}
+	// 不正リクエストチェック
+	// 存在しないプレイヤー
+	{
+		res, err := GetPlayerAction(ctx, "nonexist-player", playerAg)
+		v := ValidateResponse("プレイヤーと戦績情報取得", step, res, err, WithStatusCode(404))
+		if !v.IsEmpty() {
+			return v
+		}
 	}
 	{
 		//rank_after未指定
@@ -337,9 +352,16 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		if !v.IsEmpty() {
 			return v
 		}
+	}
 
-		// TODO: 不正リクエストチェック
-		// - 存在しない大会
+	// 不正リクエストチェック
+	// 存在しない大会
+	{
+		res, err := GetPlayerCompetitionRankingAction(ctx, "nonexisting-competition", strconv.Itoa(1), playerAg)
+		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(404))
+		if !v.IsEmpty() {
+			return v
+		}
 	}
 	{
 		res, err := GetPlayerCompetitionsAction(ctx, playerAg)

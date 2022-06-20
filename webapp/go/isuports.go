@@ -871,6 +871,14 @@ func competitionFinishHandler(c echo.Context) error {
 	if id == "" {
 		return echo.ErrBadRequest
 	}
+	_, err = retrieveCompetition(ctx, tenantDB, id)
+	if err != nil {
+		// 存在しない大会
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.ErrNotFound
+		}
+		return fmt.Errorf("error retrieveCompetition: %w", err)
+	}
 
 	now := time.Now()
 	if _, err := tenantDB.ExecContext(
@@ -913,7 +921,7 @@ func competitionResultHandler(c echo.Context) error {
 	if err != nil {
 		// 存在しない大会
 		if errors.Is(err, sql.ErrNoRows) {
-			return echo.ErrBadRequest
+			return echo.ErrNotFound
 		}
 		return fmt.Errorf("error retrieveCompetition: %w", err)
 	}
