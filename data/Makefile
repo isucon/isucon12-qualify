@@ -17,6 +17,8 @@ data.tar.gz:
 	tar czf data.tar.gz *.db *.sql *.json
 
 install:
+	rm -f ../webapp/tenant_db/*.db
+	rm -f ../initial_data/*.db
 	cp *.db ../webapp/tenant_db/
 	cp *.db ../initial_data/
 	cp *.sql ../webapp/sql/admin/
