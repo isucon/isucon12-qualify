@@ -484,6 +484,8 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 		billingMap[vh.PlayerID] = 10
 	}
 
+	// TODO: flock 入れる
+
 	scoredPlayerIDs := []string{}
 	if err := tenantDB.SelectContext(
 		ctx,
@@ -918,11 +920,9 @@ func competitionResultHandler(c echo.Context) error {
 	if !reflect.DeepEqual(headers, []string{"player_id", "score"}) {
 		return fmt.Errorf("not match header: %#v", headers)
 	}
-	ttx, err := tenantDB.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("error tenantDB.BeginTxx: %w", err)
-	}
-	if _, err := ttx.ExecContext(
+
+	// TODO: flock入れる
+	if _, err := tenantDB.ExecContext(
 		ctx,
 		"DELETE FROM player_score WHERE competition_id = ?",
 		competitionID,
@@ -937,45 +937,35 @@ func competitionResultHandler(c echo.Context) error {
 			if err == io.EOF {
 				break
 			}
-			ttx.Rollback()
 			return fmt.Errorf("error r.Read at rows: %w", err)
 		}
 		if len(row) != 2 {
-			ttx.Rollback()
 			return fmt.Errorf("row must have two columns: %#v", row)
 		}
 		playerID, scoreStr := row[0], row[1]
 		player, err := retrievePlayer(ctx, tenantDB, playerID)
 		if err != nil {
-			ttx.Rollback()
 			return fmt.Errorf("error retrievePlayer: %w", err)
 		}
 		var score int64
 		if score, err = strconv.ParseInt(scoreStr, 10, 64); err != nil {
-			ttx.Rollback()
 			return fmt.Errorf("error strconv.ParseUint: scoreStr=%s, %w", scoreStr, err)
 		}
 		id, err := dispenseID(ctx)
 		if err != nil {
-			ttx.Rollback()
 			return fmt.Errorf("error dispenseID: %w", err)
 		}
 		now := time.Now()
-		if _, err := ttx.ExecContext(
+		if _, err := tenantDB.ExecContext(
 			ctx,
 			"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 			id, v.tenantID, player.ID, competitionID, score, rowNumber, now, now,
 		); err != nil {
-			ttx.Rollback()
 			return fmt.Errorf(
 				"error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNumber=%d, createdAt=%s, updatedAt=%s, %w",
 				id, v.tenantID, player.ID, competitionID, score, rowNumber, now, now, err,
 			)
 		}
-	}
-
-	if err := ttx.Commit(); err != nil {
-		return fmt.Errorf("error txx.Commit: %w", err)
 	}
 
 	if err := c.JSON(http.StatusOK, SuccessResult{Success: true}); err != nil {
@@ -1097,6 +1087,9 @@ func playerHandler(c echo.Context) error {
 	); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("error Select competition: %w", err)
 	}
+
+	// TODO flock 入れる
+
 	pss := make([]PlayerScoreRow, 0, len(cs))
 	for _, c := range cs {
 		ps := PlayerScoreRow{}
@@ -1218,6 +1211,7 @@ func competitionRankingHandler(c echo.Context) error {
 		}
 	}
 
+	// TODO: flock 入れる
 	pss := []PlayerScoreRow{}
 	if err := tenantDB.SelectContext(
 		ctx,
