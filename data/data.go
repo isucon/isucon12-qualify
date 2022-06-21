@@ -377,7 +377,7 @@ func CreatePlayerData(
 				created := fake.Time().TimeBetween(c.CreatedAt, end)
 				competitionScores = append(competitionScores, &isuports.PlayerScoreRow{
 					TenantID:      tenant.ID,
-					ID:            GenID(created),
+					ID:            strconv.FormatInt(GenID(created), 10),
 					PlayerID:      p.ID,
 					CompetitionID: c.ID,
 					Score:         CreateScore(),

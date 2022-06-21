@@ -358,7 +358,7 @@ func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id string) (*Comp
 
 type PlayerScoreRow struct {
 	TenantID      int64     `db:"tenant_id"`
-	ID            int64     `db:"id"`
+	ID            string    `db:"id"`
 	PlayerID      string    `db:"player_id"`
 	CompetitionID string    `db:"competition_id"`
 	Score         int64     `db:"score"`
@@ -959,14 +959,8 @@ func competitionResultHandler(c echo.Context) error {
 		return fmt.Errorf("error flockByTenantID: %w", err)
 	}
 	defer fl.Close()
-	if _, err := tenantDB.ExecContext(
-		ctx,
-		"DELETE FROM player_score WHERE competition_id = ?",
-		competitionID,
-	); err != nil {
-		return fmt.Errorf("error Delete player_score: competitionID=%s, %w", competitionID, err)
-	}
 	var rowNumber int64
+	playerScoreRows := []PlayerScoreRow{}
 	for {
 		rowNumber++
 		row, err := r.Read()
@@ -980,8 +974,7 @@ func competitionResultHandler(c echo.Context) error {
 			return fmt.Errorf("row must have two columns: %#v", row)
 		}
 		playerID, scoreStr := row[0], row[1]
-		player, err := retrievePlayer(ctx, tenantDB, playerID)
-		if err != nil {
+		if _, err := retrievePlayer(ctx, tenantDB, playerID); err != nil {
 			// 存在しないプレイヤーが含まれている
 			if errors.Is(err, sql.ErrNoRows) {
 				return echo.ErrBadRequest
@@ -997,15 +990,37 @@ func competitionResultHandler(c echo.Context) error {
 			return fmt.Errorf("error dispenseID: %w", err)
 		}
 		now := time.Now()
-		if _, err := tenantDB.ExecContext(
+		playerScoreRows = append(playerScoreRows, PlayerScoreRow{
+			ID:            id,
+			TenantID:      v.tenantID,
+			PlayerID:      playerID,
+			CompetitionID: competitionID,
+			Score:         score,
+			RowNumber:     rowNumber,
+			CreatedAt:     now,
+			UpdatedAt:     now,
+		})
+	}
+
+	if _, err := tenantDB.ExecContext(
+		ctx,
+		"DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?",
+		v.tenantID,
+		competitionID,
+	); err != nil {
+		return fmt.Errorf("error Delete player_score: tenantID=%d, competitionID=%s, %w", v.tenantID, competitionID, err)
+	}
+	for _, ps := range playerScoreRows {
+		if _, err := tenantDB.NamedExecContext(
 			ctx,
-			"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-			id, v.tenantID, player.ID, competitionID, score, rowNumber, now, now,
+			"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_number, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_number, :created_at, :updated_at)",
+			ps,
 		); err != nil {
 			return fmt.Errorf(
 				"error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNumber=%d, createdAt=%s, updatedAt=%s, %w",
-				id, v.tenantID, player.ID, competitionID, score, rowNumber, now, now, err,
+				ps.ID, ps.TenantID, ps.PlayerID, ps.CompetitionID, ps.Score, ps.RowNumber, ps.CreatedAt, ps.UpdatedAt, err,
 			)
+
 		}
 	}
 
