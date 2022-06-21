@@ -56,7 +56,7 @@ type BenchmarkerSource struct {
 func init() {
 	os.Setenv("TZ", "UTC")
 	diff := Now().Add(time.Second).Sub(Epoch)
-	maxID = int64(diff.Seconds()) * 1000000
+	maxID = int64(diff.Seconds()) * 10000
 }
 
 func Run(tenantsNum int) error {
@@ -128,10 +128,10 @@ func genID(ts time.Time) int64 {
 	var newID int64
 	if _, exists := idMap[id]; !exists {
 		idMap[id] = fake.Int64Between(0, 99)
-		newID = id*1000000 + idMap[id]
-	} else if idMap[id] < 999999 {
+		newID = id*10000 + idMap[id]
+	} else if idMap[id] < 9999 {
 		idMap[id]++
-		newID = id*1000000 + idMap[id]
+		newID = id*10000 + idMap[id]
 	} else {
 		log.Fatalf("too many id at %s", ts)
 	}
