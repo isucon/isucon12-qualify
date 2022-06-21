@@ -28,15 +28,12 @@ jobs:
           go-version: ${{ matrix.go }}
         id: go
 
-      - name: chown
-        run: sudo chown -R github /home/github/work/isucon12-qualify/isucon12-qualify
-
       - name: Check out code into the Go module directory
         uses: actions/checkout@v3
 
       - name: setup tools
         run: |
-          sudo apt-get update && sudo apt-get install -y mysql-client-8.0 sqlite3 cpulimit
+          sudo apt-get update && sudo apt-get install -y mysql-client-8.0 sqlite3 cpuset
 
       - name: "build initial data"
         working-directory: ./data
@@ -49,10 +46,10 @@ jobs:
         working-directory: ./webapp/go
         run: |
           make
-          cpulimit -c 2 -- ./isuports &
+          cpuset -c -l 0-1 -- ./isuports &
 
       - name: "run bench"
         working-directory: ./bench
         run: |
           make
-          ./bench -target-addr 127.0.0.1:3000 -target-url http://t.isucon.dev
+          cpuset -c -l 2-16 ./bench -target-addr 127.0.0.1:3000 -target-url http://t.isucon.dev
