@@ -33,7 +33,7 @@ jobs:
 
       - name: setup tools
         run: |
-          sudo apt-get update && sudo apt-get install -y mysql-client-8.0 sqlite3 cpuset
+          sudo apt-get update && sudo apt-get install -y mysql-client-8.0 sqlite3
 
       - name: "build initial data"
         working-directory: ./data
@@ -46,10 +46,10 @@ jobs:
         working-directory: ./webapp/go
         run: |
           make
-          cpuset -c -l 0-1 -- ./isuports &
+          taskset -c 0-1 ./isuports &
 
       - name: "run bench"
         working-directory: ./bench
         run: |
           make
-          cpuset -c -l 2-16 ./bench -target-addr 127.0.0.1:3000 -target-url http://t.isucon.dev
+          taskset -c 2-16 ./bench -target-addr 127.0.0.1:3000 -target-url http://t.isucon.dev
