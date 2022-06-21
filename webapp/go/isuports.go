@@ -398,7 +398,7 @@ func tenantsAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error centerDB.BeginTxx: %w", err)
 	}
-	now := time.Now()
+	now := time.Now().Unix()
 	insertRes, err := tx.ExecContext(
 		ctx,
 		"INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)",
@@ -411,7 +411,7 @@ func tenantsAddHandler(c echo.Context) error {
 			return echo.ErrBadRequest
 		}
 		return fmt.Errorf(
-			"error Insert tenant: name=%s, displayName=%s, createdAt=%s, updatedAt=%s, %w",
+			"error Insert tenant: name=%s, displayName=%s, createdAt=%d, updatedAt=%d, %w",
 			name, displayName, now, now, err,
 		)
 	}
@@ -695,7 +695,7 @@ func playersAddHandler(c echo.Context) error {
 	}
 	displayNames := params["display_name"]
 
-	now := time.Now()
+	now := time.Now().Unix()
 	ttx, err := tenantDB.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("error tenantDB.BeginTxx: %w", err)
@@ -715,7 +715,7 @@ func playersAddHandler(c echo.Context) error {
 		); err != nil {
 			ttx.Rollback()
 			return fmt.Errorf(
-				"error Insert player at tenantDB: id=%s, displayName=%s, isDisqualified=%t, createdAt=%s, updatedAt=%s, %w",
+				"error Insert player at tenantDB: id=%s, displayName=%s, isDisqualified=%t, createdAt=%d, updatedAt=%d, %w",
 				id, displayName, false, now, now, err,
 			)
 		}
@@ -764,14 +764,14 @@ func playerDisqualifiedHandler(c echo.Context) error {
 
 	playerID := c.Param("player_id")
 
-	now := time.Now()
+	now := time.Now().Unix()
 	if _, err := tenantDB.ExecContext(
 		ctx,
 		"UPDATE player SET is_disqualified = ?, updated_at = ? WHERE id = ?",
 		true, now, playerID,
 	); err != nil {
 		return fmt.Errorf(
-			"error Update player: isDisqualified=%t, updatedAt=%s, id=%s, %w",
+			"error Update player: isDisqualified=%t, updatedAt=%d, id=%s, %w",
 			true, now, playerID, err,
 		)
 	}
@@ -820,7 +820,7 @@ func competitionsAddHandler(c echo.Context) error {
 
 	title := c.FormValue("title")
 
-	now := time.Now()
+	now := time.Now().Unix()
 	id, err := dispenseID(ctx)
 	if err != nil {
 		return fmt.Errorf("error dispenseID: %w", err)
@@ -831,7 +831,7 @@ func competitionsAddHandler(c echo.Context) error {
 		id, v.tenantID, title, sql.NullTime{}, now, now,
 	); err != nil {
 		return fmt.Errorf(
-			"error Insert competition: id=%s, tenant_id=%d, title=%s, finishedAt=null, createdAt=%s, updatedAt=%s, %w",
+			"error Insert competition: id=%s, tenant_id=%d, title=%s, finishedAt=null, createdAt=%d, updatedAt=%d, %w",
 			id, v.tenantID, title, now, now, err,
 		)
 	}
@@ -869,14 +869,14 @@ func competitionFinishHandler(c echo.Context) error {
 		return echo.ErrBadRequest
 	}
 
-	now := time.Now()
+	now := time.Now().Unix()
 	if _, err := tenantDB.ExecContext(
 		ctx,
 		"UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?",
 		now, now, id,
 	); err != nil {
 		return fmt.Errorf(
-			"error Update competition: finishedAt=%s, updatedAt=%s, id=%s, %w",
+			"error Update competition: finishedAt=%d, updatedAt=%d, id=%s, %w",
 			now, now, id, err,
 		)
 	}
@@ -980,7 +980,7 @@ func competitionResultHandler(c echo.Context) error {
 			ttx.Rollback()
 			return fmt.Errorf("error dispenseID: %w", err)
 		}
-		now := time.Now()
+		now := time.Now().Unix()
 		if _, err := ttx.ExecContext(
 			ctx,
 			"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -988,7 +988,7 @@ func competitionResultHandler(c echo.Context) error {
 		); err != nil {
 			ttx.Rollback()
 			return fmt.Errorf(
-				"error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNumber=%d, createdAt=%s, updatedAt=%s, %w",
+				"error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNumber=%d, createdAt=%d, updatedAt=%d, %w",
 				id, v.tenantID, player.ID, competitionID, score, rowNumber, now, now, err,
 			)
 		}
@@ -1213,7 +1213,7 @@ func competitionRankingHandler(c echo.Context) error {
 		return errNotPermitted
 	}
 
-	now := time.Now()
+	now := time.Now().Unix()
 	var tenant TenantRow
 	if err := centerDB.GetContext(ctx, &tenant, "SELECT * FROM tenant WHERE id = ?", v.tenantID); err != nil {
 		return fmt.Errorf("error Select tenant: id=%d, %w", v.tenantID, err)
@@ -1225,7 +1225,7 @@ func competitionRankingHandler(c echo.Context) error {
 		player.ID, tenant.ID, competitionID, now, now,
 	); err != nil {
 		return fmt.Errorf(
-			"error Insert visit_history: playerID=%s, tenantID=%d, competitionID=%s, createdAt=%s, updatedAt=%s, %w",
+			"error Insert visit_history: playerID=%s, tenantID=%d, competitionID=%s, createdAt=%d, updatedAt=%d, %w",
 			player.ID, tenant.ID, competitionID, now, now, err,
 		)
 	}
