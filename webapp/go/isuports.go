@@ -394,18 +394,13 @@ func tenantsAddHandler(c echo.Context) error {
 	}
 
 	ctx := context.Background()
-	tx, err := centerDB.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("error centerDB.BeginTxx: %w", err)
-	}
 	now := time.Now()
-	insertRes, err := tx.ExecContext(
+	insertRes, err := centerDB.ExecContext(
 		ctx,
 		"INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)",
 		name, displayName, now, now,
 	)
 	if err != nil {
-		tx.Rollback()
 		if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1062 { // duplicate entry
 			c.Logger().Errorf("failed to insert tenant: %v", err)
 			return echo.ErrBadRequest
@@ -418,15 +413,10 @@ func tenantsAddHandler(c echo.Context) error {
 
 	id, err := insertRes.LastInsertId()
 	if err != nil {
-		tx.Rollback()
 		return fmt.Errorf("error get LastInsertId: %w", err)
 	}
 	if err := createTenantDB(id); err != nil {
-		tx.Rollback()
 		return fmt.Errorf("error createTenantDB: id=%d name=%s %w", id, name, err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("error tx.Commit: %w", err)
 	}
 
 	res := TenantsAddHandlerResult{
@@ -696,32 +686,25 @@ func playersAddHandler(c echo.Context) error {
 	displayNames := params["display_name"]
 
 	now := time.Now()
-	ttx, err := tenantDB.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("error tenantDB.BeginTxx: %w", err)
-	}
 	pds := make([]PlayerDetail, 0, len(displayNames))
 	for _, displayName := range displayNames {
 		id, err := dispenseID(ctx)
 		if err != nil {
-			ttx.Rollback()
 			return fmt.Errorf("error dispenseID: %w", err)
 		}
 
-		if _, err := ttx.ExecContext(
+		if _, err := tenantDB.ExecContext(
 			ctx,
 			"INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
 			id, v.tenantID, displayName, false, now, now,
 		); err != nil {
-			ttx.Rollback()
 			return fmt.Errorf(
 				"error Insert player at tenantDB: id=%s, displayName=%s, isDisqualified=%t, createdAt=%s, updatedAt=%s, %w",
 				id, displayName, false, now, now, err,
 			)
 		}
-		p, err := retrievePlayer(ctx, ttx, id)
+		p, err := retrievePlayer(ctx, tenantDB, id)
 		if err != nil {
-			ttx.Rollback()
 			return fmt.Errorf("error retrievePlayer: %w", err)
 		}
 		pds = append(pds, PlayerDetail{
@@ -729,9 +712,6 @@ func playersAddHandler(c echo.Context) error {
 			DisplayName:    p.DisplayName,
 			IsDisqualified: p.IsDisqualified,
 		})
-	}
-	if err := ttx.Commit(); err != nil {
-		return fmt.Errorf("error ttx.Commit: %w", err)
 	}
 
 	res := PlayersAddHandlerResult{
