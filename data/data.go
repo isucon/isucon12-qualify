@@ -56,7 +56,7 @@ type BenchmarkerSource struct {
 func init() {
 	os.Setenv("TZ", "UTC")
 	diff := Now().Add(time.Second).Sub(Epoch)
-	maxID = int64(diff.Seconds()) * 1000
+	maxID = int64(diff.Seconds()) * 1000000
 }
 
 func Run(tenantsNum int) error {
