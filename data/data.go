@@ -32,6 +32,7 @@ var playersNumByTenant = 200                                      // テナン�
 var competitionsNumByTenant = 20                                  // テナントごとの大会数
 var disqualifiedRate = 10                                         // player失格確率
 var visitsByCompetition = 75                                      // 1大会のplayerごとの訪問数
+var scoresByCompetition = 100                                     // 1大会のplayerごとのスコアを出した数
 var maxID int64                                                   // webapp初期化時の起点ID
 var hugeTenantScale = 25                                          // 1個だけある巨大テナント データサイズ倍数
 var tenantID int64
@@ -55,7 +56,7 @@ type BenchmarkerSource struct {
 func init() {
 	os.Setenv("TZ", "UTC")
 	diff := Now().Add(time.Second).Sub(Epoch)
-	maxID = int64(diff.Seconds()) * 1000
+	maxID = int64(diff.Seconds()) * 10000
 }
 
 func Run(tenantsNum int) error {
@@ -127,10 +128,10 @@ func genID(ts time.Time) int64 {
 	var newID int64
 	if _, exists := idMap[id]; !exists {
 		idMap[id] = fake.Int64Between(0, 99)
-		newID = id*1000 + idMap[id]
-	} else if idMap[id] < 999 {
+		newID = id*10000 + idMap[id]
+	} else if idMap[id] < 9999 {
 		idMap[id]++
-		newID = id*1000 + idMap[id]
+		newID = id*10000 + idMap[id]
 	} else {
 		log.Fatalf("too many id at %s", ts)
 	}
@@ -173,7 +174,7 @@ func storeAdmin(db *sqlx.DB, tenant *isuports.TenantRow, visitHistories []*isupo
 	}
 
 	var from int
-	for i, _ := range visitHistories {
+	for i := range visitHistories {
 		if i > 0 && i%1000 == 0 || i == len(visitHistories)-1 {
 			if _, err := tx.NamedExec(
 				`INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at)
@@ -186,7 +187,6 @@ func storeAdmin(db *sqlx.DB, tenant *isuports.TenantRow, visitHistories []*isupo
 		}
 	}
 	return tx.Commit()
-	return nil
 }
 
 func storeMaxID(db *sqlx.DB) error {
@@ -231,11 +231,11 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 		return err
 	}
 	var from int
-	for i, _ := range pss {
+	for i := range pss {
 		if i > 0 && i%1000 == 0 || i == len(pss)-1 {
 			if _, err := tx.NamedExec(
-				`INSERT INTO player_score (tenant_id, id, player_id, competition_id, score, created_at, updated_at)
-				VALUES(:tenant_id, :id, :player_id, :competition_id, :score, :created_at, :updated_at)`,
+				`INSERT INTO player_score (tenant_id, id, player_id, competition_id, score, row_number, created_at, updated_at)
+				VALUES(:tenant_id, :id, :player_id, :competition_id, :score, :row_number, :created_at, :updated_at)`,
 				pss[from:i],
 			); err != nil {
 				return err
@@ -349,6 +349,7 @@ func CreatePlayerData(
 	visits := make([]*isuports.VisitHistoryRow, 0, len(players)*len(competitions)*visitsByCompetition)
 	bench := make([]*BenchmarkerSource, 0, len(players)*len(competitions))
 	for _, c := range competitions {
+		competitionScores := make([]*isuports.PlayerScoreRow, 0, len(players)*100)
 		for _, p := range players {
 			if c.FinishedAt.Valid && p.CreatedAt.After(c.FinishedAt.Time) {
 				// 大会が終わったあとに登録したplayerはデータがない
@@ -372,15 +373,18 @@ func CreatePlayerData(
 					UpdatedAt:     visitedAt,
 				})
 			}
-			scores = append(scores, &isuports.PlayerScoreRow{
-				TenantID:      tenant.ID,
-				ID:            GenID(created),
-				PlayerID:      p.ID,
-				CompetitionID: c.ID,
-				Score:         CreateScore(),
-				CreatedAt:     created,
-				UpdatedAt:     created,
-			})
+			for i := 0; i < fake.IntBetween(scoresByCompetition-(scoresByCompetition/10), scoresByCompetition+(scoresByCompetition/10)); i++ {
+				created := fake.Time().TimeBetween(c.CreatedAt, end)
+				competitionScores = append(competitionScores, &isuports.PlayerScoreRow{
+					TenantID:      tenant.ID,
+					ID:            GenID(created),
+					PlayerID:      p.ID,
+					CompetitionID: c.ID,
+					Score:         CreateScore(),
+					CreatedAt:     created,
+					UpdatedAt:     created,
+				})
+			}
 			bench = append(bench, &BenchmarkerSource{
 				TenantName:     tenant.Name,
 				CompetitionID:  c.ID,
@@ -389,6 +393,13 @@ func CreatePlayerData(
 				IsDisqualified: p.IsDisqualified,
 			})
 		}
+		sort.Slice(competitionScores, func(i, j int) bool {
+			return competitionScores[i].CreatedAt.Before(competitionScores[j].CreatedAt)
+		})
+		for i := range competitionScores {
+			competitionScores[i].RowNumber = int64(i + 1)
+		}
+		scores = append(scores, competitionScores...)
 	}
 	return scores, visits, bench
 }
