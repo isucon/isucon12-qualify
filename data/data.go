@@ -1,6 +1,7 @@
 package data
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -332,8 +333,11 @@ func CreateCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 		CreatedAt: created,
 	}
 	if isFinished {
-		competition.FinishedAt = fake.Int64Between(created, NowUnix())
-		competition.UpdatedAt = competition.FinishedAt
+		competition.FinishedAt = sql.NullInt64{
+			Valid: true,
+			Int64: fake.Int64Between(created, NowUnix()),
+		}
+		competition.UpdatedAt = competition.FinishedAt.Int64
 	} else {
 		competition.UpdatedAt = fake.Int64Between(created, NowUnix())
 	}
@@ -351,13 +355,13 @@ func CreatePlayerData(
 	for _, c := range competitions {
 		competitionScores := make([]*isuports.PlayerScoreRow, 0, len(players)*100)
 		for _, p := range players {
-			if c.FinishedAt > 0 && p.CreatedAt > c.FinishedAt {
+			if c.FinishedAt.Valid && c.FinishedAt.Int64 < p.CreatedAt {
 				// 大会が終わったあとに登録したplayerはデータがない
 				continue
 			}
 			var end int64
-			if c.FinishedAt > 0 {
-				end = c.FinishedAt
+			if c.FinishedAt.Valid {
+				end = c.FinishedAt.Int64
 			} else {
 				end = NowUnix()
 			}
@@ -389,7 +393,7 @@ func CreatePlayerData(
 				TenantName:     tenant.Name,
 				CompetitionID:  c.ID,
 				PlayerID:       p.ID,
-				IsFinished:     c.FinishedAt > 0,
+				IsFinished:     c.FinishedAt.Valid,
 				IsDisqualified: p.IsDisqualified,
 			})
 		}

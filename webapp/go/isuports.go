@@ -339,12 +339,12 @@ func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id string) (*PlayerRow
 }
 
 type CompetitionRow struct {
-	TenantID   int64  `db:"tenant_id"`
-	ID         string `db:"id"`
-	Title      string `db:"title"`
-	FinishedAt int64  `db:"finished_at"`
-	CreatedAt  int64  `db:"created_at"`
-	UpdatedAt  int64  `db:"updated_at"`
+	TenantID   int64         `db:"tenant_id"`
+	ID         string        `db:"id"`
+	Title      string        `db:"title"`
+	FinishedAt sql.NullInt64 `db:"finished_at"`
+	CreatedAt  int64         `db:"created_at"`
+	UpdatedAt  int64         `db:"updated_at"`
 }
 
 func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id string) (*CompetitionRow, error) {
@@ -487,7 +487,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 	billingMap := map[string]int64{}
 	for _, vh := range vhs {
 		// competition.finished_atよりもあとの場合は、終了後に訪問したとみなして大会開催内アクセス済みとみなさない
-		if comp.FinishedAt < vh.MinCreatedAt {
+		if comp.FinishedAt.Valid && comp.FinishedAt.Int64 < vh.MinCreatedAt {
 			continue
 		}
 		// scoreに登録されていないplayerでアクセスした人 * 10
@@ -515,7 +515,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 
 	var billingYen int64
 	// 大会が終了している場合は課金を計算する(開催中の場合は常に 0)
-	if comp.FinishedAt != 0 {
+	if comp.FinishedAt.Valid {
 		for _, v := range billingMap {
 			billingYen += v
 		}
@@ -828,7 +828,7 @@ func competitionsAddHandler(c echo.Context) error {
 	if _, err := tenantDB.ExecContext(
 		ctx,
 		"INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-		id, v.tenantID, title, sql.NullTime{}, now, now,
+		id, v.tenantID, title, sql.NullInt64{}, now, now,
 	); err != nil {
 		return fmt.Errorf(
 			"error Insert competition: id=%s, tenant_id=%d, title=%s, finishedAt=null, createdAt=%d, updatedAt=%d, %w",
@@ -910,7 +910,7 @@ func competitionResultHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error retrieveCompetition: %w", err)
 	}
-	if comp.FinishedAt > 0 {
+	if comp.FinishedAt.Valid {
 		res := FailureResult{
 			Success: false,
 			Message: "competition is finished",
@@ -1339,7 +1339,7 @@ func competitionsHandler(c echo.Context) error {
 		cds = append(cds, CompetitionDetail{
 			ID:         comp.ID,
 			Title:      comp.Title,
-			IsFinished: comp.FinishedAt > 0,
+			IsFinished: comp.FinishedAt.Valid,
 		})
 	}
 
