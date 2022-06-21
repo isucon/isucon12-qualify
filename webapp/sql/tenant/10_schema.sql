@@ -6,9 +6,9 @@ CREATE TABLE competition (
   id VARCHAR(255) NOT NULL PRIMARY KEY,
   tenant_id BIGINT NOT NULL,
   title TEXT NOT NULL,
-  finished_at DATETIME NULL,
-  created_at DATETIME NOT NULL,
-  updated_at DATETIME NOT NULL
+  finished_at BIGINT NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
 );
 
 CREATE TABLE player (
@@ -16,8 +16,8 @@ CREATE TABLE player (
   tenant_id BIGINT NOT NULL,
   display_name TEXT NOT NULL,
   is_disqualified INTEGER NOT NULL,
-  created_at DATETIME NOT NULL,
-  updated_at DATETIME NOT NULL
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
 );
 
 CREATE TABLE player_score (
@@ -27,6 +27,6 @@ CREATE TABLE player_score (
   competition_id VARCHAR(255) NOT NULL,
   score BIGINT NOT NULL,
   row_number BIGINT NOT NULL,
-  created_at DATETIME NOT NULL,
-  updated_at DATETIME NOT NULL
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
 );
