@@ -25,8 +25,10 @@ import (
 
 var fake = faker.New()
 
-var Now = func() time.Time { return defaultNow }                  // ベンチから使うときは上書きできるようにしておく
-var Epoch = time.Date(2022, 05, 01, 0, 0, 0, 0, time.UTC)         // サービス開始時点(IDの起点)
+var Now = func() time.Time { return defaultNow } // ベンチから使うときは上書きできるようにしておく
+var NowUnix = func() int64 { return Now().Unix() }
+var Epoch = time.Date(2022, 05, 01, 0, 0, 0, 0, time.UTC) // サービス開始時点(IDの起点)
+var EpochUnix = Epoch.Unix()
 var defaultNow = time.Date(2022, 05, 31, 23, 59, 59, 0, time.UTC) // 初期データの終点
 var playersNumByTenant = 200                                      // テナントごとのplayer数
 var competitionsNumByTenant = 20                                  // テナントごとの大会数
@@ -116,15 +118,17 @@ var mu sync.Mutex
 var idMap = map[int64]int64{}
 var generatedMaxID int64
 
-var GenID = func(ts time.Time) int64 {
+var GenID = func(ts int64) int64 {
 	return genID(ts)
 }
 
-func genID(ts time.Time) int64 {
+func genID(ts int64) int64 {
 	mu.Lock()
 	defer mu.Unlock()
-	diff := ts.Sub(Epoch)
-	id := int64(diff.Seconds())
+	id := ts - EpochUnix
+	if id <= 0 {
+		panic(fmt.Sprintf("generatedMaxID is smaller than 0: ts=%d", ts))
+	}
 	var newID int64
 	if _, exists := idMap[id]; !exists {
 		idMap[id] = fake.Int64Between(0, 99)
@@ -133,7 +137,7 @@ func genID(ts time.Time) int64 {
 		idMap[id]++
 		newID = id*10000 + idMap[id]
 	} else {
-		log.Fatalf("too many id at %s", ts)
+		log.Fatalf("too many id at %d", ts)
 	}
 	if newID > generatedMaxID {
 		generatedMaxID = newID
@@ -266,8 +270,8 @@ func CreateTenant(isFirst bool) *isuports.TenantRow {
 		ID:          id,
 		Name:        name,
 		DisplayName: displayName,
-		CreatedAt:   created,
-		UpdatedAt:   fake.Time().TimeBetween(created, Now()),
+		CreatedAt:   created.Unix(),
+		UpdatedAt:   fake.Time().TimeBetween(created, Now()).Unix(),
 	}
 	return &tenant
 }
@@ -283,20 +287,20 @@ func CreatePlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 		players = append(players, CreatePlayer(tenant))
 	}
 	sort.SliceStable(players, func(i int, j int) bool {
-		return players[i].CreatedAt.Before(players[j].CreatedAt)
+		return players[i].CreatedAt < players[j].CreatedAt
 	})
 	return players
 }
 
 func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
-	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
+	created := fake.Int64Between(tenant.CreatedAt, NowUnix())
 	player := isuports.PlayerRow{
 		TenantID:       tenant.ID,
 		ID:             strconv.FormatInt(GenID(created), 10),
 		DisplayName:    fake.Person().Name(),
 		IsDisqualified: rand.Intn(100) < disqualifiedRate,
 		CreatedAt:      created,
-		UpdatedAt:      fake.Time().TimeBetween(created, Now()),
+		UpdatedAt:      fake.Int64Between(created, NowUnix()),
 	}
 	return &player
 }
@@ -314,13 +318,13 @@ func CreateCompetitions(tenant *isuports.TenantRow) []*isuports.CompetitionRow {
 		rows = append(rows, CreateCompetition(tenant))
 	}
 	sort.SliceStable(rows, func(i int, j int) bool {
-		return rows[i].CreatedAt.Before(rows[j].CreatedAt)
+		return rows[i].CreatedAt < rows[j].CreatedAt
 	})
 	return rows
 }
 
 func CreateCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
-	created := fake.Time().TimeBetween(tenant.CreatedAt, Now())
+	created := fake.Int64Between(tenant.CreatedAt, NowUnix())
 	isFinished := rand.Intn(100) < 50
 	competition := isuports.CompetitionRow{
 		TenantID:  tenant.ID,
@@ -329,13 +333,13 @@ func CreateCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 		CreatedAt: created,
 	}
 	if isFinished {
-		competition.FinishedAt = sql.NullTime{
-			Time:  fake.Time().TimeBetween(created, Now()),
+		competition.FinishedAt = sql.NullInt64{
 			Valid: true,
+			Int64: fake.Int64Between(created, NowUnix()),
 		}
-		competition.UpdatedAt = competition.FinishedAt.Time
+		competition.UpdatedAt = competition.FinishedAt.Int64
 	} else {
-		competition.UpdatedAt = fake.Time().TimeBetween(created, Now())
+		competition.UpdatedAt = fake.Int64Between(created, NowUnix())
 	}
 	return &competition
 }
@@ -351,20 +355,20 @@ func CreatePlayerData(
 	for _, c := range competitions {
 		competitionScores := make([]*isuports.PlayerScoreRow, 0, len(players)*100)
 		for _, p := range players {
-			if c.FinishedAt.Valid && p.CreatedAt.After(c.FinishedAt.Time) {
+			if c.FinishedAt.Valid && c.FinishedAt.Int64 < p.CreatedAt {
 				// 大会が終わったあとに登録したplayerはデータがない
 				continue
 			}
-			var end time.Time
+			var end int64
 			if c.FinishedAt.Valid {
-				end = c.FinishedAt.Time
+				end = c.FinishedAt.Int64
 			} else {
-				end = Now()
+				end = NowUnix()
 			}
-			created := fake.Time().TimeBetween(c.CreatedAt, end)
-			lastVisitedAt := fake.Time().TimeBetween(created, end)
+			created := fake.Int64Between(c.CreatedAt, end)
+			lastVisitedAt := fake.Int64Between(created, end)
 			for i := 0; i < fake.IntBetween(visitsByCompetition/10, visitsByCompetition); i++ {
-				visitedAt := fake.Time().TimeBetween(created, lastVisitedAt)
+				visitedAt := fake.Int64Between(created, lastVisitedAt)
 				visits = append(visits, &isuports.VisitHistoryRow{
 					TenantID:      tenant.ID,
 					PlayerID:      p.ID,
@@ -374,7 +378,7 @@ func CreatePlayerData(
 				})
 			}
 			for i := 0; i < fake.IntBetween(scoresByCompetition-(scoresByCompetition/10), scoresByCompetition+(scoresByCompetition/10)); i++ {
-				created := fake.Time().TimeBetween(c.CreatedAt, end)
+				created := fake.Int64Between(c.CreatedAt, end)
 				competitionScores = append(competitionScores, &isuports.PlayerScoreRow{
 					TenantID:      tenant.ID,
 					ID:            GenID(created),
@@ -394,7 +398,7 @@ func CreatePlayerData(
 			})
 		}
 		sort.Slice(competitionScores, func(i, j int) bool {
-			return competitionScores[i].CreatedAt.Before(competitionScores[j].CreatedAt)
+			return competitionScores[i].CreatedAt < competitionScores[j].CreatedAt
 		})
 		for i := range competitionScores {
 			competitionScores[i].RowNumber = int64(i + 1)
