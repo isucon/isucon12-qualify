@@ -1017,7 +1017,7 @@ func competitionResultHandler(c echo.Context) error {
 			ps,
 		); err != nil {
 			return fmt.Errorf(
-				"error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNumber=%d, createdAt=%s, updatedAt=%s, %w",
+				"error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNumber=%d, createdAt=%d, updatedAt=%d, %w",
 				ps.ID, ps.TenantID, ps.PlayerID, ps.CompetitionID, ps.Score, ps.RowNumber, ps.CreatedAt, ps.UpdatedAt, err,
 			)
 
