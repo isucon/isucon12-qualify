@@ -128,10 +128,10 @@ func genID(ts time.Time) int64 {
 	var newID int64
 	if _, exists := idMap[id]; !exists {
 		idMap[id] = fake.Int64Between(0, 99)
-		newID = id*1000 + idMap[id]
-	} else if idMap[id] < 999 {
+		newID = id*1000000 + idMap[id]
+	} else if idMap[id] < 999999 {
 		idMap[id]++
-		newID = id*1000 + idMap[id]
+		newID = id*1000000 + idMap[id]
 	} else {
 		log.Fatalf("too many id at %s", ts)
 	}
