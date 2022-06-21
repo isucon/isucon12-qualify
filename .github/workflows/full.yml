@@ -22,8 +22,6 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - name: show cpus
-        run: cpulimit -c 2 -- echo "### Benchmark CPUs\n $(nproc) CPUs\n" >> $GITHUB_STEP_SUMMARY
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
@@ -35,7 +33,7 @@ jobs:
 
       - name: setup tools
         run: |
-          sudo apt-get update && sudo apt-get install -y mysql-client-8.0 sqlite3
+          sudo apt-get update && sudo apt-get install -y mysql-client-8.0 sqlite3 cpulimit
 
       - name: "build initial data"
         working-directory: ./data
