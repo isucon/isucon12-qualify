@@ -930,8 +930,6 @@ func competitionResultHandler(c echo.Context) error {
 	}
 	defer f.Close()
 
-	now := time.Now()
-
 	r := csv.NewReader(f)
 	headers, err := r.Read()
 	if err != nil {
@@ -982,6 +980,7 @@ func competitionResultHandler(c echo.Context) error {
 			ttx.Rollback()
 			return fmt.Errorf("error dispenseID: %w", err)
 		}
+		now := time.Now()
 		if _, err := ttx.ExecContext(
 			ctx,
 			"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_number, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
