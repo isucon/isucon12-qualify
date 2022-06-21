@@ -38,7 +38,7 @@ jobs:
 
       - name: setup tools
         run: |
-          sudo apt-get update && sudo apt-get install -y mysql-client-8.0 sqlite3
+          apt-get update && apt-get install -y mysql-client-8.0 sqlite3
 
       - name: "build initial data"
         working-directory: ./data
