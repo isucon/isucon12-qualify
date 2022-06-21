@@ -16,6 +16,8 @@ jobs:
         go-version: ${{ matrix.go }}
       id: go
 
+    - name: chwon
+      run: sudo chown -R github /home/github/work/isucon12-qualify/isucon12-qualify/
     - name: Check out code into the Go module directory
       uses: actions/checkout@v3
 
