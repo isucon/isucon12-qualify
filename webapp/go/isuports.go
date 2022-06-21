@@ -308,11 +308,11 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 }
 
 type TenantRow struct {
-	ID          int64     `db:"id"`
-	Name        string    `db:"name"`
-	DisplayName string    `db:"display_name"`
-	CreatedAt   time.Time `db:"created_at"`
-	UpdatedAt   time.Time `db:"updated_at"`
+	ID          int64  `db:"id"`
+	Name        string `db:"name"`
+	DisplayName string `db:"display_name"`
+	CreatedAt   int64  `db:"created_at"`
+	UpdatedAt   int64  `db:"updated_at"`
 }
 
 type dbOrTx interface {
@@ -322,12 +322,12 @@ type dbOrTx interface {
 }
 
 type PlayerRow struct {
-	TenantID       int64     `db:"tenant_id"`
-	ID             string    `db:"id"`
-	DisplayName    string    `db:"display_name"`
-	IsDisqualified bool      `db:"is_disqualified"`
-	CreatedAt      time.Time `db:"created_at"`
-	UpdatedAt      time.Time `db:"updated_at"`
+	TenantID       int64  `db:"tenant_id"`
+	ID             string `db:"id"`
+	DisplayName    string `db:"display_name"`
+	IsDisqualified bool   `db:"is_disqualified"`
+	CreatedAt      int64  `db:"created_at"`
+	UpdatedAt      int64  `db:"updated_at"`
 }
 
 func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id string) (*PlayerRow, error) {
@@ -339,12 +339,12 @@ func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id string) (*PlayerRow
 }
 
 type CompetitionRow struct {
-	TenantID   int64        `db:"tenant_id"`
-	ID         string       `db:"id"`
-	Title      string       `db:"title"`
-	FinishedAt sql.NullTime `db:"finished_at"`
-	CreatedAt  time.Time    `db:"created_at"`
-	UpdatedAt  time.Time    `db:"updated_at"`
+	TenantID   int64  `db:"tenant_id"`
+	ID         string `db:"id"`
+	Title      string `db:"title"`
+	FinishedAt int64  `db:"finished_at"`
+	CreatedAt  int64  `db:"created_at"`
+	UpdatedAt  int64  `db:"updated_at"`
 }
 
 func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id string) (*CompetitionRow, error) {
@@ -356,14 +356,14 @@ func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id string) (*Comp
 }
 
 type PlayerScoreRow struct {
-	TenantID      int64     `db:"tenant_id"`
-	ID            int64     `db:"id"`
-	PlayerID      string    `db:"player_id"`
-	CompetitionID string    `db:"competition_id"`
-	Score         int64     `db:"score"`
-	RowNumber     int64     `db:"row_number"`
-	CreatedAt     time.Time `db:"created_at"`
-	UpdatedAt     time.Time `db:"updated_at"`
+	TenantID      int64  `db:"tenant_id"`
+	ID            int64  `db:"id"`
+	PlayerID      string `db:"player_id"`
+	CompetitionID string `db:"competition_id"`
+	Score         int64  `db:"score"`
+	RowNumber     int64  `db:"row_number"`
+	CreatedAt     int64  `db:"created_at"`
+	UpdatedAt     int64  `db:"updated_at"`
 }
 
 type TenantDetail struct {
@@ -456,16 +456,16 @@ type BillingReport struct {
 }
 
 type VisitHistoryRow struct {
-	PlayerID      string    `db:"player_id"`
-	TenantID      int64     `db:"tenant_id"`
-	CompetitionID string    `db:"competition_id"`
-	CreatedAt     time.Time `db:"created_at"`
-	UpdatedAt     time.Time `db:"updated_at"`
+	PlayerID      string `db:"player_id"`
+	TenantID      int64  `db:"tenant_id"`
+	CompetitionID string `db:"competition_id"`
+	CreatedAt     int64  `db:"created_at"`
+	UpdatedAt     int64  `db:"updated_at"`
 }
 
 type VisitHistorySummaryRow struct {
-	PlayerID     string    `db:"player_id"`
-	MinCreatedAt time.Time `db:"min_created_at"`
+	PlayerID     string `db:"player_id"`
+	MinCreatedAt int64  `db:"min_created_at"`
 }
 
 func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID int64, competitonID string) (*BillingReport, error) {
@@ -487,7 +487,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 	billingMap := map[string]int64{}
 	for _, vh := range vhs {
 		// competition.finished_atよりもあとの場合は、終了後に訪問したとみなして大会開催内アクセス済みとみなさない
-		if comp.FinishedAt.Valid && comp.FinishedAt.Time.Before(vh.MinCreatedAt) {
+		if comp.FinishedAt < vh.MinCreatedAt {
 			continue
 		}
 		// scoreに登録されていないplayerでアクセスした人 * 10
@@ -515,7 +515,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 
 	var billingYen int64
 	// 大会が終了している場合は課金を計算する(開催中の場合は常に 0)
-	if comp.FinishedAt.Valid {
+	if comp.FinishedAt != 0 {
 		for _, v := range billingMap {
 			billingYen += v
 		}
@@ -910,7 +910,7 @@ func competitionResultHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error retrieveCompetition: %w", err)
 	}
-	if comp.FinishedAt.Valid {
+	if comp.FinishedAt > 0 {
 		res := FailureResult{
 			Success: false,
 			Message: "competition is finished",
@@ -1339,7 +1339,7 @@ func competitionsHandler(c echo.Context) error {
 		cds = append(cds, CompetitionDetail{
 			ID:         comp.ID,
 			Title:      comp.Title,
-			IsFinished: comp.FinishedAt.Valid,
+			IsFinished: comp.FinishedAt > 0,
 		})
 	}
 
