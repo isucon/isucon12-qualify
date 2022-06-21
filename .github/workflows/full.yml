@@ -9,7 +9,7 @@ jobs:
     name: Build
     runs-on: self-hosted
     container:
-      image: debian:bullseye-slim
+      image: ubuntu:22.04
       options: "--cpus 2"
     services:
       db:
