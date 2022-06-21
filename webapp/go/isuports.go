@@ -870,6 +870,14 @@ func competitionFinishHandler(c echo.Context) error {
 	if id == "" {
 		return echo.ErrBadRequest
 	}
+	_, err = retrieveCompetition(ctx, tenantDB, id)
+	if err != nil {
+		// 存在しない大会
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.ErrNotFound
+		}
+		return fmt.Errorf("error retrieveCompetition: %w", err)
+	}
 
 	now := time.Now()
 	if _, err := tenantDB.ExecContext(
@@ -910,6 +918,10 @@ func competitionResultHandler(c echo.Context) error {
 	}
 	comp, err := retrieveCompetition(ctx, tenantDB, competitionID)
 	if err != nil {
+		// 存在しない大会
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.ErrNotFound
+		}
 		return fmt.Errorf("error retrieveCompetition: %w", err)
 	}
 	if comp.FinishedAt.Valid {
@@ -970,6 +982,10 @@ func competitionResultHandler(c echo.Context) error {
 		playerID, scoreStr := row[0], row[1]
 		player, err := retrievePlayer(ctx, tenantDB, playerID)
 		if err != nil {
+			// 存在しないプレイヤーが含まれている
+			if errors.Is(err, sql.ErrNoRows) {
+				return echo.ErrBadRequest
+			}
 			return fmt.Errorf("error retrievePlayer: %w", err)
 		}
 		var score int64
