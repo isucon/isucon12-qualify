@@ -8,6 +8,10 @@ jobs:
           - 1.18
     name: Build
     runs-on: self-hosted
+    prepare_jobs:
+      image: debian:bullseye-slim
+      workingDirectory: /root
+      createOptions: "--cpus 2"
     services:
       db:
         image: mysql:8.0.29
