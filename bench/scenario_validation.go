@@ -23,17 +23,8 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	// 検証で作成する参加者数 結果のScoreも同数作成する
 	playerNum := 20
 
-	// SaaS管理者, 主催者, 参加者のagent作成
-	admin := Account{
-		Role:       AccountRoleAdmin,
-		TenantName: "admin",
-		PlayerID:   "admin",
-		Option:     sc.Option,
-	}
-	if err := admin.SetJWT(sc.RawKey); err != nil {
-		return err
-	}
-	adminAg, err := admin.GetAgent()
+	// SaaS管理者のagent作成
+	_, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
 	if err != nil {
 		return err
 	}
@@ -73,16 +64,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	}
 
 	// 大会主催者API
-	organizer := Account{
-		Role:       AccountRoleOrganizer,
-		TenantName: tenantName,
-		PlayerID:   "organizer",
-		Option:     sc.Option,
-	}
-	if err := organizer.SetJWT(sc.RawKey); err != nil {
-		return err
-	}
-	orgAg, err := organizer.GetAgent()
+	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
 	if err != nil {
 		return err
 	}
@@ -202,7 +184,8 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	var score ScoreRows
 	{
 		// NOTE: 失格済みのプレイヤーは含まれていても問題ない
-		for i, playerID := range playerIDs {
+		// NOTE: 最後の一人はスコア未登録+ranking参照済みユーザーとしてbilling検証に利用する
+		for i, playerID := range playerIDs[:playerNum-1] {
 			score = append(score, &ScoreRow{
 				PlayerID: playerID,
 				Score:    100 * i,
@@ -241,16 +224,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 	// 大会参加者API
-	player := Account{
-		Role:       AccountRolePlayer,
-		TenantName: tenantName,
-		PlayerID:   playerIDs[0],
-		Option:     sc.Option,
-	}
-	if err := player.SetJWT(sc.RawKey); err != nil {
-		return err
-	}
-	playerAg, err := player.GetAgent()
+	_, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[0])
 	if err != nil {
 		return err
 	}
@@ -323,24 +297,35 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 
-	// 不正リクエストチェック 失格者がランキングを取得しようとする
+	// 失格者がランキングを参照しようとする
 	{
-		disqualifiedPlayer := Account{
-			Role:       AccountRolePlayer,
-			TenantName: tenantName,
-			PlayerID:   playerIDs[1], // 失格済み
-			Option:     sc.Option,
-		}
-		if err := disqualifiedPlayer.SetJWT(sc.RawKey); err != nil {
-			return err
-		}
-		disqualifiedPlayerAg, err := disqualifiedPlayer.GetAgent()
+		// playerIDs[1]: 失格済み
+		_, disqualifiedPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[1])
 		if err != nil {
 			return err
 		}
 
 		res, err := GetPlayerCompetitionRankingAction(ctx, competitionId, "", disqualifiedPlayerAg)
 		v := ValidateResponse("大会内のランキング取得: 失格済みプレイヤー", step, res, err, WithStatusCode(403))
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+	// スコア未登録プレイヤーがランキングを参照する
+	{
+		// playerIDs[playerNum-1]: 最後の1人にはスコアが登録されていない
+		_, noScorePlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[playerNum-1])
+		if err != nil {
+			return err
+		}
+
+		res, err := GetPlayerCompetitionRankingAction(ctx, competitionId, "", noScorePlayerAg)
+		v := ValidateResponse("大会内のランキング取得: スコア未登録プレイヤー", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				_ = r
+				return nil
+			}),
+		)
 		if !v.IsEmpty() {
 			return v
 		}
@@ -382,10 +367,10 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 				if competitionId != r.Data.Reports[0].CompetitionID {
 					return fmt.Errorf("対象の大会のIDが違います (want: %s, got: %s)", competitionId, r.Data.Reports[0].CompetitionID)
 				}
-				// score登録者 rankingアクセスあり: 100
-				// score登録者 rankingアクセスなし: 50
-				// score未登録者 rankingアクセスあり: 10
-				billingYen := int64((100 * 1) + (50 * (playerNum - 1)))
+				// score登録者 rankingアクセスあり: 100 yen x 1 player
+				// score登録者 rankingアクセスなし:  50 yen x (playerNum - 2) player
+				// score未登録者 rankingアクセスあり:  10 yen x 1 player
+				billingYen := int64((100 * 1) + (50 * (playerNum - 2)) + (10 * 1))
 				if billingYen != r.Data.Reports[0].BillingYen {
 					return fmt.Errorf("大会の請求金額が違います competitionID: %s (want: %d, got: %d)", competitionId, billingYen, r.Data.Reports[0].BillingYen)
 				}
