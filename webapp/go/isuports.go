@@ -119,7 +119,7 @@ func dispenseID(ctx context.Context) (string, error) {
 	return "", lastErr
 }
 
-// mainから呼ばれる
+// Run は cmd/isuports/main.go から呼ばれるエントリーポイントです
 func Run() {
 	e := echo.New()
 	e.Debug = true
