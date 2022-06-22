@@ -35,18 +35,21 @@ const (
 )
 
 var (
+	// 正しいテナント名の正規表現
 	tenantNameRegexp = regexp.MustCompile(`^[a-z][a-z0-9-]{0,61}[a-z0-9]$`)
+
 	sqliteDriverName = "sqlite3"
 )
 
+// 環境変数を取得する、なければデフォルト値を返す
 func getEnv(key string, defaultValue string) string {
-	val := os.Getenv(key)
-	if val != "" {
+	if val, ok := os.LookupEnv(key); ok {
 		return val
 	}
 	return defaultValue
 }
 
+// 管理用DBに接続する
 func connectCenterDB() (*sqlx.DB, error) {
 	config := mysql.NewConfig()
 	config.Net = "tcp"
@@ -60,11 +63,13 @@ func connectCenterDB() (*sqlx.DB, error) {
 	return sqlx.Open("mysql", dsn)
 }
 
+// テナントDBのパスを返す
 func tenantDBPath(id int64) string {
 	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "../tenant_db")
 	return filepath.Join(tenantDBDir, fmt.Sprintf("%d.db", id))
 }
 
+// テナントDBに接続する
 func connectToTenantDB(id int64) (*sqlx.DB, error) {
 	p := tenantDBPath(id)
 	db, err := sqlx.Open(sqliteDriverName, fmt.Sprintf("file:%s?mode=rw", p))
@@ -74,6 +79,7 @@ func connectToTenantDB(id int64) (*sqlx.DB, error) {
 	return db, nil
 }
 
+// テナントDBを新規に作成する
 func createTenantDB(id int64) error {
 	p := tenantDBPath(id)
 
@@ -84,6 +90,7 @@ func createTenantDB(id int64) error {
 	return nil
 }
 
+// システム全体で一意なIDを生成する
 func dispenseID(ctx context.Context) (string, error) {
 	var id int64
 	var lastErr error
@@ -111,6 +118,7 @@ func dispenseID(ctx context.Context) (string, error) {
 
 var centerDB *sqlx.DB
 
+// mainから呼ばれる
 func Run() {
 	e := echo.New()
 	e.Debug = true
@@ -131,26 +139,26 @@ func Run() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// for benchmarker
+	// ベンチマーカーが最初にリクエストするAPI
 	e.POST("/initialize", initializeHandler)
 
-	// for tenant endpoint
-	// 参加者操作
+	// テナント管理者向けAPI - 参加者追加、一覧、失格
 	e.GET("/api/organizer/players", playersListHandler)
 	e.POST("/api/organizer/players/add", playersAddHandler)
 	e.POST("/api/organizer/player/:player_id/disqualified", playerDisqualifiedHandler)
-	// 大会操作
+
+	// テナント管理者向けAPI - 大会管理
 	e.POST("/api/organizer/competitions/add", competitionsAddHandler)
 	e.POST("/api/organizer/competition/:competition_id/finish", competitionFinishHandler)
 	e.POST("/api/organizer/competition/:competition_id/result", competitionResultHandler)
-	// テナント操作
 	e.GET("/api/organizer/billing", billingHandler)
-	// 参加者からの閲覧
+
+	// 参加者向けAPI
 	e.GET("/api/player/player/:player_id", playerHandler)
 	e.GET("/api/player/competition/:competition_id/ranking", competitionRankingHandler)
 	e.GET("/api/player/competitions", competitionsHandler)
 
-	// for admin endpoint
+	// SaaS管理者向けAPI
 	e.POST("/api/admin/tenants/add", tenantsAddHandler)
 	e.GET("/api/admin/tenants/billing", tenantsBillingHandler)
 
@@ -170,6 +178,7 @@ func Run() {
 	e.Logger.Fatal(e.Start(serverPort))
 }
 
+// エラー処理関数
 func errorResponseHandler(err error, c echo.Context) {
 	c.Logger().Errorf("error at %s: %s", c.Path(), err.Error())
 	var he *echo.HTTPError
@@ -269,6 +278,7 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 			fmt.Sprintf("invalid token: role is not found: %s", tokenStr),
 		)
 	}
+	// aud は1要素でテナント名がはいっている
 	aud := token.Audience()
 	if len(aud) != 1 {
 		return nil, echo.NewHTTPError(
@@ -339,6 +349,7 @@ type PlayerRow struct {
 	UpdatedAt      int64  `db:"updated_at"`
 }
 
+// 参加者を取得する
 func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id string) (*PlayerRow, error) {
 	var p PlayerRow
 	if err := tenantDB.GetContext(ctx, &p, "SELECT * FROM player WHERE id = ?", id); err != nil {
@@ -356,6 +367,7 @@ type CompetitionRow struct {
 	UpdatedAt  int64         `db:"updated_at"`
 }
 
+// 大会を取得する
 func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id string) (*CompetitionRow, error) {
 	var c CompetitionRow
 	if err := tenantDB.GetContext(ctx, &c, "SELECT * FROM competition WHERE id = ?", id); err != nil {
@@ -384,6 +396,9 @@ type TenantsAddHandlerResult struct {
 	Tenant TenantDetail `json:"tenant"`
 }
 
+// SasS管理者用API
+// テナントを追加する
+// POST /api/admin/tenants/add
 func tenantsAddHandler(c echo.Context) error {
 	v, err := parseViewer(c)
 	if err != nil {
@@ -456,6 +471,7 @@ func tenantsAddHandler(c echo.Context) error {
 	return nil
 }
 
+// テナント名が規則に沿っているかチェックする
 func validateTenantName(name string) error {
 	if tenantNameRegexp.MatchString(name) {
 		return nil
@@ -483,6 +499,7 @@ type VisitHistorySummaryRow struct {
 	MinCreatedAt int64  `db:"min_created_at"`
 }
 
+// 大会ごとの課金レポートを計算する
 func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID int64, competitonID string) (*BillingReport, error) {
 	comp, err := retrieveCompetition(ctx, tenantDB, competitonID)
 	if err != nil {
@@ -554,6 +571,10 @@ type TenantsBillingHandlerResult struct {
 	Tenants []TenantWithBilling `json:"tenants"`
 }
 
+// SaaS管理者用API
+// テナントごとの課金レポートを最大20件、テナントのid降順で取得する
+// POST /api/admin/tenants/billing
+// URL引数beforeを指定した場合、指定した値よりもidが小さいテナントの課金レポートを取得する
 func tenantsBillingHandler(c echo.Context) error {
 	if host := c.Request().Host; host != getEnv("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
 		return echo.NewHTTPError(
@@ -577,7 +598,7 @@ func tenantsBillingHandler(c echo.Context) error {
 		if err != nil {
 			return echo.NewHTTPError(
 				http.StatusBadRequest,
-				fmt.Errorf("failed to parse query parameter 'before': %s", err.Error()),
+				fmt.Sprintf("failed to parse query parameter 'before': %s", err.Error()),
 			)
 		}
 	}
@@ -646,6 +667,9 @@ type PlayersListHandlerResult struct {
 	Players []PlayerDetail `json:"players"`
 }
 
+// テナント管理者向けAPI
+// GET /api/organizer/players
+// 参加者一覧を返す
 func playersListHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
@@ -682,16 +706,16 @@ func playersListHandler(c echo.Context) error {
 	res := PlayersListHandlerResult{
 		Players: pds,
 	}
-	if err := c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res}); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-	return nil
+	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
 }
 
 type PlayersAddHandlerResult struct {
 	Players []PlayerDetail `json:"players"`
 }
 
+// テナント管理者向けAPI
+// GET /api/organizer/players
+// テナントに参加者を追加する
 func playersAddHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
@@ -983,7 +1007,7 @@ func competitionResultHandler(c echo.Context) error {
 		player, err := retrievePlayer(ctx, tenantDB, playerID)
 		if err != nil {
 			ttx.Rollback()
-			// 存在しないプレイヤーが含まれている
+			// 存在しない参加者が含まれている
 			if errors.Is(err, sql.ErrNoRows) {
 				return echo.NewHTTPError(
 					http.StatusBadRequest,
