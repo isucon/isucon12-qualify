@@ -7,9 +7,10 @@ import (
 	"log"
 	"math/rand"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,6 +26,8 @@ import (
 
 var fake = faker.New()
 
+var OutDir = "."                                 // テナントDBの出力先ディレクトリ
+var DatabaseDSN string                           // MySQLのDSN
 var Now = func() time.Time { return defaultNow } // ベンチから使うときは上書きできるようにしておく
 var NowUnix = func() int64 { return Now().Unix() }
 var Epoch = time.Date(2022, 05, 01, 0, 0, 0, 0, time.UTC) // サービス開始時点(IDの起点)
@@ -75,17 +78,15 @@ func Run(tenantsNum int) error {
 	log.Println("hugeTenantScale", hugeTenantScale)
 	log.Println("epoch", Epoch)
 
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("mysql -uisucon -pisucon --host 127.0.0.1 isuports < %s", adminDBSchemaFilePath))
-	if out, err := cmd.CombinedOutput(); err != nil {
-		log.Println(string(out))
-		return err
-	}
-
 	db, err := adminDB()
 	if err != nil {
 		return err
 	}
+	if err := loadSchema(db, adminDBSchemaFilePath); err != nil {
+		return err
+	}
 	defer db.Close()
+
 	benchSrcs := make([]*BenchmarkerSource, 0)
 	for i := 0; i < tenantsNum; i++ {
 		log.Println("create tenant")
@@ -148,17 +149,38 @@ func genID(ts int64) int64 {
 	return newID
 }
 
-func adminDB() (*sqlx.DB, error) {
-	config := mysql.NewConfig()
-	config.Net = "tcp"
-	config.Addr = "127.0.0.1:3306"
-	config.User = "isucon"
-	config.Passwd = "isucon"
-	config.DBName = "isuports"
-	config.ParseTime = true
-	config.Loc = time.UTC
+func loadSchema(db *sqlx.DB, schemaFile string) error {
+	schema, err := os.ReadFile(schemaFile)
+	if err != nil {
+		return err
+	}
+	queries := strings.Split(string(schema), ";")
+	for _, query := range queries {
+		query = strings.TrimSpace(query)
+		if query == "" {
+			continue
+		}
+		if _, err := db.Exec(query); err != nil {
+			return fmt.Errorf("failed to exec query: %s %s", err, query)
+		}
+	}
+	return nil
+}
 
-	return sqlx.Open("mysql", config.FormatDSN())
+func adminDB() (*sqlx.DB, error) {
+	if DatabaseDSN == "" {
+		config := mysql.NewConfig()
+		config.Net = "tcp"
+		config.Addr = "127.0.0.1:3306"
+		config.User = "isucon"
+		config.Passwd = "isucon"
+		config.DBName = "isuports"
+		config.InterpolateParams = true
+		config.Loc = time.UTC
+		DatabaseDSN = config.FormatDSN()
+	}
+	log.Println("DatabaseDSN", DatabaseDSN)
+	return sqlx.Open("mysql", DatabaseDSN)
 }
 
 func storeAdmin(db *sqlx.DB, tenant *isuports.TenantRow, visitHistories []*isuports.VisitHistoryRow) error {
@@ -180,6 +202,7 @@ func storeAdmin(db *sqlx.DB, tenant *isuports.TenantRow, visitHistories []*isupo
 	var from int
 	for i := range visitHistories {
 		if i > 0 && i%1000 == 0 || i == len(visitHistories)-1 {
+			fmt.Fprint(os.Stderr, ".")
 			if _, err := tx.NamedExec(
 				`INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at)
 				VALUES(:player_id, :tenant_id, :competition_id, :created_at, :updated_at)`,
@@ -190,6 +213,7 @@ func storeAdmin(db *sqlx.DB, tenant *isuports.TenantRow, visitHistories []*isupo
 			from = i
 		}
 	}
+	fmt.Fprintln(os.Stderr, "")
 	return tx.Commit()
 }
 
@@ -201,53 +225,66 @@ func storeMaxID(db *sqlx.DB) error {
 }
 
 func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, competitions []*isuports.CompetitionRow, pss []*isuports.PlayerScoreRow) error {
-	log.Println("store tenant", tenant.ID)
-	os.Remove(tenant.Name + ".db")
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("sqlite3 %d.db < %s", tenant.ID, tenantDBSchemaFilePath))
-	if out, err := cmd.CombinedOutput(); err != nil {
-		log.Println(string(out))
+	filename := filepath.Join(OutDir, fmt.Sprintf("%d.db", tenant.ID))
+	log.Println("store tenant", tenant.ID, "to", filename)
+	os.Remove(filename)
+	db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%s?mode=rwc&_synchronous=OFF", filename))
+	if err != nil {
 		return err
 	}
-	db, err := sqlx.Open("sqlite3", fmt.Sprintf("file:%d.db?mode=rw&_journal_mode=OFF", tenant.ID))
-	if err != nil {
+	if err := loadSchema(db, tenantDBSchemaFilePath); err != nil {
 		return err
 	}
 	defer db.Close()
 
-	tx, err := db.Beginx()
-	if err != nil {
-		return err
+	mustTx := func() *sqlx.Tx {
+		tx, err := db.Beginx()
+		if err != nil {
+			panic(err)
+		}
+		return tx
 	}
-	defer tx.Rollback()
-
+	tx := mustTx()
 	if _, err = tx.NamedExec(
 		`INSERT INTO player (tenant_id, id, display_name, is_disqualified, created_at, updated_at)
 		 VALUES (:tenant_id, :id, :display_name, :is_disqualified, :created_at, :updated_at)`,
 		players,
 	); err != nil {
+		tx.Rollback()
 		return err
 	}
+	tx.Commit()
+
+	tx = mustTx()
 	if _, err := tx.NamedExec(
 		`INSERT INTO competition (tenant_id, id, title, finished_at, created_at, updated_at)
 		VALUES(:tenant_id, :id, :title, :finished_at, :created_at, :updated_at)`,
 		competitions,
 	); err != nil {
+		tx.Rollback()
 		return err
 	}
+	tx.Commit()
+
 	var from int
 	for i := range pss {
 		if i > 0 && i%1000 == 0 || i == len(pss)-1 {
+			fmt.Fprint(os.Stderr, ".")
+			tx = mustTx()
 			if _, err := tx.NamedExec(
 				`INSERT INTO player_score (tenant_id, id, player_id, competition_id, score, row_number, created_at, updated_at)
 				VALUES(:tenant_id, :id, :player_id, :competition_id, :score, :row_number, :created_at, :updated_at)`,
 				pss[from:i],
 			); err != nil {
+				tx.Rollback()
 				return err
 			}
+			tx.Commit()
 			from = i
 		}
 	}
-	return tx.Commit()
+	fmt.Fprintln(os.Stderr, "")
+	return nil
 }
 
 func CreateTenant(isFirst bool) *isuports.TenantRow {
@@ -377,7 +414,7 @@ func CreatePlayerData(
 					UpdatedAt:     visitedAt,
 				})
 			}
-			for i := 0; i < fake.IntBetween(scoresByCompetition-(scoresByCompetition/10), scoresByCompetition+(scoresByCompetition/10)); i++ {
+			for i := 0; i < fake.IntBetween(scoresByCompetition/10, scoresByCompetition); i++ {
 				created := fake.Int64Between(c.CreatedAt, end)
 				competitionScores = append(competitionScores, &isuports.PlayerScoreRow{
 					TenantID:      tenant.ID,

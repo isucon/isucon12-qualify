@@ -1,6 +1,3 @@
-export STAG := $(shell echo $(TAG) | cut -d/ -f2)
-export HASH := $(shell git rev-parse HEAD)
-
 bench: *.go go.* cmd/bench/*.go
 	go build -o bench cmd/bench/main.go
 
