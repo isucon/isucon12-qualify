@@ -317,8 +317,13 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		"SELECT * FROM tenant WHERE name = ?",
 		tenantName,
 	); err != nil {
-		return nil, fmt.Errorf("failed to Select tenant: name=%s, %w", tenantName, err)
+		return nil, echo.NewHTTPError(
+			http.StatusUnauthorized,
+			fmt.Errorf("failed to Select tenant: name=%s, %w", tenantName, err),
+		)
 	}
+
+	// TODO: プレイヤーの存在確認
 
 	v := &Viewer{
 		role:       r,
@@ -1397,6 +1402,10 @@ func competitionsHandler(c echo.Context) error {
 
 	vp, err := retrievePlayer(ctx, tenantDB, v.playerID)
 	if err != nil {
+		// TODO: JWTのPlayerIDが存在するかはparseViewerの中でチェックをしたい
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.NewHTTPError(http.StatusUnauthorized, "player not found")
+		}
 		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
 	}
 	if vp.IsDisqualified {

@@ -519,7 +519,6 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		if err != nil {
 			return err
 		}
-
 		res, err := PostOrganizerCompetitionsAddAction(ctx, "not-exist-tenant-competition", invalidOrgAg)
 		v := ValidateResponse("新規大会追加: 不正リクエスト(存在しないテナント)", step, res, err, WithStatusCode(401))
 		if !v.IsEmpty() {
@@ -534,7 +533,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return err
 		}
 		res, err := GetPlayerCompetitionsAction(ctx, invalidPlayerAg)
-		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(401))
+		v := ValidateResponse("テナント内の大会情報取得: 不正なリクエスト(存在しないプレイヤー)", step, res, err, WithStatusCode(401))
 		if !v.IsEmpty() {
 			return v
 		}
