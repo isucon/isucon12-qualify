@@ -88,7 +88,7 @@ func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, playerID stri
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerCompetitonsAddAction(ctx context.Context, title string, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerCompetitionsAddAction(ctx context.Context, title string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
 	form.Set("title", title)
 	req, err := ag.POST("/api/organizer/competitions/add", strings.NewReader(form.Encode()))

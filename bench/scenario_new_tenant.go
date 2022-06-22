@@ -113,7 +113,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		Title: data.RandomString(24),
 	}
 	{
-		res, err := PostOrganizerCompetitonsAddAction(ctx, comp.Title, orgAg)
+		res, err := PostOrganizerCompetitionsAddAction(ctx, comp.Title, orgAg)
 		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
 				comp.ID = r.Data.Competition.ID

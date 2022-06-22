@@ -23,6 +23,10 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	// 検証で作成する参加者数 結果のScoreも同数作成する
 	playerNum := 20
 
+	// エラーチェック用のプレイヤー
+	disqualifiedPlayerIndex := playerNum - 2 // 失格プレイヤー
+	noScorePlayerIndex := playerNum - 1      // スコア未登録プレイヤー この値以降にはスコアは登録されない
+
 	// SaaS管理者のagent作成
 	_, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
 	if err != nil {
@@ -139,19 +143,19 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		// NOTE: 不正リクエストチェックなし
 	}
 
-	competitionName := "validate_competition"
-	var competitionId string
+	competitionTitle := "validate_competition"
+	var competitionID string
 	{
-		res, err := PostOrganizerCompetitonsAddAction(ctx, competitionName, orgAg)
+		res, err := PostOrganizerCompetitionsAddAction(ctx, competitionTitle, orgAg)
 		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
-				if competitionName != r.Data.Competition.Title {
-					return fmt.Errorf("追加された大会の名前が違います (want: %s, got: %s)", competitionName, r.Data.Competition.Title)
+				if competitionTitle != r.Data.Competition.Title {
+					return fmt.Errorf("追加された大会の名前が違います (want: %s, got: %s)", competitionTitle, r.Data.Competition.Title)
 				}
 				if r.Data.Competition.IsFinished {
 					return fmt.Errorf("新規追加された大会は開催中である必要があります competition.title: %s, competition.id: %s", r.Data.Competition.Title, r.Data.Competition.ID)
 				}
-				competitionId = r.Data.Competition.ID
+				competitionID = r.Data.Competition.ID
 				return nil
 			}),
 		)
@@ -161,14 +165,15 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		// NOTE: 不正リクエストチェックなし
 	}
 	{
-		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerIDs[1], orgAg)
+		idx := disqualifiedPlayerIndex
+		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerIDs[idx], orgAg)
 		v := ValidateResponse("プレイヤーを失格にする", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
 				if !r.Data.Player.IsDisqualified {
 					return fmt.Errorf("プレイヤーが失格になっていません player.id: %s", r.Data.Player.ID)
 				}
-				if playerIDs[1] != r.Data.Player.ID {
-					return fmt.Errorf("失格にしたプレイヤーが違います (want: %s, got: %s)", playerIDs[1], r.Data.Player.ID)
+				if playerIDs[idx] != r.Data.Player.ID {
+					return fmt.Errorf("失格にしたプレイヤーが違います (want: %s, got: %s)", playerIDs[idx], r.Data.Player.ID)
 				}
 				return nil
 			}),
@@ -183,16 +188,18 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	// 大会結果CSV入稿
 	var score ScoreRows
 	{
-		// NOTE: 失格済みのプレイヤーは含まれていても問題ない
-		// NOTE: 最後の一人はスコア未登録+ranking参照済みユーザーとしてbilling検証に利用する
-		for i, playerID := range playerIDs[:playerNum-1] {
+		// NOTE:
+		//	失格済みのプレイヤーは含まれていても問題ない
+		// 	最後の一人はスコア未登録+ranking参照済みユーザーとしてbilling検証に利用する
+		// 後ろのプレイヤーはスコア未登録(noScorePlayerIndex)
+		for i, playerID := range playerIDs[:noScorePlayerIndex] {
 			score = append(score, &ScoreRow{
 				PlayerID: playerID,
-				Score:    100 * i,
+				Score:    100 + i,
 			})
 		}
 		csv := score.CSV()
-		res, err := PostOrganizerCompetitionResultAction(ctx, competitionId, []byte(csv), orgAg)
+		res, err := PostOrganizerCompetitionResultAction(ctx, competitionID, []byte(csv), orgAg)
 		v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
 				_ = r // responseは空
@@ -217,7 +224,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			Score:    1,
 		}}
 		invalidCSV := invalidScore.CSV()
-		res, err = PostOrganizerCompetitionResultAction(ctx, competitionId, []byte(invalidCSV), orgAg)
+		res, err = PostOrganizerCompetitionResultAction(ctx, competitionID, []byte(invalidCSV), orgAg)
 		v = ValidateResponse("大会結果CSV入稿: 不正リクエスト(存在しないプレイヤー)", step, res, err, WithStatusCode(400))
 		if !v.IsEmpty() {
 			return v
@@ -230,16 +237,23 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	}
 
 	{
-		res, err := GetPlayerAction(ctx, playerIDs[0], playerAg)
+		checkPlayerIndex := 10 // < disqualifiedPlayerIndex
+		res, err := GetPlayerAction(ctx, playerIDs[checkPlayerIndex], playerAg)
 		v := ValidateResponse("プレイヤーと戦績情報取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
-				if playerIDs[0] != r.Data.Player.ID {
-					return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", playerIDs[0], r.Data.Player.ID)
+				if playerIDs[checkPlayerIndex] != r.Data.Player.ID {
+					return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", playerIDs[checkPlayerIndex], r.Data.Player.ID)
 				}
 				if 1 != len(r.Data.Scores) {
 					return fmt.Errorf("参加した大会数が違います (want: %d, got: %d)", 1, len(r.Data.Scores))
 				}
-				// TODO: ランキングチェック
+				if competitionTitle != r.Data.Scores[0].CompetitionTitle {
+					return fmt.Errorf("参加した大会IDが違います (want: %s, got: %s)", competitionTitle, r.Data.Scores[checkPlayerIndex].CompetitionTitle)
+				}
+				if int64(100+checkPlayerIndex) != r.Data.Scores[0].Score {
+					return fmt.Errorf("スコアが違います (want: %d, got: %d)", 100+checkPlayerIndex, r.Data.Scores[0].Score)
+				}
+
 				return nil
 			}),
 		)
@@ -247,6 +261,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return v
 		}
 	}
+
 	// 不正リクエストチェック
 	// 存在しないプレイヤー
 	{
@@ -256,16 +271,28 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return v
 		}
 	}
+
+	// ランキング確認
+	// NOTE: 最終的なランキングが正しいことは大会終了APIを叩いた後に確認
 	{
 		//rank_after未指定
-		res, err := GetPlayerCompetitionRankingAction(ctx, competitionId, "", playerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
 		v := ValidateResponse("大会内のランキング取得: ページングなし", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if len(score) != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
 					return fmt.Errorf("大会のランキングの結果の数が違います(最大100件) (want: %d, got: %d)", len(score), len(r.Data.Ranks))
 				}
-				// TODO: ランキングの順序が正しいことを確認
 				return nil
+
+				// TODO: 移す
+				// ランキングチェック
+				// playerIDsのindexの順にscoreが大きいので、playerIDs[0]は最下位 = (noScorePlayerIndex-1)位(失格1)
+				// if noScorePlayerIndex-1 != r.Data.Scores[0].Rank {
+				// 	return fmt.Errorf("ランキングの順位が違います (want: %s, got: %s)", competitionID, r.Data.Scores[0].CompetitionID)
+				// }
+				// if 100+0 != r.Data.Scores[0].Score {
+				// 	return fmt.Errorf("ランキングのスコアが違います (want: %s, got: %s)", competitionID, r.Data.Scores[0].CompetitionID)
+				// }
 			}),
 		)
 		if !v.IsEmpty() {
@@ -274,7 +301,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	}
 	{
 		// rank_afterで最後の1件だけを取るように指定する
-		res, err := GetPlayerCompetitionRankingAction(ctx, competitionId, strconv.Itoa(len(score)-1), playerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, competitionID, strconv.Itoa(len(score)-1), playerAg)
 		v := ValidateResponse("大会内のランキング取得: ページングあり", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if 1 != len(r.Data.Ranks) {
@@ -297,15 +324,17 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 
+	// TODO: ランキングの結果が最大100件なことを確認
+
 	// 失格者がランキングを参照しようとする
 	{
-		// playerIDs[1]: 失格済み
-		_, disqualifiedPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[1])
+		idx := disqualifiedPlayerIndex
+		_, disqualifiedPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[idx])
 		if err != nil {
 			return err
 		}
 
-		res, err := GetPlayerCompetitionRankingAction(ctx, competitionId, "", disqualifiedPlayerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, competitionID, "", disqualifiedPlayerAg)
 		v := ValidateResponse("大会内のランキング取得: 失格済みプレイヤー", step, res, err, WithStatusCode(403))
 		if !v.IsEmpty() {
 			return v
@@ -313,13 +342,13 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	}
 	// スコア未登録プレイヤーがランキングを参照する
 	{
-		// playerIDs[playerNum-1]: 最後の1人にはスコアが登録されていない
-		_, noScorePlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[playerNum-1])
+		idx := noScorePlayerIndex
+		_, noScorePlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[idx])
 		if err != nil {
 			return err
 		}
 
-		res, err := GetPlayerCompetitionRankingAction(ctx, competitionId, "", noScorePlayerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, competitionID, "", noScorePlayerAg)
 		v := ValidateResponse("大会内のランキング取得: スコア未登録プレイヤー", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if len(score) != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
@@ -335,7 +364,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// 主催者API 大会の終了
 	{
-		res, err := PostOrganizerCompetitionFinishAction(ctx, competitionId, orgAg)
+		res, err := PostOrganizerCompetitionFinishAction(ctx, competitionID, orgAg)
 		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
 				_ = r // responseは空
@@ -356,25 +385,42 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 
+	// 大会の終了(organizer/competition/finish)後は反映まで1sの猶予がある
+	time.Sleep(time.Second * 1)
+
+	// 最終的なランキングが正しいことを確認
+	{
+		res, err := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
+		v := ValidateResponse("大会内のランキング取得: ランキングが正しいことを確認", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				if len(score) != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
+					return fmt.Errorf("大会のランキングの結果の数が違います(最大100件) (want: %d, got: %d)", len(score), len(r.Data.Ranks))
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+
 	// 主催者API テナント内請求情報確認
 	{
-		// 大会の終了(organizer/competition/finish)後は反映まで1sの猶予がある
-		time.Sleep(time.Second * 1)
 		res, err := GetOrganizerBillingAction(ctx, orgAg)
 		v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIBilling) error {
 				if 1 != len(r.Data.Reports) {
 					return fmt.Errorf("請求レポートの数が違います (want: %d, got: %d)", 1, len(r.Data.Reports))
 				}
-				if competitionId != r.Data.Reports[0].CompetitionID {
-					return fmt.Errorf("対象の大会のIDが違います (want: %s, got: %s)", competitionId, r.Data.Reports[0].CompetitionID)
+				if competitionID != r.Data.Reports[0].CompetitionID {
+					return fmt.Errorf("対象の大会のIDが違います (want: %s, got: %s)", competitionID, r.Data.Reports[0].CompetitionID)
 				}
 				// score登録者 rankingアクセスあり: 100 yen x 1 player
 				// score登録者 rankingアクセスなし:  50 yen x (playerNum - 2) player
 				// score未登録者 rankingアクセスあり:  10 yen x 1 player
 				billingYen := int64((100 * 1) + (50 * (playerNum - 2)) + (10 * 1))
 				if billingYen != r.Data.Reports[0].BillingYen {
-					return fmt.Errorf("大会の請求金額が違います competitionID: %s (want: %d, got: %d)", competitionId, billingYen, r.Data.Reports[0].BillingYen)
+					return fmt.Errorf("大会の請求金額が違います competitionID: %s (want: %d, got: %d)", competitionID, billingYen, r.Data.Reports[0].BillingYen)
 				}
 
 				return nil
