@@ -12,13 +12,6 @@ services:
     network_mode: host
     restart: always
 
-  blackauth:
-    build: ./blackauth/
-    ports:
-      - "3001:3001"
-    init: true
-    restart: always
-
   webapp:
     cpus: 1
     mem_limit: 1g
@@ -29,7 +22,6 @@ services:
       ISUCON_DB_USER: isucon
       ISUCON_DB_PASSWORD: isucon
       ISUCON_DB_NAME: isuports
-      ISUCON_BASE_HOSTNAME: .t.isucon.dev
       ISUCON_ADMIN_HOSTNAME: admin.t.isucon.dev
     ports:
       - "3000:3000"
@@ -37,7 +29,8 @@ services:
       - mysql
     volumes:
       - ./webapp:/home/isucon/webapp
-      - ./initial_data:/home/isucon/initial_data
+      - tenant_db:/home/isucon/webapp/tenant_db
+      - initial_data:/home/isucon/initial_data
       - gopkg:/home/isucon/go/pkg
     init: true
     restart: always
@@ -45,7 +38,7 @@ services:
   mysql:
     cpus: 1
     mem_limit: 1g
-    image: mysql/mysql-server:8.0.28
+    image: mysql/mysql-server:8.0.29
     environment:
       - "MYSQL_ROOT_HOST=%"
       - "MYSQL_ROOT_PASSWORD=root"
@@ -56,19 +49,40 @@ services:
       - 13306:3306
     restart: always
 
+  blackauth:
+    build: ./webapp
+    ports:
+      - "3001:3001"
+    init: true
+    restart: always
+    volumes:
+      - .:/home/isucon
+    working_dir: /home/isucon/blackauth
+    command:
+      - /usr/local/go/bin/go
+      - run
+      - main.go
+
   bench:
-    build: ./bench/
+    build: ./webapp
     stdin_open: true
     tty: true
     environment:
       ISUCON_JWT_KEY_FILE: ./isuports.pem
-      ISUCON_BASE_HOSTNAME: .t.isucon.dev
     volumes:
       - .:/home/isucon
-      - gopkg_bench:/home/isucon/go/pkg
+      - tenant_db:/home/isucon/webapp/tenant_db
+      - initial_data:/home/isucon/initial_data
+      - gopkg:/home/isucon/go/pkg
     network_mode: host
+    working_dir: /home/isucon/bench
+    command:
+      - "bash"
+      - "-c"
+      - "sleep infinity"
 
 volumes:
   mysql:
   gopkg:
-  gopkg_bench:
+  tenant_db:
+  initial_data:
