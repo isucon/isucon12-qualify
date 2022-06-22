@@ -367,8 +367,13 @@ type PlayerScoreRow struct {
 	UpdatedAt     int64  `db:"updated_at"`
 }
 
+func lockFilePath(id int64) string {
+	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "../tenant_db")
+	return filepath.Join(tenantDBDir, fmt.Sprintf("%d.lock", id))
+}
+
 func flockByTenantID(tenantID int64) (io.Closer, error) {
-	p := tenantDBPath(tenantID)
+	p := lockFilePath(tenantID)
 
 	fl := flock.New(p)
 	if err := fl.Lock(); err != nil {
