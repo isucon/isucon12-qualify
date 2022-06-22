@@ -140,8 +140,9 @@ func Run() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// ベンチマーカーが最初にリクエストするAPI
-	e.POST("/initialize", initializeHandler)
+	// SaaS管理者向けAPI
+	e.POST("/api/admin/tenants/add", tenantsAddHandler)
+	e.GET("/api/admin/tenants/billing", tenantsBillingHandler)
 
 	// テナント管理者向けAPI - 参加者追加、一覧、失格
 	e.GET("/api/organizer/players", playersListHandler)
@@ -159,9 +160,8 @@ func Run() {
 	e.GET("/api/player/competition/:competition_id/ranking", competitionRankingHandler)
 	e.GET("/api/player/competitions", competitionsHandler)
 
-	// SaaS管理者向けAPI
-	e.POST("/api/admin/tenants/add", tenantsAddHandler)
-	e.GET("/api/admin/tenants/billing", tenantsBillingHandler)
+	// ベンチマーカー向けAPI
+	e.POST("/initialize", initializeHandler)
 
 	e.HTTPErrorHandler = errorResponseHandler
 
@@ -785,6 +785,9 @@ type PlayerDisqualifiedHandlerResult struct {
 	Player PlayerDetail `json:"player"`
 }
 
+// テナント管理者向けAPI
+// POST /api/organizer/player/:player_id/disqualified
+// 参加者を失格にする
 func playerDisqualifiedHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
@@ -838,6 +841,9 @@ type CompetitionsAddHandlerResult struct {
 	Competition CompetitionDetail `json:"competition"`
 }
 
+// テナント管理者向けAPI
+// POST /api/organizer/competitions/add
+// 大会を追加する
 func competitionsAddHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
@@ -881,6 +887,9 @@ func competitionsAddHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
 }
 
+// テナント管理者向けAPI
+// POST /api/organizer/competition/:competition_id/finish
+// 大会を終了する
 func competitionFinishHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
@@ -923,6 +932,9 @@ func competitionFinishHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, SuccessResult{Success: true})
 }
 
+// テナント管理者向けAPI
+// POST /api/organizer/competition/:competition_id/result
+// 大会の結果をCSVでアップロードする
 func competitionResultHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
@@ -1061,6 +1073,9 @@ type BillingHandlerResult struct {
 	Reports []BillingReport `json:"reports"`
 }
 
+// テナント管理者向けAPI
+// GET /api/organizer/billing
+// テナント内の課金レポートを取得する
 func billingHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
@@ -1113,6 +1128,9 @@ type PlayerHandlerResult struct {
 	Scores []PlayerScoreDetail `json:"scores"`
 }
 
+// 参加者向けAPI
+// GET /api/player/player/:player_id
+// 参加者の詳細情報を取得する
 func playerHandler(c echo.Context) error {
 	ctx := context.Background()
 
@@ -1221,6 +1239,9 @@ type CompetitionRankingHandlerResult struct {
 	Ranks []CompetitionRank `json:"ranks"`
 }
 
+// 参加者向けAPI
+// GET /api/player/competition/:competition_id/ranking
+// 大会ごとのランキングを取得する
 func competitionRankingHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
@@ -1351,6 +1372,9 @@ type CompetitionsHandlerResult struct {
 	Competitions []CompetitionDetail
 }
 
+// 参加者向けAPI
+// GET /api/player/competitions
+// 大会の一覧を取得する
 func competitionsHandler(c echo.Context) error {
 	ctx := context.Background()
 
@@ -1405,6 +1429,10 @@ type InitializeHandlerResult struct {
 	Appeal string `json:"appeal"`
 }
 
+// ベンチマーカー向けAPI
+// POST /initialize
+// ベンチマーカーが起動したときに最初に呼ぶ
+// データベースの初期化などが実行されるため、スキーマを変更した場合などは適宜改変すること
 func initializeHandler(c echo.Context) error {
 	out, err := exec.Command(initializeScript).CombinedOutput()
 	if err != nil {
