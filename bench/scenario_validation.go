@@ -250,7 +250,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	// 不正リクエストチェック
 	// 存在しないプレイヤー
 	{
-		res, err := GetPlayerAction(ctx, "nonexist-player", playerAg)
+		res, err := GetPlayerAction(ctx, "not-exist-player", playerAg)
 		v := ValidateResponse("プレイヤーと戦績情報取得", step, res, err, WithStatusCode(404))
 		if !v.IsEmpty() {
 			return v
@@ -322,7 +322,9 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		res, err := GetPlayerCompetitionRankingAction(ctx, competitionId, "", noScorePlayerAg)
 		v := ValidateResponse("大会内のランキング取得: スコア未登録プレイヤー", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
-				_ = r
+				if len(score) != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
+					return fmt.Errorf("大会のランキングの結果の数が違います(最大100件) (want: %d, got: %d)", len(score), len(r.Data.Ranks))
+				}
 				return nil
 			}),
 		)
