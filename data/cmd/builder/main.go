@@ -14,6 +14,8 @@ func main() {
 }
 
 func run() int {
+	flag.StringVar(&data.OutDir, "out-dir", "Output directory", ".")
+	flag.StringVar(&data.DatabaseDSN, "db-dsn", "", "")
 	flag.Parse()
 	if len(flag.Args()) != 1 {
 		log.Println("Usage: builder <tenants_num>")
