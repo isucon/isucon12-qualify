@@ -36,19 +36,24 @@ const (
 )
 
 var (
+	// 正しいテナント名の正規表現
 	tenantNameRegexp = regexp.MustCompile(`^[a-z][a-z0-9-]{0,61}[a-z0-9]$`)
+
+	adminDB *sqlx.DB
+
 	sqliteDriverName = "sqlite3"
 )
 
+// 環境変数を取得する、なければデフォルト値を返す
 func getEnv(key string, defaultValue string) string {
-	val := os.Getenv(key)
-	if val != "" {
+	if val, ok := os.LookupEnv(key); ok {
 		return val
 	}
 	return defaultValue
 }
 
-func connectCenterDB() (*sqlx.DB, error) {
+// 管理用DBに接続する
+func connectAdminDB() (*sqlx.DB, error) {
 	config := mysql.NewConfig()
 	config.Net = "tcp"
 	config.Addr = getEnv("ISUCON_DB_HOST", "127.0.0.1") + ":" + getEnv("ISUCON_DB_PORT", "3306")
@@ -61,26 +66,34 @@ func connectCenterDB() (*sqlx.DB, error) {
 	return sqlx.Open("mysql", dsn)
 }
 
+// テナントDBのパスを返す
 func tenantDBPath(id int64) string {
 	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "../tenant_db")
 	return filepath.Join(tenantDBDir, fmt.Sprintf("%d.db", id))
 }
 
+// テナントDBに接続する
 func connectToTenantDB(id int64) (*sqlx.DB, error) {
 	p := tenantDBPath(id)
-	return sqlx.Open(sqliteDriverName, fmt.Sprintf("file:%s?mode=rw", p))
+	db, err := sqlx.Open(sqliteDriverName, fmt.Sprintf("file:%s?mode=rw", p))
+	if err != nil {
+		return nil, fmt.Errorf("failed to open tenant DB: %w", err)
+	}
+	return db, nil
 }
 
+// テナントDBを新規に作成する
 func createTenantDB(id int64) error {
 	p := tenantDBPath(id)
 
 	cmd := exec.Command("sh", "-c", fmt.Sprintf("sqlite3 %s < %s", p, tenantDBSchemaFilePath))
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("error exec sqlite3 %s < %s, out=%s: %w", p, tenantDBSchemaFilePath, string(out), err)
+		return fmt.Errorf("failed to exec sqlite3 %s < %s, out=%s: %w", p, tenantDBSchemaFilePath, string(out), err)
 	}
 	return nil
 }
 
+// システム全体で一意なIDを生成する
 func dispenseID(ctx context.Context) (string, error) {
 	var id int64
 	var lastErr error
@@ -106,19 +119,20 @@ func dispenseID(ctx context.Context) (string, error) {
 	return "", lastErr
 }
 
-var adminDB *sqlx.DB
-
+// Run は cmd/isuports/main.go から呼ばれるエントリーポイントです
 func Run() {
 	e := echo.New()
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
 
-	// sqliteのクエリログを出力する設定
-	// 環境変数 ISUCON_SQLITE_TRACE_FILE を設定すると、そのファイルにクエリログをJSON形式で出力する
 	var (
 		sqlLogger io.Closer
 		err       error
 	)
+	// sqliteのクエリログを出力する設定
+	// 環境変数 ISUCON_SQLITE_TRACE_FILE を設定すると、そのファイルにクエリログをJSON形式で出力する
+	// 未設定なら出力しない
+	// sqltrace.go を参照
 	sqliteDriverName, sqlLogger, err = initializeSQLLogger()
 	if err != nil {
 		e.Logger.Panicf("error initializeSQLLogger: %s", err)
@@ -128,32 +142,32 @@ func Run() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// for benchmarker
-	e.POST("/initialize", initializeHandler)
+	// SaaS管理者向けAPI
+	e.POST("/api/admin/tenants/add", tenantsAddHandler)
+	e.GET("/api/admin/tenants/billing", tenantsBillingHandler)
 
-	// for tenant endpoint
-	// 参加者操作
+	// テナント管理者向けAPI - 参加者追加、一覧、失格
 	e.GET("/api/organizer/players", playersListHandler)
 	e.POST("/api/organizer/players/add", playersAddHandler)
 	e.POST("/api/organizer/player/:player_id/disqualified", playerDisqualifiedHandler)
-	// 大会操作
+
+	// テナント管理者向けAPI - 大会管理
 	e.POST("/api/organizer/competitions/add", competitionsAddHandler)
 	e.POST("/api/organizer/competition/:competition_id/finish", competitionFinishHandler)
 	e.POST("/api/organizer/competition/:competition_id/result", competitionResultHandler)
-	// テナント操作
 	e.GET("/api/organizer/billing", billingHandler)
-	// 参加者からの閲覧
+
+	// 参加者向けAPI
 	e.GET("/api/player/player/:player_id", playerHandler)
 	e.GET("/api/player/competition/:competition_id/ranking", competitionRankingHandler)
 	e.GET("/api/player/competitions", competitionsHandler)
 
-	// for admin endpoint
-	e.POST("/api/admin/tenants/add", tenantsAddHandler)
-	e.GET("/api/admin/tenants/billing", tenantsBillingHandler)
+	// ベンチマーカー向けAPI
+	e.POST("/initialize", initializeHandler)
 
 	e.HTTPErrorHandler = errorResponseHandler
 
-	adminDB, err = connectCenterDB()
+	adminDB, err = connectAdminDB()
 	if err != nil {
 		e.Logger.Fatalf("failed to connect db: %v", err)
 		return
@@ -167,26 +181,18 @@ func Run() {
 	e.Logger.Fatal(e.Start(serverPort))
 }
 
+// エラー処理関数
 func errorResponseHandler(err error, c echo.Context) {
 	c.Logger().Errorf("error at %s: %s", c.Path(), err.Error())
-	if errors.Is(err, errNotPermitted) {
-		c.JSON(http.StatusForbidden, FailureResult{
-			Success: false,
-			Message: err.Error(),
-		})
-		return
-	}
 	var he *echo.HTTPError
 	if errors.As(err, &he) {
 		c.JSON(he.Code, FailureResult{
 			Success: false,
-			Message: err.Error(),
 		})
 		return
 	}
 	c.JSON(http.StatusInternalServerError, FailureResult{
 		Success: false,
-		Message: err.Error(),
 	})
 }
 
@@ -208,10 +214,6 @@ const (
 	RolePlayer
 )
 
-var (
-	errNotPermitted = errors.New("this role is not permitted")
-)
-
 // アクセスしてきた人の情報
 type Viewer struct {
 	role       Role
@@ -224,7 +226,10 @@ type Viewer struct {
 func parseViewer(c echo.Context) (*Viewer, error) {
 	cookie, err := c.Request().Cookie(cookieName)
 	if err != nil {
-		return nil, fmt.Errorf("error c.Request().Cookie: %w", err)
+		return nil, echo.NewHTTPError(
+			http.StatusUnauthorized,
+			fmt.Sprintf("cookie %s is not found", cookieName),
+		)
 	}
 	tokenStr := cookie.Value
 
@@ -244,18 +249,24 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 	)
 	if err != nil {
 		if jwt.IsValidationError(err) {
-			return nil, echo.ErrBadRequest
+			return nil, echo.NewHTTPError(http.StatusUnauthorized, err.Error())
 		}
-		return nil, fmt.Errorf("error parse: %w", err)
+		return nil, fmt.Errorf("failed to parse token: %w", err)
 	}
 	if token.Subject() == "" {
-		return nil, echo.ErrBadRequest
+		return nil, echo.NewHTTPError(
+			http.StatusUnauthorized,
+			fmt.Sprintf("invalid token: subject is not found in token: %s", tokenStr),
+		)
 	}
 
 	var r Role
 	tr, ok := token.Get("role")
 	if !ok {
-		return nil, fmt.Errorf("token is invalid, not have role field: %s", tokenStr)
+		return nil, echo.NewHTTPError(
+			http.StatusUnauthorized,
+			fmt.Sprintf("invalid token: role is not found: %s", tokenStr),
+		)
 	}
 	switch tr {
 	case "admin":
@@ -265,18 +276,28 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 	case "player":
 		r = RolePlayer
 	default:
-		return nil, fmt.Errorf("token is invalid, unknown role: %s", tokenStr)
+		return nil, echo.NewHTTPError(
+			http.StatusUnauthorized,
+			fmt.Sprintf("invalid token: role is not found: %s", tokenStr),
+		)
 	}
+	// aud は1要素でテナント名がはいっている
 	aud := token.Audience()
 	if len(aud) != 1 {
-		return nil, fmt.Errorf("token is invalid, aud field is few or too many: %s", tokenStr)
+		return nil, echo.NewHTTPError(
+			http.StatusUnauthorized,
+			fmt.Sprintf("invalid token: aud field is few or too much: %s", tokenStr),
+		)
 	}
 
 	// JWTに入っているテナント名とHostヘッダのテナント名が一致しているか確認
 	baseHost := getEnv("ISUCON_BASE_HOSTNAME", ".t.isucon.dev")
 	tenantName := strings.TrimSuffix(c.Request().Host, baseHost)
 	if tenantName != aud[0] {
-		return nil, fmt.Errorf("token is invalid, tenant name is not match with %s: %s", c.Request().Host, tokenStr)
+		return nil, echo.NewHTTPError(
+			http.StatusUnauthorized,
+			fmt.Sprintf("invalid token: tenant name is not match with %s: %s", c.Request().Host, tokenStr),
+		)
 	}
 
 	// SaaS管理者用ドメイン
@@ -296,7 +317,7 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		"SELECT * FROM tenant WHERE name = ?",
 		tenantName,
 	); err != nil {
-		return nil, fmt.Errorf("error Select tenant: name=%s, %w", tenantName, err)
+		return nil, fmt.Errorf("failed to Select tenant: name=%s, %w", tenantName, err)
 	}
 
 	v := &Viewer{
@@ -331,6 +352,7 @@ type PlayerRow struct {
 	UpdatedAt      int64  `db:"updated_at"`
 }
 
+// 参加者を取得する
 func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id string) (*PlayerRow, error) {
 	var p PlayerRow
 	if err := tenantDB.GetContext(ctx, &p, "SELECT * FROM player WHERE id = ?", id); err != nil {
@@ -348,6 +370,7 @@ type CompetitionRow struct {
 	UpdatedAt  int64         `db:"updated_at"`
 }
 
+// 大会を取得する
 func retrieveCompetition(ctx context.Context, tenantDB dbOrTx, id string) (*CompetitionRow, error) {
 	var c CompetitionRow
 	if err := tenantDB.GetContext(ctx, &c, "SELECT * FROM competition WHERE id = ?", id); err != nil {
@@ -367,11 +390,13 @@ type PlayerScoreRow struct {
 	UpdatedAt     int64  `db:"updated_at"`
 }
 
+// 排他ロックのためのファイル名を生成する
 func lockFilePath(id int64) string {
 	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "../tenant_db")
 	return filepath.Join(tenantDBDir, fmt.Sprintf("%d.lock", id))
 }
 
+// 排他ロックする
 func flockByTenantID(tenantID int64) (io.Closer, error) {
 	p := lockFilePath(tenantID)
 
@@ -391,22 +416,27 @@ type TenantsAddHandlerResult struct {
 	Tenant TenantDetail `json:"tenant"`
 }
 
+// SasS管理者用API
+// テナントを追加する
+// POST /api/admin/tenants/add
 func tenantsAddHandler(c echo.Context) error {
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.tenantName != "admin" {
 		// admin: SaaS管理者用の特別なテナント名
-		return echo.ErrNotFound
+		return echo.NewHTTPError(
+			http.StatusNotFound,
+			fmt.Sprintf("%s has not this API", v.tenantName),
+		)
 	} else if v.role != RoleAdmin {
-		return errNotPermitted
+		return echo.NewHTTPError(http.StatusForbidden, "admin role required")
 	}
 
 	displayName := c.FormValue("display_name")
 	name := c.FormValue("name")
 	if err := validateTenantName(name); err != nil {
-		c.Logger().Errorf("failed to validateTenantName: %v", name, err)
-		return echo.ErrBadRequest
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
 	ctx := context.Background()
@@ -418,8 +448,7 @@ func tenantsAddHandler(c echo.Context) error {
 	)
 	if err != nil {
 		if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1062 { // duplicate entry
-			c.Logger().Errorf("failed to insert tenant: %v", err)
-			return echo.ErrBadRequest
+			return echo.NewHTTPError(http.StatusBadRequest, "duplicate tenant")
 		}
 		return fmt.Errorf(
 			"error Insert tenant: name=%s, displayName=%s, createdAt=%d, updatedAt=%d, %w",
@@ -447,6 +476,7 @@ func tenantsAddHandler(c echo.Context) error {
 	return nil
 }
 
+// テナント名が規則に沿っているかチェックする
 func validateTenantName(name string) error {
 	if tenantNameRegexp.MatchString(name) {
 		return nil
@@ -474,6 +504,7 @@ type VisitHistorySummaryRow struct {
 	MinCreatedAt int64  `db:"min_created_at"`
 }
 
+// 大会ごとの課金レポートを計算する
 func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID int64, competitonID string) (*BillingReport, error) {
 	comp, err := retrieveCompetition(ctx, tenantDB, competitonID)
 	if err != nil {
@@ -551,16 +582,23 @@ type TenantsBillingHandlerResult struct {
 	Tenants []TenantWithBilling `json:"tenants"`
 }
 
+// SaaS管理者用API
+// テナントごとの課金レポートを最大20件、テナントのid降順で取得する
+// POST /api/admin/tenants/billing
+// URL引数beforeを指定した場合、指定した値よりもidが小さいテナントの課金レポートを取得する
 func tenantsBillingHandler(c echo.Context) error {
-	if c.Request().Host != getEnv("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
-		return echo.ErrNotFound
+	if host := c.Request().Host; host != getEnv("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
+		return echo.NewHTTPError(
+			http.StatusNotFound,
+			fmt.Sprintf("invalid hostname %s", host),
+		)
 	}
 
 	ctx := context.Background()
 	if v, err := parseViewer(c); err != nil {
-		return fmt.Errorf("error parseViewer: %w", err)
+		return err
 	} else if v.role != RoleAdmin {
-		return errNotPermitted
+		return echo.NewHTTPError(http.StatusForbidden, "admin role required")
 	}
 
 	before := c.QueryParam("before")
@@ -569,7 +607,10 @@ func tenantsBillingHandler(c echo.Context) error {
 		var err error
 		beforeID, err = strconv.ParseInt(before, 10, 64)
 		if err != nil {
-			return fmt.Errorf("error strconv.ParseInt at before: %w", err)
+			return echo.NewHTTPError(
+				http.StatusBadRequest,
+				fmt.Sprintf("failed to parse query parameter 'before': %s", err.Error()),
+			)
 		}
 	}
 	// テナントごとに
@@ -595,7 +636,7 @@ func tenantsBillingHandler(c echo.Context) error {
 		}
 		tenantDB, err := connectToTenantDB(t.ID)
 		if err != nil {
-			return fmt.Errorf("error connectToTenantDB: %w", err)
+			return fmt.Errorf("failed to connectToTenantDB: %w", err)
 		}
 		defer tenantDB.Close()
 		cs := []CompetitionRow{}
@@ -605,12 +646,12 @@ func tenantsBillingHandler(c echo.Context) error {
 			"SELECT * FROM competition WHERE tenant_id=?",
 			t.ID,
 		); err != nil {
-			return fmt.Errorf("error Select competition: %w", err)
+			return fmt.Errorf("failed to Select competition: %w", err)
 		}
 		for _, comp := range cs {
 			report, err := billingReportByCompetition(ctx, tenantDB, t.ID, comp.ID)
 			if err != nil {
-				return fmt.Errorf("error billingReportByCompetition: %w", err)
+				return fmt.Errorf("failed to billingReportByCompetition: %w", err)
 			}
 			tb.BillingYen += report.BillingYen
 		}
@@ -619,15 +660,12 @@ func tenantsBillingHandler(c echo.Context) error {
 			break
 		}
 	}
-	if err := c.JSON(http.StatusOK, SuccessResult{
+	return c.JSON(http.StatusOK, SuccessResult{
 		Success: true,
 		Data: TenantsBillingHandlerResult{
 			Tenants: tenantBillings,
 		},
-	}); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-	return nil
+	})
 }
 
 type PlayerDetail struct {
@@ -640,13 +678,16 @@ type PlayersListHandlerResult struct {
 	Players []PlayerDetail `json:"players"`
 }
 
+// テナント管理者向けAPI
+// GET /api/organizer/players
+// 参加者一覧を返す
 func playersListHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
 	if err != nil {
-		return fmt.Errorf("error parseViewer: %w", err)
+		return err
 	} else if v.role != RoleOrganizer {
-		return errNotPermitted
+		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
@@ -676,28 +717,28 @@ func playersListHandler(c echo.Context) error {
 	res := PlayersListHandlerResult{
 		Players: pds,
 	}
-	if err := c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res}); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-	return nil
+	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
 }
 
 type PlayersAddHandlerResult struct {
 	Players []PlayerDetail `json:"players"`
 }
 
+// テナント管理者向けAPI
+// GET /api/organizer/players
+// テナントに参加者を追加する
 func playersAddHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
-		return errNotPermitted
+		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
-		return fmt.Errorf("error connectToTenantDB: %w", err)
+		return err
 	}
 	defer tenantDB.Close()
 
@@ -739,28 +780,28 @@ func playersAddHandler(c echo.Context) error {
 	res := PlayersAddHandlerResult{
 		Players: pds,
 	}
-	if err := c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res}); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-	return nil
+	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
 }
 
 type PlayerDisqualifiedHandlerResult struct {
 	Player PlayerDetail `json:"player"`
 }
 
+// テナント管理者向けAPI
+// POST /api/organizer/player/:player_id/disqualified
+// 参加者を失格にする
 func playerDisqualifiedHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
-		return errNotPermitted
+		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
-		return fmt.Errorf("error connectToTenantDB: %w", err)
+		return err
 	}
 	defer tenantDB.Close()
 
@@ -789,10 +830,7 @@ func playerDisqualifiedHandler(c echo.Context) error {
 			IsDisqualified: p.IsDisqualified,
 		},
 	}
-	if err := c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res}); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-	return nil
+	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
 }
 
 type CompetitionDetail struct {
@@ -805,18 +843,21 @@ type CompetitionsAddHandlerResult struct {
 	Competition CompetitionDetail `json:"competition"`
 }
 
+// テナント管理者向けAPI
+// POST /api/organizer/competitions/add
+// 大会を追加する
 func competitionsAddHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
-		return errNotPermitted
+		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
-		return fmt.Errorf("error connectToTenantDB: %w", err)
+		return err
 	}
 	defer tenantDB.Close()
 
@@ -845,36 +886,36 @@ func competitionsAddHandler(c echo.Context) error {
 			IsFinished: false,
 		},
 	}
-	if err := c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res}); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-	return nil
+	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
 }
 
+// テナント管理者向けAPI
+// POST /api/organizer/competition/:competition_id/finish
+// 大会を終了する
 func competitionFinishHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
-		return errNotPermitted
+		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
-		return fmt.Errorf("error connectToTenantDB: %w", err)
+		return err
 	}
 	defer tenantDB.Close()
 
 	id := c.Param("competition_id")
 	if id == "" {
-		return echo.ErrBadRequest
+		return echo.NewHTTPError(http.StatusBadRequest, "competition_id required")
 	}
 	_, err = retrieveCompetition(ctx, tenantDB, id)
 	if err != nil {
 		// 存在しない大会
 		if errors.Is(err, sql.ErrNoRows) {
-			return echo.ErrNotFound
+			return echo.NewHTTPError(http.StatusNotFound, "competition not found")
 		}
 		return fmt.Errorf("error retrieveCompetition: %w", err)
 	}
@@ -890,37 +931,36 @@ func competitionFinishHandler(c echo.Context) error {
 			now, now, id, err,
 		)
 	}
-
-	if err := c.JSON(http.StatusOK, SuccessResult{Success: true}); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-	return nil
+	return c.JSON(http.StatusOK, SuccessResult{Success: true})
 }
 
+// テナント管理者向けAPI
+// POST /api/organizer/competition/:competition_id/result
+// 大会の結果をCSVでアップロードする
 func competitionResultHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
-		return errNotPermitted
+		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
-		return fmt.Errorf("error connectToTenantDB: %w", err)
+		return err
 	}
 	defer tenantDB.Close()
 
 	competitionID := c.Param("competition_id")
 	if competitionID == "" {
-		return echo.ErrBadRequest
+		return echo.NewHTTPError(http.StatusBadRequest, "competition_id required")
 	}
 	comp, err := retrieveCompetition(ctx, tenantDB, competitionID)
 	if err != nil {
 		// 存在しない大会
 		if errors.Is(err, sql.ErrNoRows) {
-			return echo.ErrNotFound
+			return echo.NewHTTPError(http.StatusNotFound, "competition not found")
 		}
 		return fmt.Errorf("error retrieveCompetition: %w", err)
 	}
@@ -929,9 +969,7 @@ func competitionResultHandler(c echo.Context) error {
 			Success: false,
 			Message: "competition is finished",
 		}
-		if err := c.JSON(http.StatusBadRequest, res); err != nil {
-			return fmt.Errorf("error c.JSON: %w", err)
-		}
+		return c.JSON(http.StatusBadRequest, res)
 	}
 
 	fh, err := c.FormFile("scores")
@@ -950,7 +988,7 @@ func competitionResultHandler(c echo.Context) error {
 		return fmt.Errorf("error r.Read at header: %w", err)
 	}
 	if !reflect.DeepEqual(headers, []string{"player_id", "score"}) {
-		return fmt.Errorf("not match header: %#v", headers)
+		return fmt.Errorf("invalid CSV headers: %#v", headers)
 	}
 
 	// / DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
@@ -975,15 +1013,21 @@ func competitionResultHandler(c echo.Context) error {
 		}
 		playerID, scoreStr := row[0], row[1]
 		if _, err := retrievePlayer(ctx, tenantDB, playerID); err != nil {
-			// 存在しないプレイヤーが含まれている
+			// 存在しない参加者が含まれている
 			if errors.Is(err, sql.ErrNoRows) {
-				return echo.ErrBadRequest
+				return echo.NewHTTPError(
+					http.StatusBadRequest,
+					fmt.Sprintf("player not found: %s", playerID),
+				)
 			}
 			return fmt.Errorf("error retrievePlayer: %w", err)
 		}
 		var score int64
 		if score, err = strconv.ParseInt(scoreStr, 10, 64); err != nil {
-			return fmt.Errorf("error strconv.ParseUint: scoreStr=%s, %w", scoreStr, err)
+			return echo.NewHTTPError(
+				http.StatusBadRequest,
+				fmt.Sprintf("error strconv.ParseUint: scoreStr=%s, %s", scoreStr, err),
+			)
 		}
 		id, err := dispenseID(ctx)
 		if err != nil {
@@ -1024,40 +1068,30 @@ func competitionResultHandler(c echo.Context) error {
 		}
 	}
 
-	if err := c.JSON(http.StatusOK, SuccessResult{Success: true}); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-	return nil
+	return c.JSON(http.StatusOK, SuccessResult{Success: true})
 }
 
 type BillingHandlerResult struct {
 	Reports []BillingReport `json:"reports"`
 }
 
+// テナント管理者向けAPI
+// GET /api/organizer/billing
+// テナント内の課金レポートを取得する
 func billingHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
 	} else if v.role != RoleOrganizer {
-		return errNotPermitted
+		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
-		return fmt.Errorf("error connectToTenantDB: %w", err)
+		return err
 	}
 	defer tenantDB.Close()
-
-	var t TenantRow
-	if err := adminDB.GetContext(
-		ctx,
-		&t,
-		"SELECT * FROM tenant WHERE id = ?",
-		v.tenantID,
-	); err != nil {
-		return fmt.Errorf("error Select tenant: name=%s, %w", v.tenantName, err)
-	}
 
 	cs := []CompetitionRow{}
 	if err := tenantDB.SelectContext(
@@ -1070,7 +1104,7 @@ func billingHandler(c echo.Context) error {
 	}
 	tbrs := make([]BillingReport, 0, len(cs))
 	for _, comp := range cs {
-		report, err := billingReportByCompetition(ctx, tenantDB, t.ID, comp.ID)
+		report, err := billingReportByCompetition(ctx, tenantDB, v.tenantID, comp.ID)
 		if err != nil {
 			return fmt.Errorf("error billingReportByCompetition: %w", err)
 		}
@@ -1083,11 +1117,7 @@ func billingHandler(c echo.Context) error {
 			Reports: tbrs,
 		},
 	}
-	if err := c.JSON(http.StatusOK, res); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-
-	return nil
+	return c.JSON(http.StatusOK, res)
 }
 
 type PlayerScoreDetail struct {
@@ -1100,17 +1130,20 @@ type PlayerHandlerResult struct {
 	Scores []PlayerScoreDetail `json:"scores"`
 }
 
+// 参加者向けAPI
+// GET /api/player/player/:player_id
+// 参加者の詳細情報を取得する
 func playerHandler(c echo.Context) error {
 	ctx := context.Background()
 
 	v, err := parseViewer(c)
 	if err != nil {
-		return fmt.Errorf("error parseViewer: %w", err)
+		return err
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
-		return fmt.Errorf("error connectToTenantDB: %w", err)
+		return err
 	}
 	defer tenantDB.Close()
 
@@ -1119,19 +1152,19 @@ func playerHandler(c echo.Context) error {
 		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
 	}
 	if vp.IsDisqualified {
-		return errNotPermitted
+		return echo.NewHTTPError(http.StatusForbidden, "player is disqualified")
 	}
 
 	playerID := c.Param("player_id")
 	if playerID == "" {
-		return echo.ErrBadRequest
+		return echo.NewHTTPError(http.StatusBadRequest, "player_id is required")
 	}
 
 	// playerの存在確認
 	p, err := retrievePlayer(ctx, tenantDB, playerID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return echo.ErrNotFound
+			return echo.NewHTTPError(http.StatusNotFound, "player not found")
 		}
 		return fmt.Errorf("error retrievePlayer: %w", err)
 	}
@@ -1194,11 +1227,7 @@ func playerHandler(c echo.Context) error {
 			Scores: psds,
 		},
 	}
-	if err := c.JSON(http.StatusOK, res); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-
-	return nil
+	return c.JSON(http.StatusOK, res)
 }
 
 type CompetitionRank struct {
@@ -1212,28 +1241,31 @@ type CompetitionRankingHandlerResult struct {
 	Ranks []CompetitionRank `json:"ranks"`
 }
 
+// 参加者向けAPI
+// GET /api/player/competition/:competition_id/ranking
+// 大会ごとのランキングを取得する
 func competitionRankingHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
 	if err != nil {
-		return fmt.Errorf("error parseViewer: %w", err)
+		return err
 	}
 
 	competitionID := c.Param("competition_id")
 	if competitionID == "" {
-		return echo.ErrBadRequest
+		return echo.NewHTTPError(http.StatusBadRequest, "competition_id is required")
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
-		return fmt.Errorf("error connectToTenantDB: %w", err)
+		return err
 	}
 	defer tenantDB.Close()
 
 	// 大会の存在確認
 	if _, err := retrieveCompetition(ctx, tenantDB, competitionID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return echo.ErrNotFound
+			return echo.NewHTTPError(http.StatusNotFound, "competition not found")
 		}
 		return fmt.Errorf("error retrieveCompetition: %w", err)
 	}
@@ -1243,7 +1275,7 @@ func competitionRankingHandler(c echo.Context) error {
 		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
 	}
 	if player.IsDisqualified {
-		return errNotPermitted
+		return echo.NewHTTPError(http.StatusForbidden, "you are disqualified")
 	}
 
 	now := time.Now().Unix()
@@ -1342,17 +1374,20 @@ type CompetitionsHandlerResult struct {
 	Competitions []CompetitionDetail
 }
 
+// 参加者向けAPI
+// GET /api/player/competitions
+// 大会の一覧を取得する
 func competitionsHandler(c echo.Context) error {
 	ctx := context.Background()
 
 	v, err := parseViewer(c)
 	if err != nil {
-		return fmt.Errorf("error parseViewer: %w", err)
+		return err
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
-		return fmt.Errorf("error connectToTenantDB: %w", err)
+		return err
 	}
 	defer tenantDB.Close()
 
@@ -1361,7 +1396,7 @@ func competitionsHandler(c echo.Context) error {
 		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
 	}
 	if vp.IsDisqualified {
-		return errNotPermitted
+		return echo.NewHTTPError(http.StatusForbidden, "you are disqualified")
 	}
 
 	cs := []CompetitionRow{}
@@ -1388,11 +1423,7 @@ func competitionsHandler(c echo.Context) error {
 			Competitions: cds,
 		},
 	}
-	if err := c.JSON(http.StatusOK, res); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-
-	return nil
+	return c.JSON(http.StatusOK, res)
 }
 
 type InitializeHandlerResult struct {
@@ -1400,6 +1431,10 @@ type InitializeHandlerResult struct {
 	Appeal string `json:"appeal"`
 }
 
+// ベンチマーカー向けAPI
+// POST /initialize
+// ベンチマーカーが起動したときに最初に呼ぶ
+// データベースの初期化などが実行されるため、スキーマを変更した場合などは適宜改変すること
 func initializeHandler(c echo.Context) error {
 	out, err := exec.Command(initializeScript).CombinedOutput()
 	if err != nil {
@@ -1411,9 +1446,5 @@ func initializeHandler(c echo.Context) error {
 		// 競技中の最後に計測したものを参照して、講評記事などで使わせていただきます
 		Appeal: "",
 	}
-	if err := c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res}); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-
-	return nil
+	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
 }
