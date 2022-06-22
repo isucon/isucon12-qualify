@@ -186,7 +186,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// 不正リクエスト: 存在しないプレイヤーを失格にする
 	{
-		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, "non-exist-player", orgAg)
+		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, "not-exist-player", orgAg)
 		v := ValidateResponse("プレイヤーを失格にする: 不正リクエスト(存在しないプレイヤー)", step, res, err, WithStatusCode(404))
 		if !v.IsEmpty() {
 			return v
@@ -220,7 +220,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 		// 不正リクエストチェック
 		// 存在しない大会
-		res, err = PostOrganizerCompetitionResultAction(ctx, "nonexisting-competition", []byte(csv), orgAg)
+		res, err = PostOrganizerCompetitionResultAction(ctx, "not-exist-competition", []byte(csv), orgAg)
 		v = ValidateResponse("大会結果CSV入稿: 不正リクエスト(存在しない大会)", step, res, err, WithStatusCode(404))
 		if !v.IsEmpty() {
 			return v
@@ -315,7 +315,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	// 不正リクエストチェック
 	// 存在しない大会
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, "nonexisting-competition", "", playerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, "not-exist-competition", "", playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(404))
 		if !v.IsEmpty() {
 			return v
@@ -376,7 +376,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	// 不正リクエストチェック
 	// 存在しない大会
 	{
-		res, err := PostOrganizerCompetitionFinishAction(ctx, "nonexisting-competition", orgAg)
+		res, err := PostOrganizerCompetitionFinishAction(ctx, "not-exist-competition", orgAg)
 		v := ValidateResponse("大会終了: 不正リクエスト(存在しない大会)", step, res, err, WithStatusCode(404))
 		if !v.IsEmpty() {
 			return v
@@ -489,8 +489,56 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 
-	// TODO: invalid JWT
+	// 不正リクエスト 無効なJWT
 	// exp切れ
+	{
+		ac := &Account{
+			Role:       AccountRoleAdmin,
+			TenantName: "admin",
+			PlayerID:   "admin",
+			Option:     sc.Option,
+		}
+		if err := ac.SetJWT(sc.RawKey, false); err != nil {
+			return err
+		}
+		invalidAdminAg, err := ac.GetAgent()
+		if err != nil {
+			return err
+		}
+
+		res, err := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, invalidAdminAg)
+		v := ValidateResponse("新規テナント作成: 不正リクエスト(exp切れのJWT)", step, res, err, WithStatusCode(401))
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+
+	// 存在しないテナント
+	{
+		_, invalidOrgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, "not-exist-tenant", "organizer")
+		if err != nil {
+			return err
+		}
+
+		res, err := PostOrganizerCompetitionsAddAction(ctx, "not-exist-tenant-competition", invalidOrgAg)
+		v := ValidateResponse("新規大会追加: 不正リクエスト(存在しないテナント)", step, res, err, WithStatusCode(401))
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+
+	// 存在しないプレイヤー
+	{
+		_, invalidPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, "not-exist-player")
+		if err != nil {
+			return err
+		}
+		res, err := GetPlayerCompetitionsAction(ctx, invalidPlayerAg)
+		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(401))
+		if !v.IsEmpty() {
+			return v
+		}
+	}
 
 	return nil
 }
