@@ -86,7 +86,7 @@ func dispenseID(ctx context.Context) (string, error) {
 	var lastErr error
 	for i := 0; i < 100; i++ {
 		var ret sql.Result
-		ret, err := centerDB.ExecContext(ctx, "REPLACE INTO id_generator (stub) VALUES (?);", "a")
+		ret, err := adminDB.ExecContext(ctx, "REPLACE INTO id_generator (stub) VALUES (?);", "a")
 		if err != nil {
 			if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1213 { // deadlock
 				lastErr = fmt.Errorf("error REPLACE INTO id_generator: %w", err)
@@ -106,7 +106,7 @@ func dispenseID(ctx context.Context) (string, error) {
 	return "", lastErr
 }
 
-var centerDB *sqlx.DB
+var adminDB *sqlx.DB
 
 func Run() {
 	e := echo.New()
@@ -153,13 +153,13 @@ func Run() {
 
 	e.HTTPErrorHandler = errorResponseHandler
 
-	centerDB, err = connectCenterDB()
+	adminDB, err = connectCenterDB()
 	if err != nil {
 		e.Logger.Fatalf("failed to connect db: %v", err)
 		return
 	}
-	centerDB.SetMaxOpenConns(10)
-	defer centerDB.Close()
+	adminDB.SetMaxOpenConns(10)
+	defer adminDB.Close()
 
 	port := getEnv("SERVER_APP_PORT", "3000")
 	e.Logger.Infof("starting isuports server on : %s ...", port)
@@ -290,7 +290,7 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 
 	// テナントの存在確認
 	var tenant TenantRow
-	if err := centerDB.GetContext(
+	if err := adminDB.GetContext(
 		context.Background(),
 		&tenant,
 		"SELECT * FROM tenant WHERE name = ?",
@@ -411,7 +411,7 @@ func tenantsAddHandler(c echo.Context) error {
 
 	ctx := context.Background()
 	now := time.Now().Unix()
-	insertRes, err := centerDB.ExecContext(
+	insertRes, err := adminDB.ExecContext(
 		ctx,
 		"INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)",
 		name, displayName, now, now,
@@ -481,7 +481,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 	}
 
 	vhs := []VisitHistorySummaryRow{}
-	if err := centerDB.SelectContext(
+	if err := adminDB.SelectContext(
 		ctx,
 		&vhs,
 		"SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id",
@@ -580,7 +580,7 @@ func tenantsBillingHandler(c echo.Context) error {
 	//   を合計したものを
 	// テナントの課金とする
 	ts := []TenantRow{}
-	if err := centerDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY id DESC"); err != nil {
+	if err := adminDB.SelectContext(ctx, &ts, "SELECT * FROM tenant ORDER BY id DESC"); err != nil {
 		return fmt.Errorf("error Select tenant: %w", err)
 	}
 	tenantBillings := make([]TenantWithBilling, 0, len(ts))
@@ -1050,7 +1050,7 @@ func billingHandler(c echo.Context) error {
 	defer tenantDB.Close()
 
 	var t TenantRow
-	if err := centerDB.GetContext(
+	if err := adminDB.GetContext(
 		ctx,
 		&t,
 		"SELECT * FROM tenant WHERE id = ?",
@@ -1248,11 +1248,11 @@ func competitionRankingHandler(c echo.Context) error {
 
 	now := time.Now().Unix()
 	var tenant TenantRow
-	if err := centerDB.GetContext(ctx, &tenant, "SELECT * FROM tenant WHERE id = ?", v.tenantID); err != nil {
+	if err := adminDB.GetContext(ctx, &tenant, "SELECT * FROM tenant WHERE id = ?", v.tenantID); err != nil {
 		return fmt.Errorf("error Select tenant: id=%d, %w", v.tenantID, err)
 	}
 
-	if _, err := centerDB.ExecContext(
+	if _, err := adminDB.ExecContext(
 		ctx,
 		"INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
 		player.ID, tenant.ID, competitionID, now, now,
