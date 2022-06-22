@@ -131,6 +131,8 @@ func Run() {
 	)
 	// sqliteのクエリログを出力する設定
 	// 環境変数 ISUCON_SQLITE_TRACE_FILE を設定すると、そのファイルにクエリログをJSON形式で出力する
+	// 未設定なら出力しない
+	// sqltrace.go を参照
 	sqliteDriverName, sqlLogger, err = initializeSQLLogger()
 	if err != nil {
 		e.Logger.Panicf("error initializeSQLLogger: %s", err)
@@ -388,11 +390,13 @@ type PlayerScoreRow struct {
 	UpdatedAt     int64  `db:"updated_at"`
 }
 
+// 排他ロックのためのファイル名を生成する
 func lockFilePath(id int64) string {
 	tenantDBDir := getEnv("ISUCON_TENANT_DB_DIR", "../tenant_db")
 	return filepath.Join(tenantDBDir, fmt.Sprintf("%d.lock", id))
 }
 
+// 排他ロックする
 func flockByTenantID(tenantID int64) (io.Closer, error) {
 	p := lockFilePath(tenantID)
 
