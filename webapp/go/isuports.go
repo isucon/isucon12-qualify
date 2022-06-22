@@ -436,8 +436,7 @@ func tenantsAddHandler(c echo.Context) error {
 	displayName := c.FormValue("display_name")
 	name := c.FormValue("name")
 	if err := validateTenantName(name); err != nil {
-		c.Logger().Errorf("failed to validateTenantName: %v", name, err)
-		return echo.ErrBadRequest
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
 
 	ctx := context.Background()
@@ -449,8 +448,7 @@ func tenantsAddHandler(c echo.Context) error {
 	)
 	if err != nil {
 		if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1062 { // duplicate entry
-			c.Logger().Errorf("failed to insert tenant: %v", err)
-			return echo.ErrBadRequest
+			return echo.NewHTTPError(http.StatusBadRequest, "duplicate tenant")
 		}
 		return fmt.Errorf(
 			"error Insert tenant: name=%s, displayName=%s, createdAt=%d, updatedAt=%d, %w",
