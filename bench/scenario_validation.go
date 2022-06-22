@@ -182,8 +182,15 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		if !v.IsEmpty() {
 			return v
 		}
-		// TODO: 不正リクエストチェック
-		// - 存在しないプレイヤー
+	}
+
+	// 不正リクエスト: 存在しないプレイヤーを失格にする
+	{
+		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, "non-exist-player", orgAg)
+		v := ValidateResponse("プレイヤーを失格にする: 不正リクエスト(存在しないプレイヤー)", step, res, err, WithStatusCode(404))
+		if !v.IsEmpty() {
+			return v
+		}
 	}
 
 	// 大会結果CSV入稿
@@ -465,7 +472,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 				if 1 > len(r.Data.Tenants) {
-					return fmt.Errorf("請求ダッシュボードの結果が足りません")
+					return fmt.Errorf("請求ダッシュボードの結果がありません")
 				}
 				tenantNameMap := make(map[string]struct{})
 				for _, tenant := range r.Data.Tenants {
@@ -480,11 +487,10 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		if !v.IsEmpty() {
 			return v
 		}
-		// TODO: リクエストチェック
-		// - ページングありを検証するか要検討
 	}
 
 	// TODO: invalid JWT
+	// exp切れ
 
 	return nil
 }

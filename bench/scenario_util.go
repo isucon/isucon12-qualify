@@ -93,7 +93,7 @@ func (sc *Scenario) GetAccountAndAgent(role, tenantName, playerID string) (*Acco
 		PlayerID:   playerID,
 		Option:     sc.Option,
 	}
-	if err := ac.SetJWT(sc.RawKey); err != nil {
+	if err := ac.SetJWT(sc.RawKey, true); err != nil {
 		return ac, nil, err
 	}
 	agent, err := ac.GetAgent()

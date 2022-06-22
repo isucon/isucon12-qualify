@@ -51,10 +51,17 @@ func (ac *Account) GetRequestURL() string {
 }
 
 // SetJWT Agentがなければ作って、JWTをcookieに入れる
-func (ac *Account) SetJWT(rawkey *rsa.PrivateKey) error {
+func (ac *Account) SetJWT(rawkey *rsa.PrivateKey, isValidExp bool) error {
 	ag, err := ac.GetAgent()
 	if err != nil {
 		return fmt.Errorf("error GetAgent: %w", err)
+	}
+
+	var expTime time.Time
+	if isValidExp {
+		expTime = time.Now().Add(time.Hour)
+	} else {
+		expTime = time.Now().Add(-time.Hour)
 	}
 
 	token := jwt.New()
@@ -62,7 +69,7 @@ func (ac *Account) SetJWT(rawkey *rsa.PrivateKey) error {
 	token.Set("sub", ac.PlayerID)
 	token.Set("aud", ac.TenantName)
 	token.Set("role", ac.Role)
-	token.Set("exp", time.Now().Add(24*time.Hour).Unix())
+	token.Set("exp", expTime.Unix())
 
 	signedToken, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, rawkey))
 	if err != nil {

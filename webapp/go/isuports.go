@@ -777,6 +777,10 @@ func playerDisqualifiedHandler(c echo.Context) error {
 	}
 	p, err := retrievePlayer(ctx, tenantDB, playerID)
 	if err != nil {
+		// 存在しないプレイヤー
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.ErrNotFound
+		}
 		return fmt.Errorf("error retrievePlayer: %w", err)
 	}
 

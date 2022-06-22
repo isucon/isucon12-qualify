@@ -55,17 +55,7 @@ func (sc *Scenario) ExistingTenantScenario(ctx context.Context, step *isucandar.
 	}
 	sc.ScenarioStart(scTag)
 
-	organizer := Account{
-		Role:       AccountRoleOrganizer,
-		TenantName: tenantName,
-		PlayerID:   "organizer",
-		Option:     sc.Option,
-	}
-
-	if err := organizer.SetJWT(sc.RawKey); err != nil {
-		return err
-	}
-	orgAg, err := organizer.GetAgent()
+	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
 	if err != nil {
 		return err
 	}

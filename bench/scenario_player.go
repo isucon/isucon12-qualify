@@ -42,16 +42,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 
 	// 初期データから一人選ぶ
 	data := sc.InitialData.Choise()
-	player := Account{
-		Role:       AccountRolePlayer,
-		TenantName: data.TenantName,
-		PlayerID:   data.PlayerID,
-		Option:     sc.Option,
-	}
-	if err := player.SetJWT(sc.RawKey); err != nil {
-		return err
-	}
-	playerAg, err := player.GetAgent()
+	_, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, data.TenantName, data.PlayerID)
 	if err != nil {
 		return err
 	}
@@ -66,16 +57,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		}
 
 		// 失格にする
-		organizer := Account{
-			Role:       AccountRoleOrganizer,
-			TenantName: data.TenantName,
-			PlayerID:   "organizer",
-			Option:     sc.Option,
-		}
-		if err := organizer.SetJWT(sc.RawKey); err != nil {
-			return err
-		}
-		orgAg, err := organizer.GetAgent()
+		_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, data.TenantName, "organizer")
 		if err != nil {
 			return err
 		}
