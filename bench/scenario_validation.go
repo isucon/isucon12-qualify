@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/isucon/isucandar"
+	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 )
 
 // ベンチ実行後の整合性検証シナリオ
@@ -191,7 +192,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		// NOTE:
 		//	失格済みのプレイヤーは含まれていても問題ない
 		// 	最後の一人はスコア未登録+ranking参照済みユーザーとしてbilling検証に利用する
-		// 後ろのプレイヤーはスコア未登録(noScorePlayerIndex)
+		// 後ろのプレイヤーはスコア未登録(noScorePlayerIndex以降)
 		for i, playerID := range playerIDs[:noScorePlayerIndex] {
 			score = append(score, &ScoreRow{
 				PlayerID: playerID,
@@ -283,16 +284,6 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 					return fmt.Errorf("大会のランキングの結果の数が違います(最大100件) (want: %d, got: %d)", len(score), len(r.Data.Ranks))
 				}
 				return nil
-
-				// TODO: 移す
-				// ランキングチェック
-				// playerIDsのindexの順にscoreが大きいので、playerIDs[0]は最下位 = (noScorePlayerIndex-1)位(失格1)
-				// if noScorePlayerIndex-1 != r.Data.Scores[0].Rank {
-				// 	return fmt.Errorf("ランキングの順位が違います (want: %s, got: %s)", competitionID, r.Data.Scores[0].CompetitionID)
-				// }
-				// if 100+0 != r.Data.Scores[0].Score {
-				// 	return fmt.Errorf("ランキングのスコアが違います (want: %s, got: %s)", competitionID, r.Data.Scores[0].CompetitionID)
-				// }
 			}),
 		)
 		if !v.IsEmpty() {
@@ -390,11 +381,31 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// 最終的なランキングが正しいことを確認
 	{
+		// NOTE: 失格者はランキングから除外しない
+		rankingNum := len(score)
 		res, err := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
 		v := ValidateResponse("大会内のランキング取得: ランキングが正しいことを確認", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
-				if len(score) != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
-					return fmt.Errorf("大会のランキングの結果の数が違います(最大100件) (want: %d, got: %d)", len(score), len(r.Data.Ranks))
+				if rankingNum != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
+					return fmt.Errorf("大会のランキングの結果の数が違います(最大100件) (want: %d, got: %d)", rankingNum, len(r.Data.Ranks))
+				}
+
+				// ランキングチェック
+				// playerIDsのindexの順にscoreが大きいのでランキングは逆順になる
+				// playerIDs[0]は最下位 = (noScorePlayerIndex-1)位(失格1)
+				playerIDScoreMap := map[string]isuports.CompetitionRank{}
+				for _, rank := range r.Data.Ranks {
+					playerIDScoreMap[rank.PlayerID] = rank
+				}
+				for index, playerID := range playerIDs[:noScorePlayerIndex] {
+					rank := int64(noScorePlayerIndex - index)
+					if rank != playerIDScoreMap[playerID].Rank {
+						return fmt.Errorf("ランキングのランクが違います (want: %d, got: %d)", rank, playerIDScoreMap[playerID].Rank)
+					}
+					score := int64(100 + index)
+					if score != playerIDScoreMap[playerID].Score {
+						return fmt.Errorf("ランキングのスコアが違います (want: %d, got: %d)", score, playerIDScoreMap[playerID].Score)
+					}
 				}
 				return nil
 			}),
