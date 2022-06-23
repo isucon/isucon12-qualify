@@ -322,8 +322,6 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 
-	// TODO: ランキングの結果が最大100件なことを確認
-
 	// 失格者がランキングを参照しようとする
 	{
 		idx := disqualifiedPlayerIndex
@@ -534,6 +532,84 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 		res, err := GetPlayerCompetitionsAction(ctx, invalidPlayerAg)
 		v := ValidateResponse("テナント内の大会情報取得: 不正なリクエスト(存在しないプレイヤー)", step, res, err, WithStatusCode(401))
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+
+	// ランキングの結果が最大100件なことを確認
+	rankingCheckCompetition := "ranking_check_competition"
+	var rankingCheckCompetitionID string
+	// 大会を作成
+	{
+		res, err := PostOrganizerCompetitionsAddAction(ctx, rankingCheckCompetition, orgAg)
+		v := ValidateResponse("新規大会追加: 不正リクエスト(存在しないテナント)", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
+				rankingCheckCompetitionID = r.Data.Competition.ID
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+
+	// プレイヤーを101人追加
+	var pIDs []string
+	{
+		var names []string
+		for i := 0; i < 101; i++ {
+			names = append(names, fmt.Sprintf("ranking_check_%d", i))
+		}
+
+		res, err := PostOrganizerPlayersAddAction(ctx, names, orgAg)
+		v := ValidateResponse("テナントへプレイヤー101人追加", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
+				for _, pl := range r.Data.Players {
+					pIDs = append(pIDs, pl.ID)
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+	// スコアを101人登録
+	{
+		var rankingCheckScore ScoreRows
+		for i, playerID := range pIDs {
+			rankingCheckScore = append(rankingCheckScore, &ScoreRow{
+				PlayerID: playerID,
+				Score:    100 + i,
+			})
+		}
+		csv := rankingCheckScore.CSV()
+		res, err := PostOrganizerCompetitionResultAction(ctx, rankingCheckCompetitionID, []byte(csv), orgAg)
+		v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200))
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+	// 終了する
+	{
+		res, err := PostOrganizerCompetitionFinishAction(ctx, rankingCheckCompetitionID, orgAg)
+		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200))
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+	// 結果を引く
+	{
+		res, err := GetPlayerCompetitionRankingAction(ctx, rankingCheckCompetitionID, "", playerAg)
+		v := ValidateResponse("大会内のランキング取得: ページングなし", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				if 100 != len(r.Data.Ranks) {
+					return fmt.Errorf("大会のランキングの結果の最大は100件である必要があります (want: %d, got: %d)", 100, len(r.Data.Ranks))
+				}
+				return nil
+			}),
+		)
 		if !v.IsEmpty() {
 			return v
 		}
