@@ -55,17 +55,7 @@ func (sc *Scenario) ExistingTenantScenario(ctx context.Context, step *isucandar.
 	}
 	sc.ScenarioStart(scTag)
 
-	organizer := Account{
-		Role:       AccountRoleOrganizer,
-		TenantName: tenantName,
-		PlayerID:   "organizer",
-		Option:     sc.Option,
-	}
-
-	if err := organizer.SetJWT(sc.RawKey); err != nil {
-		return err
-	}
-	orgAg, err := organizer.GetAgent()
+	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
 	if err != nil {
 		return err
 	}
@@ -100,7 +90,7 @@ func (sc *Scenario) ExistingTenantScenario(ctx context.Context, step *isucandar.
 
 	var competitionID string
 	{
-		res, err := PostOrganizerCompetitonsAddAction(ctx, data.RandomString(16), orgAg)
+		res, err := PostOrganizerCompetitionsAddAction(ctx, data.RandomString(16), orgAg)
 		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
 				competitionID = r.Data.Competition.ID

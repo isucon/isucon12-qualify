@@ -43,7 +43,7 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		PlayerID:   "admin",
 		Option:     opt,
 	}
-	if err := admin.SetJWT(sc.RawKey); err != nil {
+	if err := admin.SetJWT(sc.RawKey, true); err != nil {
 		return err
 	}
 	adminAg, err := admin.GetAgent()

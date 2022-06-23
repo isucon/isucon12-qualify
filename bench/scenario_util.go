@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/isucon/isucandar"
+	"github.com/isucon/isucandar/agent"
 	"github.com/isucon/isucandar/score"
 	"github.com/k0kubun/pp/v3"
 )
@@ -82,4 +83,22 @@ func (sc *Scenario) PrintScenarioCount() {
 		scmap[key] = fmt.Sprintf("count: %d (error: %d)", value[0], value[1])
 	}
 	AdminLogger.Println(pp.Sprint(scmap))
+}
+
+// Accountを作成してAccountとagent.Agentを返す
+func (sc *Scenario) GetAccountAndAgent(role, tenantName, playerID string) (*Account, *agent.Agent, error) {
+	ac := &Account{
+		Role:       role,
+		TenantName: tenantName,
+		PlayerID:   playerID,
+		Option:     sc.Option,
+	}
+	if err := ac.SetJWT(sc.RawKey, true); err != nil {
+		return ac, nil, err
+	}
+	agent, err := ac.GetAgent()
+	if err != nil {
+		return ac, nil, err
+	}
+	return ac, agent, nil
 }

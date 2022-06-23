@@ -38,16 +38,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	addPlayerNum := 5    // 1度のPlayersAddで追加するプレイヤー数
 	requestNum := 10     // 参加者1人あたりがリクエストする回数 初期データは75
 
-	admin := &Account{
-		Role:       AccountRoleAdmin,
-		TenantName: "admin",
-		PlayerID:   "admin",
-		Option:     sc.Option,
-	}
-	if err := admin.SetJWT(sc.RawKey); err != nil {
-		return err
-	}
-	adminAg, err := admin.GetAgent()
+	_, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
 	if err != nil {
 		return err
 	}
@@ -65,17 +56,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		return v
 	}
 
-	organizer := Account{
-		Role:       AccountRoleOrganizer,
-		TenantName: tenant.Name,
-		PlayerID:   "organizer",
-		Option:     sc.Option,
-	}
-
-	if err := organizer.SetJWT(sc.RawKey); err != nil {
-		return err
-	}
-	orgAg, err := organizer.GetAgent()
+	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.Name, "organizer")
 	if err != nil {
 		return err
 	}
@@ -113,7 +94,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		Title: data.RandomString(24),
 	}
 	{
-		res, err := PostOrganizerCompetitonsAddAction(ctx, comp.Title, orgAg)
+		res, err := PostOrganizerCompetitionsAddAction(ctx, comp.Title, orgAg)
 		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
 				comp.ID = r.Data.Competition.ID
@@ -227,16 +208,7 @@ type tenantPlayerScenarioData struct {
 
 func (sc *Scenario) tenantPlayerScenario(ctx context.Context, step *isucandar.BenchmarkStep, data *tenantPlayerScenarioData) error {
 	scTag := ScenarioTag("NewTenantScenario")
-	player := Account{
-		Role:       AccountRolePlayer,
-		TenantName: data.tenantName,
-		PlayerID:   data.playerID,
-		Option:     sc.Option,
-	}
-	if err := player.SetJWT(sc.RawKey); err != nil {
-		return err
-	}
-	playerAg, err := player.GetAgent()
+	_, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, data.tenantName, data.playerID)
 	if err != nil {
 		return err
 	}
