@@ -317,13 +317,8 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		"SELECT * FROM tenant WHERE name = ?",
 		tenantName,
 	); err != nil {
-		return nil, echo.NewHTTPError(
-			http.StatusUnauthorized,
-			fmt.Errorf("failed to Select tenant: name=%s, %w", tenantName, err),
-		)
+		return nil, fmt.Errorf("failed to Select tenant: name=%s, %w", tenantName, err)
 	}
-
-	// TODO: プレイヤーの存在確認
 
 	v := &Viewer{
 		role:       r,
@@ -364,6 +359,22 @@ func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id string) (*PlayerRow
 		return nil, fmt.Errorf("error Select player: id=%s, %w", id, err)
 	}
 	return &p, nil
+}
+
+// 参加者を認可する
+// 参加者向けAPIで呼ばれる
+func authorizePlayer(ctx context.Context, tenantDB dbOrTx, id string) error {
+	player, err := retrievePlayer(ctx, tenantDB, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return echo.NewHTTPError(http.StatusUnauthorized, "player not found")
+		}
+		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
+	}
+	if player.IsDisqualified {
+		return echo.NewHTTPError(http.StatusForbidden, "player is disqualified")
+	}
+	return nil
 }
 
 type CompetitionRow struct {
@@ -1156,20 +1167,14 @@ func playerHandler(c echo.Context) error {
 	}
 	defer tenantDB.Close()
 
-	vp, err := retrievePlayer(ctx, tenantDB, v.playerID)
-	if err != nil {
-		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
-	}
-	if vp.IsDisqualified {
-		return echo.NewHTTPError(http.StatusForbidden, "player is disqualified")
+	if err := authorizePlayer(ctx, tenantDB, v.playerID); err != nil {
+		return err
 	}
 
 	playerID := c.Param("player_id")
 	if playerID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "player_id is required")
 	}
-
-	// playerの存在確認
 	p, err := retrievePlayer(ctx, tenantDB, playerID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -1260,16 +1265,20 @@ func competitionRankingHandler(c echo.Context) error {
 		return err
 	}
 
-	competitionID := c.Param("competition_id")
-	if competitionID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "competition_id is required")
-	}
-
 	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
 		return err
 	}
 	defer tenantDB.Close()
+
+	if err := authorizePlayer(ctx, tenantDB, v.playerID); err != nil {
+		return err
+	}
+
+	competitionID := c.Param("competition_id")
+	if competitionID == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "competition_id is required")
+	}
 
 	// 大会の存在確認
 	if _, err := retrieveCompetition(ctx, tenantDB, competitionID); err != nil {
@@ -1277,14 +1286,6 @@ func competitionRankingHandler(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusNotFound, "competition not found")
 		}
 		return fmt.Errorf("error retrieveCompetition: %w", err)
-	}
-
-	player, err := retrievePlayer(ctx, tenantDB, v.playerID)
-	if err != nil {
-		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
-	}
-	if player.IsDisqualified {
-		return echo.NewHTTPError(http.StatusForbidden, "you are disqualified")
 	}
 
 	now := time.Now().Unix()
@@ -1296,11 +1297,11 @@ func competitionRankingHandler(c echo.Context) error {
 	if _, err := adminDB.ExecContext(
 		ctx,
 		"INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-		player.ID, tenant.ID, competitionID, now, now,
+		v.playerID, tenant.ID, competitionID, now, now,
 	); err != nil {
 		return fmt.Errorf(
 			"error Insert visit_history: playerID=%s, tenantID=%d, competitionID=%s, createdAt=%d, updatedAt=%d, %w",
-			player.ID, tenant.ID, competitionID, now, now, err,
+			v.playerID, tenant.ID, competitionID, now, now, err,
 		)
 	}
 
@@ -1400,16 +1401,8 @@ func competitionsHandler(c echo.Context) error {
 	}
 	defer tenantDB.Close()
 
-	vp, err := retrievePlayer(ctx, tenantDB, v.playerID)
-	if err != nil {
-		// TODO: JWTのPlayerIDが存在するかはparseViewerの中でチェックをしたい
-		if errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(http.StatusUnauthorized, "player not found")
-		}
-		return fmt.Errorf("error retrievePlayer from viewer: %w", err)
-	}
-	if vp.IsDisqualified {
-		return echo.NewHTTPError(http.StatusForbidden, "you are disqualified")
+	if err := authorizePlayer(ctx, tenantDB, v.playerID); err != nil {
+		return err
 	}
 
 	cs := []CompetitionRow{}
