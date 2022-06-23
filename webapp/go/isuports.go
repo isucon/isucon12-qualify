@@ -317,6 +317,9 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		"SELECT * FROM tenant WHERE name = ?",
 		tenantName,
 	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, echo.NewHTTPError(http.StatusUnauthorized, "tenant not found")
+		}
 		return nil, fmt.Errorf("failed to Select tenant: name=%s, %w", tenantName, err)
 	}
 
