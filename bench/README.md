@@ -1,28 +1,48 @@
 # bench
 
-# TODO
+## 想定負荷の流れ
 
-- 鍵がPEM版、webappはまだ多分jwk版なので動かないです
+- SaaS管理者は1人 (1 worker)
+  - admin billingを順番に見る
+    - 整合性チェック、テナントのworkerのbillingに左右されるのでちょっと難しそう
+    - 何かしらのチェックは入れたいので頑張りどころ
+      - 大会をfinishしたタイミングでそのtenantのbillingは確定するので、それを記憶するsync.Mapはどうだろう
+  - 見終わったらテナントを1増やして新規テナントシナリオを増やす
 
+- 増えたテナントで大会が開催される(tenant worker)
+  - 大会を追加
+    - playerを追加
+    - CSV入稿（下記の増加想定）
+    - 大会のfinish
+    - rankingの確認
+  - tenant billingが返ってくる
+  - 大会の追加に戻る
 
-## How to run
+- 初期データテナントで整合性チェックをする
+  - ここはあまり負荷は増えない
+  - 巨大テナント(id=1) 1 worker
+    - ranking, score
+    - billing
+  - 人気テナント(id=2~20?)(破壊的シナリオNG)
+    - ranking, score
+    - billing
+  - のんびりテナント(id=21~40?)(破壊的シナリオOK)
+    - playerを失格にして確認
+    - billing
 
-前提
+## シナリオ一覧
 
-- repo root にいる状態
-- docker-compose で起動している状態
-  - nginx が port 80
-  - mysql が port 13306
+- SaaS管理者
+- 新規テナント
+- 既存巨大テナント(id=1)
+- 既存人気テナント 破壊的操作NG(id=2~99 20個程度)
+- 既存のんびりテナント 破壊的操作OK(id=2~99 20個程度)
 
-```console
-$ gh release download dummydata/20220421_0056-prod # もしくはreleaseからisucon_listen80_dump_prod.tar.gzをダウンロード
-$ tar xvf isucon_listen80_dump_prod.tar.gz
-$ mysql -uroot -proot --host 127.0.0.1 --port 13306 < isucon_listen80_dump.sql
-$ cd bench
-$ make
-$ ./bench -target-url http://localhost  # nginxのportを変えている場合はportを合わせる
-```
+## CSV入稿について
 
+benchから入稿されるCSVは、入稿される度に後ろに行数が増えていく
+最後に入稿されたCSVが有効
+１人あたり平均100個(ブレ有り)程度
 
 # メモ
 
