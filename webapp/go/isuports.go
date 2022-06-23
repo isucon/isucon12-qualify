@@ -841,7 +841,7 @@ func playerDisqualifiedHandler(c echo.Context) error {
 	if err != nil {
 		// 存在しないプレイヤー
 		if errors.Is(err, sql.ErrNoRows) {
-			return echo.ErrNotFound
+			return echo.NewHTTPError(http.StatusNotFound, "player not found")
 		}
 		return fmt.Errorf("error retrievePlayer: %w", err)
 	}
