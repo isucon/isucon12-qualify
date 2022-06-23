@@ -24,7 +24,6 @@ const (
 	AccountRolePlayer    = "player"
 )
 
-// TODO: 一旦何が必要かまだわからないのでAccount、いずれ分離したりするかも
 type Account struct {
 	mu         sync.RWMutex
 	Agent      *agent.Agent
