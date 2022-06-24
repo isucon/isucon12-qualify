@@ -4,9 +4,7 @@ services:
   webapp:
     cpus: 1
     mem_limit: 1g
-    build:
-      context: ../
-      dockerfile: ./development/backend-go/Dockerfile
+    build: ./backend-go
     environment:
       ISUCON_DB_HOST: mysql
       ISUCON_DB_PORT: 3306

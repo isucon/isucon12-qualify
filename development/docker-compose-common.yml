@@ -27,9 +27,7 @@ services:
     restart: always
 
   blackauth:
-    build:
-      context: ../
-      dockerfile: ./development/backend-go/Dockerfile
+    build: ./backend-go
     ports:
       - "3001:3001"
     init: true
@@ -43,7 +41,7 @@ services:
       - main.go
 
   bench:
-    build: ../webapp
+    build: ./backend-go
     stdin_open: true
     tty: true
     environment:
