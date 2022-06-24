@@ -57,7 +57,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           prerelease: true
-          name: initial data ${{ steps.date.outputs.datetime }} ${{ github.sha }}
+          name: initial_data_${{ steps.date.outputs.datetime }}
           tag_name: data/${{ steps.date.outputs.datetime }}-${{ github.sha }}
           files: |
             initial_data.tar.gz
