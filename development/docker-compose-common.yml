@@ -39,7 +39,6 @@ services:
       - /usr/local/go/bin/go
       - run
       - main.go
-
   bench:
     build: ./backend-go
     stdin_open: true
