@@ -109,27 +109,26 @@ type Scenario struct {
 
 // isucandar.PrepeareScenario を満たすメソッド
 // isucandar.Benchmark の Prepare ステップで実行される
-func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) error {
+func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) error {
 	// Prepareは60秒以内に完了
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-	s.ScenarioScoreMap = sync.Map{}
-	s.ScenarioCountMap = make(map[ScenarioTag][]int)
-	s.ScenarioCountMutex = sync.Mutex{}
-	s.DisqualifiedPlayer = map[string]struct{}{}
-	s.WorkerCh = make(chan *worker.Worker, 5) // TODO: 何も考えていない
+	sc.ScenarioScoreMap = sync.Map{}
+	sc.ScenarioCountMap = make(map[ScenarioTag][]int)
+	sc.ScenarioCountMutex = sync.Mutex{}
+	sc.DisqualifiedPlayer = map[string]struct{}{}
 
 	// GET /initialize 用ユーザーエージェントの生成
-	b, err := url.Parse(s.Option.TargetURL)
+	b, err := url.Parse(sc.Option.TargetURL)
 	if err != nil {
 		return failure.NewError(ErrCannotNewAgent, err)
 	}
-	ag, err := s.Option.NewAgent(b.Scheme+"://admin."+b.Host, true)
+	ag, err := sc.Option.NewAgent(b.Scheme+"://admin."+b.Host, true)
 	if err != nil {
 		return failure.NewError(ErrCannotNewAgent, err)
 	}
 
-	if s.Option.SkipPrepare {
+	if sc.Option.SkipPrepare {
 		return nil
 	}
 
@@ -146,7 +145,7 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 		if err != nil {
 			return fmt.Errorf("error os.ReadFile: %w", err)
 		}
-		s.InitialData, err = GetInitialData()
+		sc.InitialData, err = GetInitialData()
 		if err != nil {
 			return fmt.Errorf("初期データのロードに失敗しました %s", err)
 		}
@@ -155,11 +154,11 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 		if block == nil {
 			return fmt.Errorf("error pem.Decode: block is nil")
 		}
-		s.RawKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
+		sc.RawKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
 		if err != nil {
 			return fmt.Errorf("error x509.ParsePKCS1PrivateKey: %w", err)
 		}
-		s.InitialData, err = GetInitialData()
+		sc.InitialData, err = GetInitialData()
 		if err != nil {
 			return fmt.Errorf("初期データのロードに失敗しました %s", err)
 		}
@@ -172,7 +171,7 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 	}
 
 	// 検証シナリオを1回まわす
-	if err := s.ValidationScenario(ctx, step); err != nil {
+	if err := sc.ValidationScenario(ctx, step); err != nil {
 		fmt.Println(err)
 		return fmt.Errorf("整合性チェックに失敗しました")
 	}
@@ -184,8 +183,8 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 // ベンチ本編
 // isucandar.LoadScenario を満たすメソッド
 // isucandar.Benchmark の Load ステップで実行される
-func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) error {
-	if s.Option.PrepareOnly {
+func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) error {
+	if sc.Option.PrepareOnly {
 		return nil
 	}
 	ContestantLogger.Println("負荷テストを開始します")
@@ -194,31 +193,31 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 
 	// 旧シリーズ
 	// 新規テナントシナリオ
-	newTenantCase, err := s.NewTenantScenarioWorker(step, 1)
+	newTenantCase, err := sc.NewTenantScenarioWorker(step, 1)
 	if err != nil {
 		return err
 	}
 
 	// 既存テナントシナリオ
-	existingTenantCase, err := s.ExistingTenantScenarioWorker(step, 1, false)
+	existingTenantCase, err := sc.ExistingTenantScenarioWorker(step, 1, false)
 	if err != nil {
 		return err
 	}
 
 	// 既存テナントシナリオ(重いデータ)
-	existingHeavryTenantCase, err := s.ExistingTenantScenarioWorker(step, 1, true)
+	existingHeavryTenantCase, err := sc.ExistingTenantScenarioWorker(step, 1, true)
 	if err != nil {
 		return err
 	}
 
 	// 初期データプレイヤー整合性チェックシナリオ
-	playerCase, err := s.PlayerScenarioWorker(step, 1)
+	playerCase, err := sc.PlayerScenarioWorker(step, 1)
 	if err != nil {
 		return err
 	}
 
 	// admin billingを見るシナリオ
-	adminBillingCase, err := s.AdminBillingScenarioWorker(step, 1)
+	adminBillingCase, err := sc.AdminBillingScenarioWorker(step, 1)
 	if err != nil {
 		return err
 	}
@@ -232,6 +231,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	}))
 
 	// 最初から起動するworkerをChannelへ放り込む
+	sc.WorkerCh = make(chan *worker.Worker, 1)
 	workers := []*worker.Worker{
 		newTenantCase,
 		playerCase,
@@ -240,21 +240,24 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 		adminBillingCase,
 	}
 	for _, w := range workers {
-		go func() {
-			s.WorkerCh <- w
-		}()
+		wg.Add(1)
+		go func(w *worker.Worker) {
+			defer wg.Done()
+			AdminLogger.Printf("なにかをqueueingしました(%+v)", w)
+			sc.WorkerCh <- w
+		}(w)
 	}
 
-	// signalで起動するworker
-	var w *worker.Worker
+	// channelでworkerを軌h起動する
 	for {
 		select {
 		case <-ctx.Done():
 			break
-		case w = <-s.WorkerCh: // TODO: 何も考えていない
+		case w := <-sc.WorkerCh:
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				AdminLogger.Printf("なにかのworkerが発火しました(%+v)", w)
 				w.Process(ctx)
 			}()
 			// TODO: エラー総数で打ち切りにする？専用のchannelで待ち受ける？
