@@ -47,7 +47,7 @@ jobs:
 
       - name: "pack initial data"
         run: |
-          tar cvf initial_data.tar.gz initial_data/
+          tar cvf initial_data.tar.gz initial_data/*.db bench/*.json webapp/sql/admin/90_data.sql
 
       - id: date
         name: get datetime
