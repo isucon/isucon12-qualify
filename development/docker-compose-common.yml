@@ -4,35 +4,12 @@ services:
   nginx:
     image: nginx:1.22
     volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
-      - ./nginx/tls:/etc/nginx/tls
+      - ../nginx/conf.d:/etc/nginx/conf.d
+      - ../nginx/tls:/etc/nginx/tls
       #- ./public:/public
     ports:
       - "443:443"
     network_mode: host
-    restart: always
-
-  webapp:
-    cpus: 1
-    mem_limit: 1g
-    build: ./webapp/go
-    environment:
-      ISUCON_DB_HOST: mysql
-      ISUCON_DB_PORT: 3306
-      ISUCON_DB_USER: isucon
-      ISUCON_DB_PASSWORD: isucon
-      ISUCON_DB_NAME: isuports
-      ISUCON_ADMIN_HOSTNAME: admin.t.isucon.dev
-    ports:
-      - "3000:3000"
-    links:
-      - mysql
-    volumes:
-      - ./webapp:/home/isucon/webapp
-      - tenant_db:/home/isucon/webapp/tenant_db
-      - initial_data:/home/isucon/initial_data
-      - gopkg:/home/isucon/go/pkg
-    init: true
     restart: always
 
   mysql:
@@ -43,20 +20,20 @@ services:
       - "MYSQL_ROOT_HOST=%"
       - "MYSQL_ROOT_PASSWORD=root"
     volumes:
-      - ./webapp/sql/admin/:/docker-entrypoint-initdb.d
+      - ../webapp/sql/admin/:/docker-entrypoint-initdb.d
       - mysql:/var/lib/mysql
     ports:
       - 13306:3306
     restart: always
 
   blackauth:
-    build: ./webapp/go
+    build: ./backend-go
     ports:
       - "3001:3001"
     init: true
     restart: always
     volumes:
-      - .:/home/isucon
+      - ../:/home/isucon
     working_dir: /home/isucon/blackauth
     command:
       - /usr/local/go/bin/go
@@ -64,13 +41,13 @@ services:
       - main.go
 
   bench:
-    build: ./webapp/go
+    build: ./backend-go
     stdin_open: true
     tty: true
     environment:
       ISUCON_JWT_KEY_FILE: ./isuports.pem
     volumes:
-      - .:/home/isucon
+      - ../:/home/isucon
       - tenant_db:/home/isucon/webapp/tenant_db
       - initial_data:/home/isucon/initial_data
       - gopkg:/home/isucon/go/pkg
