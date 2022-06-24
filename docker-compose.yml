@@ -15,7 +15,7 @@ services:
   webapp:
     cpus: 1
     mem_limit: 1g
-    build: ./webapp/
+    build: ./webapp/go
     environment:
       ISUCON_DB_HOST: mysql
       ISUCON_DB_PORT: 3306
@@ -50,7 +50,7 @@ services:
     restart: always
 
   blackauth:
-    build: ./webapp
+    build: ./webapp/go
     ports:
       - "3001:3001"
     init: true
@@ -64,7 +64,7 @@ services:
       - main.go
 
   bench:
-    build: ./webapp
+    build: ./webapp/go
     stdin_open: true
     tty: true
     environment:
