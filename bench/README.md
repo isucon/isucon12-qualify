@@ -33,11 +33,11 @@
 
 ## シナリオ一覧
 
-- SaaS管理者: admin_billing
-- 新規テナント: new_tenant
-- 既存巨大テナント(id=1): large_tenant
-- 既存人気テナント 破壊的操作NG(id=2~99 20個程度): popular_tenant
-- 既存のんびりテナント 破壊的操作OK(id=2~99 20個程度): peaceful_scenario
+- SaaS管理者: admin
+- 新規テナント: organizer_new_tenant
+- 既存巨大テナント(id=1): organizer_large_tenant
+- 既存人気テナント 破壊的操作NG(id=2~99 20個程度): organizer_popular_tenant
+- 既存のんびりテナント 破壊的操作OK(id=2~99 20個程度): organizer_peaceful_tenant
 
 ## CSV入稿について
 

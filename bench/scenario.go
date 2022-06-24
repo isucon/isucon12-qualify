@@ -59,6 +59,16 @@ const (
 	ScoreGETPlayerCompetitions score.ScoreTag = "GET /player/api/competitions"
 )
 
+// シナリオ分別用タグ
+type ScenarioTag string
+
+const (
+	ScenarioTagAdmin                   ScenarioTag = "Admin"
+	ScenarioTagOrganizerNewTenant      ScenarioTag = "OrganizerNewTenant"
+	ScenarioTagOrganizerPopularTenant  ScenarioTag = "OrganizerPopularTenant"
+	ScenarioTagOrganizerPeacefulTenant ScenarioTag = "OrganizerPeacefulTenant"
+)
+
 // ScoreTag毎の倍率
 var ResultScoreMap = map[score.ScoreTag]int64{
 	ScorePOSTAdminTenantsAdd:             1,
@@ -93,6 +103,8 @@ type Scenario struct {
 	InitialData        InitialDataRows
 	DisqualifiedPlayer map[string]struct{}
 	RawKey             *rsa.PrivateKey
+
+	WorkerCh chan *worker.Worker // TODO: 何も考えていない
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -105,6 +117,7 @@ func (s *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) e
 	s.ScenarioCountMap = make(map[ScenarioTag][]int)
 	s.ScenarioCountMutex = sync.Mutex{}
 	s.DisqualifiedPlayer = map[string]struct{}{}
+	s.WorkerCh = make(chan *worker.Worker, 5) // TODO: 何も考えていない
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(s.Option.TargetURL)
@@ -179,11 +192,13 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	defer ContestantLogger.Println("負荷テストを終了します")
 	wg := &sync.WaitGroup{}
 
+	// 旧シリーズ
 	// 新規テナントシナリオ
 	newTenantCase, err := s.NewTenantScenarioWorker(step, 1)
 	if err != nil {
 		return err
 	}
+
 	// 既存テナントシナリオ
 	existingTenantCase, err := s.ExistingTenantScenarioWorker(step, 1, false)
 	if err != nil {
@@ -201,12 +216,12 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 	if err != nil {
 		return err
 	}
+
 	// admin billingを見るシナリオ
 	adminBillingCase, err := s.AdminBillingScenarioWorker(step, 1)
 	if err != nil {
 		return err
 	}
-	_ = existingHeavryTenantCase
 
 	AdminLogger.Printf("%d workers", len([]*worker.Worker{
 		newTenantCase,
@@ -216,6 +231,7 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 		adminBillingCase,
 	}))
 
+	// 最初から起動するworkerをChannelへ放り込む
 	workers := []*worker.Worker{
 		newTenantCase,
 		playerCase,
@@ -224,55 +240,29 @@ func (s *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) erro
 		adminBillingCase,
 	}
 	for _, w := range workers {
-		wg.Add(1)
-		worker := w
 		go func() {
-			defer wg.Done()
-			worker.Process(ctx)
+			s.WorkerCh <- w
 		}()
 	}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		s.loadAdjustor(ctx, step,
-			existingTenantCase,
-			newTenantCase,
-		)
-	}()
-	wg.Wait()
 
-	return nil
-}
-
-// 並列数の調整
-func (s *Scenario) loadAdjustor(ctx context.Context, step *isucandar.BenchmarkStep, workers ...*worker.Worker) {
-	tk := time.NewTicker(time.Second * 1) // TODO: 適切な値にする
-	var prevErrors int64
+	// signalで起動するworker
+	var w *worker.Worker
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-tk.C:
+			break
+		case w = <-s.WorkerCh: // TODO: 何も考えていない
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				w.Process(ctx)
+			}()
+			// TODO: エラー総数で打ち切りにする？専用のchannelで待ち受ける？
 		}
-		errors := step.Result().Errors.Count()
-		total := errors["load"]
-		if total >= int64(MaxErrors) {
-			ContestantLogger.Printf("負荷テストを打ち切ります (エラー数:%d)", total)
-			AdminLogger.Printf("%#v", errors)
-			step.Result().Score.Close()
-			step.Cancel()
-			return
-		}
-		if diff := total - prevErrors; diff > 0 {
-			ContestantLogger.Printf("エラーが%d件増えました(現在%d件)", diff, total)
-		} else {
-			ContestantLogger.Println("並列数を1追加します")
-			for _, w := range workers {
-				w.AddParallelism(1)
-			}
-		}
-		prevErrors = total
 	}
+	wg.Wait()
+
+	return nil
 }
 
 var nullFunc = func() {}

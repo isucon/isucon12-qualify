@@ -12,8 +12,6 @@ import (
 )
 
 // どのシナリオから加算されたスコアかをカウントしならがスコアを追加する
-type ScenarioTag string
-
 func (sc *Scenario) AddScoreByScenario(step *isucandar.BenchmarkStep, scoreTag score.ScoreTag, scenarioTag ScenarioTag) {
 	key := fmt.Sprintf("%s", scenarioTag)
 	value, ok := sc.ScenarioScoreMap.Load(key)
