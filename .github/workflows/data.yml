@@ -1,0 +1,63 @@
+name: Build initial data
+on:
+  push:
+    branches:
+      - main
+jobs:
+  test:
+    strategy:
+      matrix:
+        go:
+          - 1.18
+    name: Build
+    runs-on: self-hosted
+    services:
+      db:
+        image: mysql:8.0.29
+        ports:
+          - 3306:3306
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_ROOT_HOST: "%"
+        options: >-
+          --health-cmd "mysqladmin ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v3
+
+      - name: setup tools
+        run: |
+          sudo apt-get update && sudo apt-get install -y mysql-client-8.0 sqlite3
+
+      - name: "build initial data"
+        working-directory: ./data
+        run: |
+          mysql -uroot -proot --host 127.0.0.1 < ../webapp/sql/admin/01_create_mysql_database.sql
+          make build
+          make install
+
+      - name: "pack initial data"
+        run: |
+          tar cvf initial_data.tar.gz initial_data/
+
+      - id: date
+        name: get datetime
+        run: echo "::set-output name=datetime::$(date +%Y%m%d_%H%M)"
+
+      - name: release
+        uses: softprops/action-gh-release@v1
+        with:
+          prerelease: true
+          name: initial data ${{ steps.date.outputs.datetime }} ${{ github.sha }}
+          tag_name: data/${{ steps.date.outputs.datetime }}-${{ github.sha }}
+          files: |
+            initial_data.tar.gz
