@@ -1,10 +1,10 @@
 .PHONY: install-initialdata init-mysql run-bench run-bench-noload
 
 up/%:
-	docker compose -f docker-compose-$*.yml -f docker-compose-common.yml up -d 
+	docker compose -f docker-compose-$*.yml -f docker-compose-common.yml up --build -d
 
 down/%:
-	docker compose -f docker-compose-$*.yml -f docker-compose-common.yml down -d
+	docker compose -f docker-compose-$*.yml -f docker-compose-common.yml down
 
 logs-webapp/%:
 	docker compose -f docker-compose-$*.yml -f docker-compose-common.yml logs -f webapp
