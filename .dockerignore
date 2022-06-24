@@ -1,0 +1,4 @@
+initial_data/*
+webapp/tenant_db/*
+data/*.db
+*.tar.gz
