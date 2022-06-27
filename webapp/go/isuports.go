@@ -1384,7 +1384,7 @@ func competitionRankingHandler(c echo.Context) error {
 }
 
 type CompetitionsHandlerResult struct {
-	Competitions []CompetitionDetail
+	Competitions []CompetitionDetail `json:"competitions"`
 }
 
 // 参加者向けAPI
