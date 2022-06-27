@@ -10,7 +10,16 @@ import (
 	"github.com/isucon/isucon12-qualify/data"
 )
 
-func (sc *Scenario) ExistingTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32, isHeavyTenant bool) (*worker.Worker, error) {
+type existingTenantScenarioWorker struct {
+	worker *worker.Worker
+}
+
+func (existingTenantScenarioWorker) String() string {
+	return "ExistingTenantScenarioWorker"
+}
+func (w *existingTenantScenarioWorker) Process(ctx context.Context) { w.worker.Process(ctx) }
+
+func (sc *Scenario) ExistingTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32, isHeavyTenant bool) (Worker, error) {
 	var scTag ScenarioTag
 	if isHeavyTenant {
 		scTag = "ExistingTenantScenario_HevaryTenant"
@@ -32,7 +41,9 @@ func (sc *Scenario) ExistingTenantScenarioWorker(step *isucandar.BenchmarkStep, 
 		return nil, err
 	}
 	w.SetParallelism(p)
-	return w, nil
+	return &existingTenantScenarioWorker{
+		worker: w,
+	}, nil
 }
 
 func (sc *Scenario) ExistingTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag, isHeavyTenant bool) error {

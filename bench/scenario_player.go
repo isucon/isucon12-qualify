@@ -10,10 +10,19 @@ import (
 	"github.com/isucon/isucandar/worker"
 )
 
+type playerScenarioWorker struct {
+	worker *worker.Worker
+}
+
+func (playerScenarioWorker) String() string {
+	return "PlayerScenarioWorker"
+}
+func (w *playerScenarioWorker) Process(ctx context.Context) { w.worker.Process(ctx) }
+
 // 負荷をかけるより整合性チェックをメインにしたい
 // - 失格にする前後で/player/...が403になること
 
-func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
+func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32) (Worker, error) {
 	scTag := ScenarioTag("PlayerScenario")
 
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
@@ -32,7 +41,9 @@ func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32)
 		return nil, err
 	}
 	w.SetParallelism(p)
-	return w, nil
+	return &playerScenarioWorker{
+		worker: w,
+	}, nil
 }
 
 func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag) error {

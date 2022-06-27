@@ -3,6 +3,8 @@ package bench
 import (
 	"context"
 	"math/rand"
+	"sync"
+	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/agent"
@@ -10,6 +12,7 @@ import (
 )
 
 type OrganizerJobConfig struct {
+	scTag             ScenarioTag
 	tenantName        string // 対象テナント
 	addPlayerNum      int    // 一度に追加する合計プレイヤー数
 	addPlayerTimes    int    // 追加する回数
@@ -20,6 +23,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 	for {
 		// TODO: 一つのテナントに対して大会を2,3個くらい同時開催するのを想定してもいいのではないか
 		// 参加者登録 addPlayerNum * addPlayerTimes
+		AdminLogger.Printf("Playerを追加します tenant: %s players: %d", conf.tenantName, conf.addPlayerNum*conf.addPlayerTimes)
 		players := make(map[string]*PlayerData, conf.addPlayerNum*conf.addPlayerTimes)
 		for times := 0; times < conf.addPlayerTimes; times++ {
 			playerDisplayNames := make([]string, conf.addPlayerNum)
@@ -65,62 +69,79 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		}
 
 		// 大会のランキングを参照するプレイヤーたち
-		for loopCount := 0; loopCount < conf.rankingRequestNum; loopCount++ {
-			var err error
-			var ve ValidationError
-			var ok bool
-			for _, player := range players {
-				err = sc.tenantPlayerJob(ctx, step, &tenantPlayerJobConfig{
-					tenantName:    conf.tenantName,
-					playerID:      player.ID,
-					competitionID: comp.ID,
-				})
+		wg := sync.WaitGroup{}
+		for _, player := range players {
+			wg.Add(1)
+			go func(player *PlayerData) {
+				defer wg.Done()
+
+				_, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, conf.tenantName, player.ID)
 				if err != nil {
-					// ctxが終了のエラーでなければ何らかのエラー
-					if ve, ok = err.(ValidationError); ok && !ve.Canceled {
-						return err
+					AdminLogger.Println(scTag, err)
+					return
+				}
+
+				var ve ValidationError
+				var ok bool
+				for loopCount := 0; loopCount < conf.rankingRequestNum; loopCount++ {
+					err := sc.tenantPlayerJob(ctx, step, &tenantPlayerJobConfig{
+						playerAgent:   playerAg,
+						scTag:         conf.scTag,
+						tenantName:    conf.tenantName,
+						playerID:      player.ID,
+						competitionID: comp.ID,
+					})
+					if err != nil {
+						// ctxが終了のエラーでなければ何らかのエラー
+						if ve, ok = err.(ValidationError); ok && !ve.Canceled {
+							AdminLogger.Println(scTag, err)
+							return
+						}
+						break
+					}
+					time.Sleep(time.Millisecond * 200)
+				}
+				AdminLogger.Printf("Playerリクエストおわりplayer: %s %d回", player.ID, conf.rankingRequestNum)
+				return
+			}(player)
+		}
+
+		// 大会結果入稿
+		// TODO: 増やし方を考える
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var score ScoreRows
+
+			for count := 0; count < 5; count++ {
+				for _, player := range players {
+					// CSV入稿
+					score = append(score, &ScoreRow{
+						PlayerID: player.ID,
+						Score:    rand.Intn(1000),
+					})
+				}
+				csv := score.CSV()
+				AdminLogger.Printf("CSV入稿 %d回目 len(%d)", count+1, len(csv))
+				res, err := PostOrganizerCompetitionResultAction(ctx, comp.ID, []byte(csv), orgAg)
+				v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
+					WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+						_ = r
+						return nil
+					}))
+				if v.IsEmpty() {
+					sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionResult, scTag)
+				} else {
+					if !v.Canceled {
+						AdminLogger.Println("unexpected error: ", scTag, v)
+						return
 					}
 					break
 				}
 			}
-			// ctx終了で抜けてきた場合はloop終了
-			if err != nil && ve.Canceled {
-				break
-			}
-		}
+		}()
 
-		// 大会結果入稿
-		// TODO: 大きくしていく
-		var score ScoreRows
-		for _, player := range players {
-			// 巨大CSV入稿
-			// データ量かさ増し用の無効なデータ
-			for i := 0; i < 1; i++ {
-				score = append(score, &ScoreRow{
-					PlayerID: player.ID,
-					Score:    1,
-				})
-			}
-
-			score = append(score, &ScoreRow{
-				PlayerID: player.ID,
-				Score:    rand.Intn(1000),
-			})
-		}
-		csv := score.CSV()
-		{
-			res, err := PostOrganizerCompetitionResultAction(ctx, comp.ID, []byte(csv), orgAg)
-			v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
-					_ = r
-					return nil
-				}))
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionResult, scTag)
-			} else {
-				return v
-			}
-		}
+		wg.Wait()
 
 		// 大会結果確定 x 1
 		{
@@ -158,20 +179,16 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 }
 
 type tenantPlayerJobConfig struct {
+	playerAgent   *agent.Agent
+	scTag         ScenarioTag
 	tenantName    string // 対象テナント
 	playerID      string // 対象プレイヤー
 	competitionID string // 対象大会
 }
 
 func (sc *Scenario) tenantPlayerJob(ctx context.Context, step *isucandar.BenchmarkStep, conf *tenantPlayerJobConfig) error {
-	scTag := ScenarioTagOrganizerNewTenant
-	_, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, conf.tenantName, conf.playerID)
-	if err != nil {
-		return err
-	}
-
 	{
-		res, err := GetPlayerAction(ctx, conf.playerID, playerAg)
+		res, err := GetPlayerAction(ctx, conf.playerID, conf.playerAgent)
 		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				_ = r
@@ -179,13 +196,13 @@ func (sc *Scenario) tenantPlayerJob(ctx context.Context, step *isucandar.Benchma
 			}),
 		)
 		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, conf.scTag)
 		} else {
 			return v
 		}
 	}
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, conf.competitionID, "", playerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, conf.competitionID, "", conf.playerAgent)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				_ = r
@@ -193,13 +210,13 @@ func (sc *Scenario) tenantPlayerJob(ctx context.Context, step *isucandar.Benchma
 			}),
 		)
 		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
+			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, conf.scTag)
 		} else {
 			return v
 		}
 	}
 	{
-		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
+		res, err := GetPlayerCompetitionsAction(ctx, conf.playerAgent)
 		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitions) error {
 				_ = r
@@ -207,7 +224,7 @@ func (sc *Scenario) tenantPlayerJob(ctx context.Context, step *isucandar.Benchma
 			}),
 		)
 		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, conf.scTag)
 		} else {
 			return v
 		}
