@@ -105,7 +105,7 @@ func ValidateResponse(title string, step *isucandar.BenchmarkStep, res *http.Res
 		}
 	}
 	if !ve.IsEmpty() {
-		ContestantLogger.Print(ve.Error(), response.Body)
+		ContestantLogger.Print(ve.Error())
 	}
 	return ve
 }
@@ -222,7 +222,7 @@ func WithErrorResponse[T ResponseAPI]() ResponseValidator {
 			}
 			return failure.NewError(
 				ErrInvalidJSON,
-				fmt.Errorf("JSONのdecodeに失敗しました %s %s status %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode),
+				fmt.Errorf("JSONのdecodeに失敗しました %s %s status %d body %s", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode, r.Body),
 			)
 		}
 		if v.IsSuccess() {

@@ -73,9 +73,9 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 					completed = true
 					return nil
 				}
-				for _, tenant := range r.Data.Tenants {
-					AdminLogger.Printf("%s: %d yen", tenant.Name, tenant.BillingYen)
-				}
+				// for _, tenant := range r.Data.Tenants {
+				// 	AdminLogger.Printf("%s: %d yen", tenant.Name, tenant.BillingYen)
+				// }
 				beforeTenantID = r.Data.Tenants[len(r.Data.Tenants)-1].ID
 				return nil
 			}),
@@ -85,7 +85,7 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		} else {
 			return v
 		}
-		// 初期実装ではid=1が重すぎて帰ってこないので、1回で終わる
+		// id=1が重いので、light modeなら一回で終わる
 		if sc.Option.LoadType == LoadTypeLight {
 			completed = true
 		}

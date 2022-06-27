@@ -23,6 +23,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 	for {
 		// TODO: 一つのテナントに対して大会を2,3個くらい同時開催するのを想定してもいいのではないか
 		// 参加者登録 addPlayerNum * addPlayerTimes
+		AdminLogger.Printf("Playerを追加します tenant: %s players: %d", conf.tenantName, conf.addPlayerNum*conf.addPlayerTimes)
 		players := make(map[string]*PlayerData, conf.addPlayerNum*conf.addPlayerTimes)
 		for times := 0; times < conf.addPlayerTimes; times++ {
 			playerDisplayNames := make([]string, conf.addPlayerNum)
@@ -72,13 +73,14 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		for _, player := range players {
 			wg.Add(1)
 			go func(player *PlayerData) {
+				defer wg.Done()
+
 				_, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, conf.tenantName, player.ID)
 				if err != nil {
 					AdminLogger.Println(scTag, err)
 					return
 				}
 
-				defer wg.Done()
 				var ve ValidationError
 				var ok bool
 				for loopCount := 0; loopCount < conf.rankingRequestNum; loopCount++ {
@@ -99,6 +101,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 					}
 					time.Sleep(time.Millisecond * 200)
 				}
+				AdminLogger.Printf("Playerリクエストおわりplayer: %s %d回", player.ID, conf.rankingRequestNum)
 				return
 			}(player)
 		}
@@ -119,6 +122,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 					})
 				}
 				csv := score.CSV()
+				AdminLogger.Printf("CSV入稿 %d回目 len(%d)", count+1, len(csv))
 				res, err := PostOrganizerCompetitionResultAction(ctx, comp.ID, []byte(csv), orgAg)
 				v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
 					WithSuccessResponse(func(r ResponseAPICompetitionResult) error {

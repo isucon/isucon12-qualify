@@ -76,7 +76,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		rankingRequestNum: 30,
 	}
 	if sc.Option.LoadType == LoadTypeLight {
-		jobConf.rankingRequestNum = 3
+		jobConf.rankingRequestNum = 10
 	}
 
 	for {
