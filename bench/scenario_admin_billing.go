@@ -11,7 +11,7 @@ import (
 // ずっと/admin/billingを見続けるシナリオ
 // 指定回数エラーが出るまで繰り返し、並列動作はしない
 func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
-	scTag := ScenarioTag("AdminBillingScenario")
+	scTag := ScenarioTagAdmin
 
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.AdminBillingScenario(ctx, step, scTag); err != nil {
@@ -74,6 +74,18 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		} else {
 			return v
 		}
+		// 初期実装ではid=1が重すぎて帰ってこないので、1回で終わる
+		if sc.Option.LoadType == LoadTypeLight {
+			completed = true
+		}
+
 	}
+	// Billingが見終わったら新規テナントを追加する
+	newTenantWorker, err := sc.NewTenantScenarioWorker(step, 1)
+	if err != nil {
+		return err
+	}
+	sc.WorkerCh <- newTenantWorker
+
 	return nil
 }
