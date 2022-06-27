@@ -1,0 +1,44 @@
+## 移植用開発環境
+
+### 起動方法
+
+以下の手順で行います。
+
+1. GitHub release から初期データをダウンロード
+   - `gh` コマンドが必要です
+2. Docker Compose (v2) で起動
+   - `up/go` の `go` の部分は各言語実装によって書き換えてください。
+3. 起動した環境に初期データをコピー
+
+```console
+$ make initial_data
+$ make up/go
+$ make install_initial_data
+```
+
+### ベンチ実行方法
+
+```console
+$ make run-bench
+```
+
+整合性チェックだけ走らせる(負荷を掛けない)場合は
+
+```conosole
+$ make run-bench-noload
+```
+
+### 初期データへのリセット方法
+
+```console
+$ make install-initialdata
+$ make init-mysql
+```
+
+### アプリケーションログの閲覧方法
+
+`go` の部分は各言語実装によって書き換えてください。
+
+```console
+$ make logs-webapp/go
+```

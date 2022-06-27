@@ -1,4 +1,4 @@
-.PHONY: install-initialdata init-mysql run-bench run-bench-noload
+.PHONY: install-initialdata init-mysql run-bench run-bench-noload clean
 
 up/%:
 	docker compose -f docker-compose-$*.yml -f docker-compose-common.yml up
@@ -8,9 +8,6 @@ down/%:
 
 logs-webapp/%:
 	docker compose -f docker-compose-$*.yml -f docker-compose-common.yml logs -f webapp
-
-install-initialdata:
-	docker compose -f docker-compose-common.yml cp ../initial_data/ bench:/home/isucon/
 
 init-mysql:
 	docker compose -f docker-compose-common.yml exec --workdir /docker-entrypoint-initdb.d mysql \
@@ -25,5 +22,12 @@ run-bench-noload:
 ../initial_data.tar.gz:
 	gh release list | awk '/Latest/{print $$3}' | xargs gh release download --dir ..
 
+install_initial_data:
+	docker compose -f docker-compose-common.yml cp ../initial_data/ bench:/home/isucon/
+
 initial_data: ../initial_data.tar.gz
 	tar -C .. -xvf ../initial_data.tar.gz
+
+clean:
+	rm -rf ../initial_data*
+	git checkout ../initial_data/
