@@ -30,10 +30,19 @@ $ make run-bench-noload
 
 ### 初期データへのリセット方法
 
+基本的にbenchmarkerが最初に行う `POST /initialize` によって復旧されますが、なんらかの原因で壊してしまったと思われる場合は以下でリセットできます。
+
 ```console
 $ make install-initialdata
 $ make init-mysql
 ```
+
+GitHub Releaseの初期データが変わった場合は以下のようにします。
+
+- `make down/go` して落とす
+- `make clean`
+- `docker volume ls` で `development-*` という volumen を見つけて全て削除
+- 起動方法 の手順でやり直し
 
 ### アプリケーションログの閲覧方法
 
