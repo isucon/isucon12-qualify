@@ -29,7 +29,25 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	noScorePlayerIndex := playerNum - 1      // スコア未登録プレイヤー この値以降にはスコアは登録されない
 
 	// SaaS管理者のagent作成
-	_, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
+	// _, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
+	// if err != nil {
+	// 	return err
+	// }
+
+	// admin billingが重いので例外としてvalidationは60sまで許容
+	// TODO: 後で戻す
+	opt := sc.Option
+	opt.RequestTimeout = time.Second * 60 // AdminBillingのみタイムアウトを60秒まで許容
+	admin := &Account{
+		Role:       AccountRoleAdmin,
+		TenantName: "admin",
+		PlayerID:   "admin",
+		Option:     opt,
+	}
+	if err := admin.SetJWT(sc.RawKey, true); err != nil {
+		return err
+	}
+	adminAg, err := admin.GetAgent()
 	if err != nil {
 		return err
 	}
