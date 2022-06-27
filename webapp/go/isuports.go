@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -212,10 +213,24 @@ type FailureResult struct {
 type Role int
 
 const (
-	RoleAdmin Role = iota + 1
+	RoleNone Role = iota
+	RoleAdmin
 	RoleOrganizer
 	RolePlayer
 )
+
+func (r Role) MarshalJSON() ([]byte, error) {
+	roleStr := "none"
+	switch r {
+	case RoleAdmin:
+		roleStr = "admin"
+	case RoleOrganizer:
+		roleStr = "organizer"
+	case RolePlayer:
+		roleStr = "player"
+	}
+	return json.Marshal(roleStr)
+}
 
 // アクセスしてきた人の情報
 type Viewer struct {
@@ -299,7 +314,7 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		}
 		return nil, fmt.Errorf("error retrieveTenantRowFromHeader at parseViewer: %w", err)
 	}
-	if tenant.Name == "Admin" && r != RoleAdmin {
+	if tenant.Name == "admin" && r != RoleAdmin {
 		return nil, echo.NewHTTPError(http.StatusUnauthorized, "tenant not found")
 	}
 
@@ -1451,6 +1466,7 @@ func competitionsHandler(c echo.Context) error {
 type MeHandlerResult struct {
 	Tenant   *TenantDetail `json:"tenant"`
 	Me       *PlayerDetail `json:"me"`
+	Role     Role          `json:"role"`
 	LoggedIn bool          `json:"logged_in"`
 }
 
@@ -1472,12 +1488,26 @@ func meHandler(c echo.Context) error {
 				Data: MeHandlerResult{
 					Tenant:   td,
 					Me:       nil,
+					Role:     RoleNone,
 					LoggedIn: false,
 				},
 			})
 		}
 		return fmt.Errorf("error parseViewer: %w", err)
 	}
+	if v.role == RoleAdmin || v.role == RoleOrganizer {
+		return c.JSON(http.StatusOK, SuccessResult{
+			Success: true,
+			Data: MeHandlerResult{
+				Tenant:   td,
+				Me:       nil,
+				Role:     v.role,
+				LoggedIn: true,
+			},
+		})
+
+	}
+
 	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
 		return fmt.Errorf("error connectToTenantDB: %w", err)
@@ -1497,6 +1527,7 @@ func meHandler(c echo.Context) error {
 				DisplayName:    p.DisplayName,
 				IsDisqualified: p.IsDisqualified,
 			},
+			Role:     v.role,
 			LoggedIn: true,
 		},
 	})
