@@ -8,11 +8,20 @@ import (
 	"github.com/isucon/isucandar/worker"
 )
 
+type adminBillingScenarioWorker struct {
+	worker *worker.Worker
+}
+
+func (adminBillingScenarioWorker) String() string {
+	return "AdminBillingScenarioWorker"
+}
+func (w *adminBillingScenarioWorker) Process(ctx context.Context) { w.worker.Process(ctx) }
+
 // ずっと/admin/billingを見続けるシナリオ
 // 指定回数エラーが出るまで繰り返し、並列動作はしない
-func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
-	scTag := ScenarioTagAdmin
 
+func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p int32) (Worker, error) {
+	scTag := ScenarioTagAdmin
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.AdminBillingScenario(ctx, step, scTag); err != nil {
 			sc.ScenarioError(scTag, err)
@@ -26,7 +35,9 @@ func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p 
 		return nil, err
 	}
 	w.SetParallelism(p)
-	return w, nil
+	return &adminBillingScenarioWorker{
+		worker: w,
+	}, nil
 }
 
 func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag) error {

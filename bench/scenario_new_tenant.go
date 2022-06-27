@@ -9,7 +9,16 @@ import (
 	"github.com/isucon/isucon12-qualify/data"
 )
 
-func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
+type newTenantScenarioWorker struct {
+	worker *worker.Worker
+}
+
+func (newTenantScenarioWorker) String() string {
+	return "NewTenantScenarioWorker"
+}
+func (w *newTenantScenarioWorker) Process(ctx context.Context) { w.worker.Process(ctx) }
+
+func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*newTenantScenarioWorker, error) {
 	scTag := ScenarioTagOrganizerNewTenant
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.NewTenantScenario(ctx, step); err != nil {
@@ -24,7 +33,10 @@ func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int
 		return nil, err
 	}
 	w.SetParallelism(p)
-	return w, nil
+
+	return &newTenantScenarioWorker{
+		worker: w,
+	}, nil
 }
 
 func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {

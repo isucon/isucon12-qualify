@@ -13,7 +13,6 @@ import (
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/failure"
-	"github.com/isucon/isucandar/worker"
 )
 
 var (
@@ -37,6 +36,12 @@ type TenantData struct {
 	Name        string
 }
 
+// isucandar worker.Workerを実装する
+type Worker interface {
+	String() string
+	Process(context.Context)
+}
+
 // オプションと全データを持つシナリオ構造体
 type Scenario struct {
 	Option Option
@@ -50,7 +55,7 @@ type Scenario struct {
 	DisqualifiedPlayer map[string]struct{}
 	RawKey             *rsa.PrivateKey
 
-	WorkerCh chan *worker.Worker
+	WorkerCh chan Worker
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -144,7 +149,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 	defer ContestantLogger.Println("負荷テストを終了します")
 	wg := &sync.WaitGroup{}
 
-	sc.WorkerCh = make(chan *worker.Worker, 1)
+	sc.WorkerCh = make(chan Worker, 10)
 
 	// 最初に起動するシナリオ
 	// AdminBillingを見続けて新規テナントを追加する
@@ -153,24 +158,18 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		if err != nil {
 			return err
 		}
-		// select channel前なのでdeadlock対策でgoroutineに置いておく
-		go func(w *worker.Worker) {
-			sc.WorkerCh <- w
-		}(wkr)
+		sc.WorkerCh <- wkr
 	}
-	// 最初から回る新規テナント
+
+	// // 最初から回る新規テナント
 	{
 		wkr, err := sc.NewTenantScenarioWorker(step, 1)
 		if err != nil {
 			return err
 		}
-		// select channel前なのでdeadlock対策でgoroutineに置いておく
-		go func(w *worker.Worker) {
-			sc.WorkerCh <- w
-		}(wkr)
+		sc.WorkerCh <- wkr
 	}
-	{
-	}
+
 	// 軽いテナント
 	// TODO: deprecated
 	{
@@ -178,9 +177,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		if err != nil {
 			return err
 		}
-		go func(w *worker.Worker) {
-			sc.WorkerCh <- w
-		}(wkr)
+		sc.WorkerCh <- wkr
 	}
 	// 重いテナント
 	// TODO: deprecated
@@ -189,10 +186,9 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		if err != nil {
 			return err
 		}
-		go func(w *worker.Worker) {
-			sc.WorkerCh <- w
-		}(wkr)
+		sc.WorkerCh <- wkr
 	}
+
 	// プレイヤー
 	// TODO: deprecated
 	{
@@ -200,9 +196,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		if err != nil {
 			return err
 		}
-		go func(w *worker.Worker) {
-			sc.WorkerCh <- w
-		}(wkr)
+		sc.WorkerCh <- wkr
 	}
 
 	// workerを起動する
@@ -212,11 +206,12 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 			break
 		case w := <-sc.WorkerCh:
 			wg.Add(1)
-			go func() {
+			go func(w Worker) {
 				defer wg.Done()
-				AdminLogger.Printf("なにかのworkerが発火しました(%+v)", w)
-				w.Process(ctx)
-			}()
+				wkr := w
+				AdminLogger.Printf("workerを増やします (%s)", wkr)
+				wkr.Process(ctx)
+			}(w)
 			// TODO: エラー総数で打ち切りにする？専用のchannelで待ち受ける？5秒ごとにstep.Errorsを確認してもいいかも
 		}
 	}
