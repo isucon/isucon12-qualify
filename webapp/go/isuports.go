@@ -1497,7 +1497,7 @@ func meHandler(c echo.Context) error {
 				DisplayName:    p.DisplayName,
 				IsDisqualified: p.IsDisqualified,
 			},
-			LoggedIn: false,
+			LoggedIn: true,
 		},
 	})
 }
