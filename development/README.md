@@ -5,7 +5,7 @@
 以下の手順で行います。
 
 1. GitHub release から初期データをダウンロード
-   - `gh` コマンドが必要です
+   - `gh` コマンドが必要です https://github.com/cli/cli
 2. Docker Compose (v2) で起動
    - `up/go` の `go` の部分は各言語実装によって書き換えてください。
 3. 起動した環境に初期データをコピー
