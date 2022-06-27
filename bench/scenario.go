@@ -137,6 +137,9 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
+	sc.DisqualifiedPlayer = map[string]struct{}{}
+	sc.ScenarioCountMutex = sync.Mutex{}
+
 	sc.ScenarioScoreMap = sync.Map{}
 	sc.ScenarioCountMap = make(map[ScenarioTag][]int)
 	for _, key := range ScenarioTagList {
@@ -144,9 +147,6 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 		sc.ScenarioScoreMap.Store(string(key), &n)
 		sc.ScenarioCountMap[key] = []int{0, 0}
 	}
-
-	sc.ScenarioCountMutex = sync.Mutex{}
-	sc.DisqualifiedPlayer = map[string]struct{}{}
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(sc.Option.TargetURL)

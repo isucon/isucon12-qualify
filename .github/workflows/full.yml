@@ -48,8 +48,12 @@ jobs:
           make
           ./isuports &
 
-      - name: "run bench"
+      - name: "run bench(default)"
         working-directory: ./bench
         run: |
-          make
-          ./bench -target-addr 127.0.0.1:3000 -target-url http://t.isucon.dev
+          make ci
+
+      - name: "run bench(load-type light)"
+        working-directory: ./bench
+        run: |
+          make ci-loadtype-light
