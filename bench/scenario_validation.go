@@ -11,6 +11,11 @@ import (
 	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 )
 
+var (
+	notExistID   = "0000000000" // 存在しない想定のID(competition, player用)
+	notExistName = "null-null"  // 存在しない想定のName(tenant用)
+)
+
 // ベンチ実行後の整合性検証シナリオ
 // isucandar.ValidateScenarioを満たすメソッド
 // isucandar.Benchmark の validation ステップで実行される
@@ -186,7 +191,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// 不正リクエスト: 存在しないプレイヤーを失格にする
 	{
-		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, "not-exist-player", orgAg)
+		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, "0000000000", orgAg)
 		v := ValidateResponse("プレイヤーを失格にする: 不正リクエスト(存在しないプレイヤー)", step, res, err, WithStatusCode(404))
 		if !v.IsEmpty() {
 			return v
@@ -220,7 +225,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 		// 不正リクエストチェック
 		// 存在しない大会
-		res, err = PostOrganizerCompetitionResultAction(ctx, "not-exist-competition", []byte(csv), orgAg)
+		res, err = PostOrganizerCompetitionResultAction(ctx, notExistID, []byte(csv), orgAg)
 		v = ValidateResponse("大会結果CSV入稿: 不正リクエスト(存在しない大会)", step, res, err, WithStatusCode(404))
 		if !v.IsEmpty() {
 			return v
@@ -228,7 +233,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 		// 存在しないプレイヤーが含まれるCSVを入稿
 		invalidScore := ScoreRows{&ScoreRow{
-			PlayerID: "not-exist-player",
+			PlayerID: notExistID,
 			Score:    1,
 		}}
 		invalidCSV := invalidScore.CSV()
@@ -273,7 +278,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	// 不正リクエストチェック
 	// 存在しないプレイヤー
 	{
-		res, err := GetPlayerAction(ctx, "not-exist-player", playerAg)
+		res, err := GetPlayerAction(ctx, notExistID, playerAg)
 		v := ValidateResponse("プレイヤーと戦績情報取得", step, res, err, WithStatusCode(404))
 		if !v.IsEmpty() {
 			return v
@@ -315,7 +320,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	// 不正リクエストチェック
 	// 存在しない大会
 	{
-		res, err := GetPlayerCompetitionRankingAction(ctx, "not-exist-competition", "", playerAg)
+		res, err := GetPlayerCompetitionRankingAction(ctx, notExistID, "", playerAg)
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(404))
 		if !v.IsEmpty() {
 			return v
@@ -374,7 +379,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	// 不正リクエストチェック
 	// 存在しない大会
 	{
-		res, err := PostOrganizerCompetitionFinishAction(ctx, "not-exist-competition", orgAg)
+		res, err := PostOrganizerCompetitionFinishAction(ctx, notExistID, orgAg)
 		v := ValidateResponse("大会終了: 不正リクエスト(存在しない大会)", step, res, err, WithStatusCode(404))
 		if !v.IsEmpty() {
 			return v
@@ -513,11 +518,11 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// 存在しないテナント
 	{
-		_, invalidOrgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, "not-exist-tenant", "organizer")
+		_, invalidOrgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, notExistName, "organizer")
 		if err != nil {
 			return err
 		}
-		res, err := PostOrganizerCompetitionsAddAction(ctx, "not-exist-tenant-competition", invalidOrgAg)
+		res, err := PostOrganizerCompetitionsAddAction(ctx, notExistName, invalidOrgAg)
 		v := ValidateResponse("新規大会追加: 不正リクエスト(存在しないテナント)", step, res, err, WithStatusCode(401))
 		if !v.IsEmpty() {
 			return v
@@ -526,7 +531,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// 存在しないプレイヤー
 	{
-		_, invalidPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, "not-exist-player")
+		_, invalidPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, notExistID)
 		if err != nil {
 			return err
 		}
