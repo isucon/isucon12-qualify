@@ -107,13 +107,13 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		}
 
 		// 大会結果入稿
-		// TODO: 大きくしていく
+		// TODO: 増やし方を考える
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			var score ScoreRows
 
-			for count := 0; count < 30; count++ {
+			for count := 0; count < 5; count++ {
 				for _, player := range players {
 					// CSV入稿
 					score = append(score, &ScoreRow{
