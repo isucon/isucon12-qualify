@@ -1,7 +1,6 @@
 package bench
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -53,7 +52,25 @@ func (v ValidationError) IsEmpty() bool {
 }
 
 // レスポンスを検証するバリデータ関数の型
-type ResponseValidator func(*http.Response) error
+type ResponseValidator func(*Response) error
+
+// Bodyを繰り返し取れるように先に読んでStringとして置いておく
+type Response struct {
+	Response *http.Response // Bodyは読み取り済み
+	Body     string
+}
+
+func ReadResponse(res *http.Response) *Response {
+	var data []byte
+	if res.Body != nil {
+		data, _ = io.ReadAll(res.Body)
+		defer res.Body.Close()
+	}
+	return &Response{
+		Body:     string(data),
+		Response: res,
+	}
+}
 
 // レスポンスを検証する関数
 // 複数のバリデータ関数を受け取ってすべてでレスポンスを検証し、 ValidationError を返す
@@ -72,28 +89,30 @@ func ValidateResponse(title string, step *isucandar.BenchmarkStep, res *http.Res
 		// リクエストがエラーだったらそれ以上の検証はしない(できない)
 		ve.Errors = append(ve.Errors, failure.NewError(ErrInvalidRequest, err))
 		ContestantLogger.Print(ve.Error())
+
 		return ve
 	} else {
 		if Debug {
 			AdminLogger.Printf("%s %s %d %s", res.Request.Method, res.Request.URL.Path, res.StatusCode, title)
 		}
-		defer res.Body.Close()
 	}
+
+	response := ReadResponse(res)
 	for _, v := range validators {
-		if err := v(res); err != nil {
+		if err := v(response); err != nil {
 			ve.Errors = append(ve.Errors, failure.NewError(ErrValidation, err))
 			break // 前から順に検証、失敗したらそれ以上の検証はしない
 		}
 	}
 	if !ve.IsEmpty() {
-		ContestantLogger.Print(ve.Error())
+		ContestantLogger.Print(ve.Error(), response.Body)
 	}
 	return ve
 }
 
 func WithCacheControlPrivate() ResponseValidator {
-	return func(r *http.Response) error {
-		if !strings.Contains(r.Header.Get("Cache-Control"), "private") {
+	return func(r *Response) error {
+		if !strings.Contains(r.Response.Header.Get("Cache-Control"), "private") {
 			return failure.NewError(ErrInvalidCacheControl, fmt.Errorf("Cache-Control: private が含まれていません"))
 		}
 		return nil
@@ -103,10 +122,10 @@ func WithCacheControlPrivate() ResponseValidator {
 // ステータスコードコードを検証するバリデータ関数を返す高階関数
 // 例: ValidateResponse(res, WithStatusCode(200, 304))
 func WithStatusCode(statusCodes ...int) ResponseValidator {
-	return func(r *http.Response) error {
+	return func(r *Response) error {
 		for _, statusCode := range statusCodes {
 			// 1個でも一致したらok
-			if r.StatusCode == statusCode {
+			if r.Response.StatusCode == statusCode {
 				return nil
 			}
 		}
@@ -116,10 +135,10 @@ func WithStatusCode(statusCodes ...int) ResponseValidator {
 			ErrInvalidStatusCode,
 			fmt.Errorf(
 				"%s %s : expected(%v) != actual(%d)",
-				r.Request.Method,
-				r.Request.URL.Path,
+				r.Response.Request.Method,
+				r.Response.Request.URL.Path,
 				statusCodes,
-				r.StatusCode,
+				r.Response.StatusCode,
 			),
 		)
 	}
@@ -162,26 +181,22 @@ type ResponseAPI interface {
 }
 
 func WithSuccessResponse[T ResponseAPI](validates ...func(res T) error) ResponseValidator {
-	return func(r *http.Response) error {
+	return func(r *Response) error {
 		var v T
 		// TODO: debug json extract失敗したら生json出す
-		bbuf := new(bytes.Buffer)
-		abuf := io.TeeReader(r.Body, bbuf)
-		if err := json.NewDecoder(abuf).Decode(&v); err != nil {
+		if err := json.NewDecoder(strings.NewReader(r.Body)).Decode(&v); err != nil {
 			if failure.Is(err, context.DeadlineExceeded) || failure.Is(err, context.Canceled) {
 				return nil
 			}
-			b, _ := io.ReadAll(bbuf)
-			fmt.Println(string(b))
 			return failure.NewError(
 				ErrInvalidJSON,
-				fmt.Errorf("JSONのdecodeに失敗しました %s %s %s status %d", err, r.Request.Method, r.Request.URL.Path, r.StatusCode),
+				fmt.Errorf("JSONのdecodeに失敗しました %s %s status %d body %s", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode, r.Body),
 			)
 		}
 		if !v.IsSuccess() {
 			return failure.NewError(
 				ErrFailed,
-				fmt.Errorf("成功したAPIレスポンスの.resultはtrueである必要があります %s %s status %d", r.Request.Method, r.Request.URL.Path, r.StatusCode),
+				fmt.Errorf("成功したAPIレスポンスの.resultはtrueである必要があります %s %s status %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode),
 			)
 		}
 		for _, validate := range validates {
@@ -190,7 +205,7 @@ func WithSuccessResponse[T ResponseAPI](validates ...func(res T) error) Response
 				AdminLogger.Println(string(b))
 				return failure.NewError(
 					ErrFailed,
-					fmt.Errorf("%s %s %s", r.Request.Method, r.Request.URL.Path, err.Error()),
+					fmt.Errorf("%s %s %s", r.Response.Request.Method, r.Response.Request.URL.Path, err.Error()),
 				)
 			}
 		}
@@ -199,27 +214,27 @@ func WithSuccessResponse[T ResponseAPI](validates ...func(res T) error) Response
 }
 
 func WithErrorResponse[T ResponseAPI]() ResponseValidator {
-	return func(r *http.Response) error {
+	return func(r *Response) error {
 		var v T
-		if err := json.NewDecoder(r.Body).Decode(&v); err != nil {
+		if err := json.NewDecoder(strings.NewReader(r.Body)).Decode(&v); err != nil {
 			if failure.Is(err, context.DeadlineExceeded) || failure.Is(err, context.Canceled) {
 				return nil
 			}
 			return failure.NewError(
 				ErrInvalidJSON,
-				fmt.Errorf("JSONのdecodeに失敗しました %s %s status %d", r.Request.Method, r.Request.URL.Path, r.StatusCode),
+				fmt.Errorf("JSONのdecodeに失敗しました %s %s status %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode),
 			)
 		}
 		if v.IsSuccess() {
 			return failure.NewError(
 				ErrFailed,
-				fmt.Errorf("失敗したAPIレスポンスの.resultはfalseである必要があります %s %s %d", r.Request.Method, r.Request.URL.Path, r.StatusCode),
+				fmt.Errorf("失敗したAPIレスポンスの.resultはfalseである必要があります %s %s %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode),
 			)
 		}
 		if v.ErrorMessage() == "" {
 			return failure.NewError(
 				ErrFailed,
-				fmt.Errorf("失敗したAPIレスポンスの.errorにはエラーメッセージが必要です %s %s %d", r.Request.Method, r.Request.URL.Path, r.StatusCode),
+				fmt.Errorf("失敗したAPIレスポンスの.errorにはエラーメッセージが必要です %s %s %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode),
 			)
 		}
 		return nil

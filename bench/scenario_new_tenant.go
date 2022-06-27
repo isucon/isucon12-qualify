@@ -69,10 +69,11 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	jobConf := &OrganizerJobConfig{
+		scTag:             scTag,
 		tenantName:        tenant.Name,
 		addPlayerTimes:    20,
 		addPlayerNum:      5,
-		rankingRequestNum: 10,
+		rankingRequestNum: 30,
 	}
 	if sc.Option.LoadType == LoadTypeLight {
 		jobConf.rankingRequestNum = 3
