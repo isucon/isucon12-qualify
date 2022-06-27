@@ -12,6 +12,10 @@ module.exports = defineConfig({
         target: 'https://127.0.0.1:443',
         secure: false, // Do NOT check upstream cert's CN
       },
+      '/auth': {
+        target: 'https://127.0.0.1:443',
+        secure: false, // Do NOT check upstream cert's CN
+      },
     },
   },
 });

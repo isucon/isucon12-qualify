@@ -11,10 +11,10 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue'
-import HeaderBar from '@/components/admin/HeaderBar.vue'
+import HeaderBar from '@/components/tenant/HeaderBar.vue'
 
 export default defineComponent({
-  name: 'AdminLayout',
+  name: 'TenantLayout',
   components: {
     HeaderBar,
   },
@@ -24,7 +24,7 @@ export default defineComponent({
 
 <style scoped>
 .main {
-  color: #222;
+  color: #F8F8FF;
   height: 100%;
 }
 
@@ -35,22 +35,23 @@ export default defineComponent({
   width: 100%;
   height: 100%;
   content: "";
-  background: linear-gradient(#FFFFFF, #FFFFFF, #fff8f5);
+  background: linear-gradient(#301855,#301855, #0a0833);
   z-index: -1;
 }
 
+
 .header {
-  background: orange;
+  background: rgb(16, 11, 27);
   color: white;
-  filter: drop-shadow(0px 2px 3px rgba(0, 0, 0, 0.4));
+  filter:drop-shadow(0px 2px 3px rgba(0, 0, 0, 0.4));
   position: sticky;
+  height: 70px;
   top: 0;
   left: 0;
   right: 0;
 }
 
 .body {
-  padding-top: 10px;
   max-width: 940px;
   margin: 20px auto 0;
 }

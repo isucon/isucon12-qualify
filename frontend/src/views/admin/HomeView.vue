@@ -33,11 +33,10 @@ export default defineComponent({
 
     const account = ref('')
     const handleSubmit = async () => {
-      console.log('handleSubmit')
       try {
-        const res = await axios.post('/api/admin/login', {
-          name: account,
-        })
+        const res = await axios.post('/auth/admin/login', new URLSearchParams({
+          id: account.value,
+        }))
 
         if (res.status != 200) {
           window.alert('Failed to Login: status=' + res.status)
