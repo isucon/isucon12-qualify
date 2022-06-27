@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/isucon/isucandar"
+	"github.com/isucon/isucandar/score"
 	"github.com/isucon/isucon12-qualify/bench"
 	"github.com/k0kubun/pp/v3"
 )
@@ -103,13 +104,24 @@ func main() {
 	scenario.PrintScenarioCount()
 	score, addition, deduction := SumScore(result)
 	bench.ContestantLogger.Printf("SCORE: %d (+%d %d)", score, addition, -deduction)
-	bench.ContestantLogger.Printf("RESULT: %#v", result.Score.Breakdown())
-	bench.AdminLogger.Printf("%s", pp.Sprint(result.Score.Breakdown()))
+	bench.ContestantLogger.Printf("RESULT: %#v", AllTagBreakdown(result))
+	bench.AdminLogger.Printf("%s", pp.Sprint(AllTagBreakdown(result)))
 
 	// 0点以下(fail)ならエラーで終了
 	if option.ExitErrorOnFail && score <= 0 {
 		os.Exit(1)
 	}
+}
+
+// 結果が0のタグを含めたbreakdownを返す
+func AllTagBreakdown(result *isucandar.BenchmarkResult) score.ScoreTable {
+	bd := result.Score.Breakdown()
+	for _, tag := range bench.ScoreTagList {
+		if _, ok := bd[tag]; !ok {
+			bd[tag] = int64(0)
+		}
+	}
+	return bd
 }
 
 func SumScore(result *isucandar.BenchmarkResult) (int64, int64, int64) {
