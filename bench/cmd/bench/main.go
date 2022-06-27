@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"math/rand"
 	"os"
 	"time"
@@ -17,6 +18,7 @@ const (
 	DefaultRequestTimeout           = time.Second * 30
 	DefaultInitializeRequestTimeout = time.Second * 30
 	DefaultDuration                 = time.Minute
+	DefaultLoadType                 = bench.LoadTypeDefault
 )
 
 func main() {
@@ -36,6 +38,7 @@ func main() {
 	flag.BoolVar(&option.SkipPrepare, "skip-prepare", false, "Skip prepare")
 	flag.StringVar(&option.DataDir, "data-dir", "data", "Data directory")
 	flag.BoolVar(&option.Debug, "debug", false, "Debug mode")
+	flag.StringVar(&option.LoadType, "load-type", DefaultLoadType, fmt.Sprintf("load type [%s,%s] Default: %s", bench.LoadTypeDefault, bench.LoadTypeLight, DefaultLoadType))
 
 	// コマンドライン引数のパースを実行
 	// この時点で各フィールドに値が設定されます

@@ -1,5 +1,14 @@
 # bench
 
+## 構成
+
+Scenario_xxx
+  workerとしてgoroutineで動作できるもの
+job_xxx
+  Action+Validationのまとまり
+  終わるまでブロックする
+  Scenarioの中で利用する
+
 ## 想定負荷の流れ
 
 - SaaS管理者は1人 (1 worker)

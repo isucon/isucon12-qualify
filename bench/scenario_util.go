@@ -3,13 +3,35 @@ package bench
 import (
 	"fmt"
 	"log"
+	"os"
 	"sync/atomic"
+	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/agent"
 	"github.com/isucon/isucandar/score"
 	"github.com/k0kubun/pp/v3"
 )
+
+var nullFunc = func() {}
+
+func timeReporter(name string) func() {
+	if !Debug {
+		return nullFunc
+	}
+	start := time.Now()
+	return func() {
+		AdminLogger.Printf("Scenario:%s elapsed:%s", name, time.Since(start))
+	}
+}
+
+func getEnv(key string, defaultValue string) string {
+	val := os.Getenv(key)
+	if val != "" {
+		return val
+	}
+	return defaultValue
+}
 
 // どのシナリオから加算されたスコアかをカウントしならがスコアを追加する
 func (sc *Scenario) AddScoreByScenario(step *isucandar.BenchmarkStep, scoreTag score.ScoreTag, scenarioTag ScenarioTag) {
@@ -43,7 +65,7 @@ func (sc *Scenario) PrintScenarioScoreMap() {
 
 		return true
 	})
-	AdminLogger.Println(pp.Sprint(ssmap))
+	AdminLogger.Printf("ScenarioScoreMap: %s", pp.Sprint(ssmap))
 }
 
 // シナリオ回転数
@@ -80,7 +102,7 @@ func (sc *Scenario) PrintScenarioCount() {
 	for key, value := range sc.ScenarioCountMap {
 		scmap[key] = fmt.Sprintf("count: %d (error: %d)", value[0], value[1])
 	}
-	AdminLogger.Println(pp.Sprint(scmap))
+	AdminLogger.Printf("ScenarioCount: %s", pp.Sprint(scmap))
 }
 
 // Accountを作成してAccountとagent.Agentを返す

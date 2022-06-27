@@ -191,64 +191,21 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 	defer ContestantLogger.Println("負荷テストを終了します")
 	wg := &sync.WaitGroup{}
 
-	// 旧シリーズ
-	// 新規テナントシナリオ
-	newTenantCase, err := sc.NewTenantScenarioWorker(step, 1)
-	if err != nil {
-		return err
-	}
-
-	// 既存テナントシナリオ
-	existingTenantCase, err := sc.ExistingTenantScenarioWorker(step, 1, false)
-	if err != nil {
-		return err
-	}
-
-	// 既存テナントシナリオ(重いデータ)
-	existingHeavryTenantCase, err := sc.ExistingTenantScenarioWorker(step, 1, true)
-	if err != nil {
-		return err
-	}
-
-	// 初期データプレイヤー整合性チェックシナリオ
-	playerCase, err := sc.PlayerScenarioWorker(step, 1)
-	if err != nil {
-		return err
-	}
-
-	// admin billingを見るシナリオ
-	adminBillingCase, err := sc.AdminBillingScenarioWorker(step, 1)
-	if err != nil {
-		return err
-	}
-
-	AdminLogger.Printf("%d workers", len([]*worker.Worker{
-		newTenantCase,
-		existingTenantCase,
-		existingHeavryTenantCase,
-		playerCase,
-		adminBillingCase,
-	}))
-
-	// 最初から起動するworkerをChannelへ放り込む
 	sc.WorkerCh = make(chan *worker.Worker, 1)
-	workers := []*worker.Worker{
-		newTenantCase,
-		playerCase,
-		existingTenantCase,
-		existingHeavryTenantCase,
-		adminBillingCase,
-	}
-	for _, w := range workers {
-		wg.Add(1)
+
+	// 最初に起動するシナリオ
+	{
+		adminBillingWorker, err := sc.AdminBillingScenarioWorker(step, 1)
+		if err != nil {
+			return err
+		}
+		// select channel前なのでdeadlock対策でgoroutineに置いておく
 		go func(w *worker.Worker) {
-			defer wg.Done()
-			AdminLogger.Printf("なにかをqueueingしました(%+v)", w)
 			sc.WorkerCh <- w
-		}(w)
+		}(adminBillingWorker)
 	}
 
-	// channelでworkerを軌h起動する
+	// workerを起動する
 	for {
 		select {
 		case <-ctx.Done():
@@ -266,24 +223,4 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 	wg.Wait()
 
 	return nil
-}
-
-var nullFunc = func() {}
-
-func timeReporter(name string) func() {
-	if !Debug {
-		return nullFunc
-	}
-	start := time.Now()
-	return func() {
-		AdminLogger.Printf("Scenario:%s elapsed:%s", name, time.Since(start))
-	}
-}
-
-func getEnv(key string, defaultValue string) string {
-	val := os.Getenv(key)
-	if val != "" {
-		return val
-	}
-	return defaultValue
 }

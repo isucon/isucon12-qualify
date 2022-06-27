@@ -74,6 +74,18 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		} else {
 			return v
 		}
+		// 初期実装ではid=1が重すぎて帰ってこないので、1回で終わる
+		if sc.Option.LoadType == LoadTypeLight {
+			completed = true
+		}
+
 	}
+	// Billingが見終わったら新規テナントを追加する
+	newTenantWorker, err := sc.NewTenantScenarioWorker(step, 1)
+	if err != nil {
+		return err
+	}
+	sc.WorkerCh <- newTenantWorker
+
 	return nil
 }
