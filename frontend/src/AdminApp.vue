@@ -20,4 +20,12 @@ html, body {
   margin: 0;
   padding: 0;
 }
+
+button {
+  padding: 8px;
+  border-radius: 8px;
+  background: #38F;
+  color: white;
+  border: 1px solid;
+}
 </style>

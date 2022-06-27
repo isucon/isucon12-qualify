@@ -1,12 +1,36 @@
 <template>
-  <h1>Tenant Vue App</h1>
-  <nav>
-    <router-link to="/">Home</router-link> |
-    <router-link to="/about">About</router-link>
-  </nav>
-  <router-view />
+  <TenantLayout />
 </template>
 
-<style>
+<script lang="ts">
+import { defineComponent } from 'vue'
+import TenantLayout from './components/TenantLayout.vue'
 
+export default defineComponent({
+  name: 'TenantApp',
+  components: {
+    TenantLayout,
+  },
+})
+</script>
+
+
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+#app {
+  height: 100%;
+}
+
+button {
+  padding: 8px;
+  border-radius: 8px;
+  background: #38F;
+  color: white;
+  border: 1px solid;
+}
 </style>
