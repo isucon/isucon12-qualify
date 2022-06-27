@@ -13,7 +13,6 @@ import (
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/failure"
-	"github.com/isucon/isucandar/score"
 	"github.com/isucon/isucandar/worker"
 )
 
@@ -31,82 +30,6 @@ const (
 	ErrFailedLoadJSON failure.StringCode = "load-json"
 	ErrCannotNewAgent failure.StringCode = "agent"
 	ErrInvalidRequest failure.StringCode = "request"
-)
-
-// シナリオで発生するスコアのタグ
-const (
-	ScoreGETRoot score.ScoreTag = "GET /"
-
-	// for admin endpoint
-	ScorePOSTAdminTenantsAdd    score.ScoreTag = "POST /admin/api/tenants/add"
-	ScoreGETAdminTenantsBilling score.ScoreTag = "GET /admin/api/tenants/billing"
-
-	// for organizer endpoint
-	// 参加者操作
-	ScorePOSTOrganizerPlayersAdd         score.ScoreTag = "POST /organizer/api/players/add"
-	ScorePOSTOrganizerPlayerDisqualified score.ScoreTag = "POST /organizer/api/player/:player_name/disqualified"
-	// 大会操作
-	ScorePOSTOrganizerCompetitionsAdd   score.ScoreTag = "POST /organizer/api/competitions/add"
-	ScorePOSTOrganizerCompetitionFinish score.ScoreTag = "POST /organizer/api/competition/:competition_id/finish"
-	ScorePOSTOrganizerCompetitionResult score.ScoreTag = "POST /organizer/api/competition/:competition_id/result"
-	// テナント操作
-	ScoreGETOrganizerBilling score.ScoreTag = "GET /organizer/api/billing"
-
-	// for player
-	// 参加者からの閲覧
-	ScoreGETPlayerDetails      score.ScoreTag = "GET /player/api/player/:player_name"
-	ScoreGETPlayerRanking      score.ScoreTag = "GET /player/api/competition/:competition_id/ranking"
-	ScoreGETPlayerCompetitions score.ScoreTag = "GET /player/api/competitions"
-)
-
-// シナリオ分別用タグ
-type ScenarioTag string
-
-const (
-	ScenarioTagAdmin                   ScenarioTag = "Admin"
-	ScenarioTagOrganizerNewTenant      ScenarioTag = "OrganizerNewTenant"
-	ScenarioTagOrganizerPopularTenant  ScenarioTag = "OrganizerPopularTenant"
-	ScenarioTagOrganizerPeacefulTenant ScenarioTag = "OrganizerPeacefulTenant"
-)
-
-// ScoreTag毎の倍率
-var ResultScoreMap = map[score.ScoreTag]int64{
-	ScorePOSTAdminTenantsAdd:             1,
-	ScoreGETAdminTenantsBilling:          1,
-	ScorePOSTOrganizerPlayersAdd:         1,
-	ScorePOSTOrganizerPlayerDisqualified: 1,
-	ScorePOSTOrganizerCompetitionsAdd:    1,
-	ScorePOSTOrganizerCompetitionFinish:  1,
-	ScorePOSTOrganizerCompetitionResult:  1,
-	ScoreGETOrganizerBilling:             1,
-
-	// TODO: 要調整 初期から万単位がでるので*1/100みたいなのをしたい
-	ScoreGETPlayerDetails:      1,
-	ScoreGETPlayerRanking:      1,
-	ScoreGETPlayerCompetitions: 1,
-}
-
-// 各tagのリスト
-var (
-	ScenarioTagList = []ScenarioTag{
-		ScenarioTagAdmin,
-		ScenarioTagOrganizerNewTenant,
-		ScenarioTagOrganizerPopularTenant,
-		ScenarioTagOrganizerPeacefulTenant,
-	}
-	ScoreTagList = []score.ScoreTag{
-		ScorePOSTAdminTenantsAdd,
-		ScoreGETAdminTenantsBilling,
-		ScorePOSTOrganizerPlayersAdd,
-		ScorePOSTOrganizerPlayerDisqualified,
-		ScorePOSTOrganizerCompetitionsAdd,
-		ScorePOSTOrganizerCompetitionFinish,
-		ScorePOSTOrganizerCompetitionResult,
-		ScoreGETOrganizerBilling,
-		ScoreGETPlayerDetails,
-		ScoreGETPlayerRanking,
-		ScoreGETPlayerCompetitions,
-	}
 )
 
 type TenantData struct {
@@ -127,7 +50,7 @@ type Scenario struct {
 	DisqualifiedPlayer map[string]struct{}
 	RawKey             *rsa.PrivateKey
 
-	WorkerCh chan *worker.Worker // TODO: 何も考えていない
+	WorkerCh chan *worker.Worker
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -224,15 +147,62 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 	sc.WorkerCh = make(chan *worker.Worker, 1)
 
 	// 最初に起動するシナリオ
+	// AdminBillingを見続けて新規テナントを追加する
 	{
-		adminBillingWorker, err := sc.AdminBillingScenarioWorker(step, 1)
+		wkr, err := sc.AdminBillingScenarioWorker(step, 1)
 		if err != nil {
 			return err
 		}
 		// select channel前なのでdeadlock対策でgoroutineに置いておく
 		go func(w *worker.Worker) {
 			sc.WorkerCh <- w
-		}(adminBillingWorker)
+		}(wkr)
+	}
+	// 最初から回る新規テナント
+	{
+		wkr, err := sc.NewTenantScenarioWorker(step, 1)
+		if err != nil {
+			return err
+		}
+		// select channel前なのでdeadlock対策でgoroutineに置いておく
+		go func(w *worker.Worker) {
+			sc.WorkerCh <- w
+		}(wkr)
+	}
+	{
+	}
+	// 軽いテナント
+	// TODO: deprecated
+	{
+		wkr, err := sc.ExistingTenantScenarioWorker(step, 1, false)
+		if err != nil {
+			return err
+		}
+		go func(w *worker.Worker) {
+			sc.WorkerCh <- w
+		}(wkr)
+	}
+	// 重いテナント
+	// TODO: deprecated
+	{
+		wkr, err := sc.ExistingTenantScenarioWorker(step, 1, true)
+		if err != nil {
+			return err
+		}
+		go func(w *worker.Worker) {
+			sc.WorkerCh <- w
+		}(wkr)
+	}
+	// プレイヤー
+	// TODO: deprecated
+	{
+		wkr, err := sc.PlayerScenarioWorker(step, 1)
+		if err != nil {
+			return err
+		}
+		go func(w *worker.Worker) {
+			sc.WorkerCh <- w
+		}(wkr)
 	}
 
 	// workerを起動する
@@ -247,7 +217,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 				AdminLogger.Printf("なにかのworkerが発火しました(%+v)", w)
 				w.Process(ctx)
 			}()
-			// TODO: エラー総数で打ち切りにする？専用のchannelで待ち受ける？
+			// TODO: エラー総数で打ち切りにする？専用のchannelで待ち受ける？5秒ごとにstep.Errorsを確認してもいいかも
 		}
 	}
 	wg.Wait()
