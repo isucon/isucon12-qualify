@@ -31,7 +31,7 @@ const (
 
 func (o Option) String() string {
 	return fmt.Sprintf(
-		"TargetURL: %s, TargetAddr: %s, InitializeRequestTimeout: %s, InitializeRequestTimeout: %s, LoadType: %s",
+		"TargetURL: %s, TargetAddr: %s, RequestTimeout: %s, InitializeRequestTimeout: %s, LoadType: %s",
 		o.TargetURL,
 		o.TargetAddr,
 		o.RequestTimeout.String(),
