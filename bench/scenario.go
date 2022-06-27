@@ -86,6 +86,29 @@ var ResultScoreMap = map[score.ScoreTag]int64{
 	ScoreGETPlayerCompetitions: 1,
 }
 
+// 各tagのリスト
+var (
+	ScenarioTagList = []ScenarioTag{
+		ScenarioTagAdmin,
+		ScenarioTagOrganizerNewTenant,
+		ScenarioTagOrganizerPopularTenant,
+		ScenarioTagOrganizerPeacefulTenant,
+	}
+	ScoreTagList = []score.ScoreTag{
+		ScorePOSTAdminTenantsAdd,
+		ScoreGETAdminTenantsBilling,
+		ScorePOSTOrganizerPlayersAdd,
+		ScorePOSTOrganizerPlayerDisqualified,
+		ScorePOSTOrganizerCompetitionsAdd,
+		ScorePOSTOrganizerCompetitionFinish,
+		ScorePOSTOrganizerCompetitionResult,
+		ScoreGETOrganizerBilling,
+		ScoreGETPlayerDetails,
+		ScoreGETPlayerRanking,
+		ScoreGETPlayerCompetitions,
+	}
+)
+
 type TenantData struct {
 	DisplayName string
 	Name        string
@@ -113,8 +136,15 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	// Prepareは60秒以内に完了
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
+
 	sc.ScenarioScoreMap = sync.Map{}
 	sc.ScenarioCountMap = make(map[ScenarioTag][]int)
+	for _, key := range ScenarioTagList {
+		n := int64(0)
+		sc.ScenarioScoreMap.Store(string(key), &n)
+		sc.ScenarioCountMap[key] = []int{0, 0}
+	}
+
 	sc.ScenarioCountMutex = sync.Mutex{}
 	sc.DisqualifiedPlayer = map[string]struct{}{}
 

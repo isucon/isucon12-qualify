@@ -11,7 +11,7 @@ import (
 // ずっと/admin/billingを見続けるシナリオ
 // 指定回数エラーが出るまで繰り返し、並列動作はしない
 func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*worker.Worker, error) {
-	scTag := ScenarioTag("AdminBillingScenario")
+	scTag := ScenarioTagAdmin
 
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.AdminBillingScenario(ctx, step, scTag); err != nil {

@@ -10,10 +10,10 @@ import (
 )
 
 type OrganizerJobConfig struct {
-	tenantName     string
-	addPlayerNum   int
-	addPlayerTimes int
-	requestNum     int
+	tenantName        string // 対象テナント
+	addPlayerNum      int    // 一度に追加する合計プレイヤー数
+	addPlayerTimes    int    // 追加する回数
+	rankingRequestNum int    // 1人あたりのランキングを確認する回数, 初期実装:75
 }
 
 func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkStep, orgAg *agent.Agent, scTag ScenarioTag, conf *OrganizerJobConfig) error {
@@ -65,7 +65,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		}
 
 		// 大会のランキングを参照するプレイヤーたち
-		for loopCount := 0; loopCount < conf.requestNum; loopCount++ {
+		for loopCount := 0; loopCount < conf.rankingRequestNum; loopCount++ {
 			var err error
 			var ve ValidationError
 			var ok bool
@@ -158,9 +158,9 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 }
 
 type tenantPlayerJobConfig struct {
-	tenantName    string
-	playerID      string
-	competitionID string
+	tenantName    string // 対象テナント
+	playerID      string // 対象プレイヤー
+	competitionID string // 対象大会
 }
 
 func (sc *Scenario) tenantPlayerJob(ctx context.Context, step *isucandar.BenchmarkStep, conf *tenantPlayerJobConfig) error {

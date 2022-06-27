@@ -57,14 +57,19 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	jobConf := &OrganizerJobConfig{
-		tenantName:     tenant.Name,
-		addPlayerTimes: 20, // PlayersAddを叩く回数
-		addPlayerNum:   5,  // 1度のPlayersAddで追加するプレイヤー数
-		requestNum:     10, // 参加者1人あたりがリクエストする回数 初期データは75
+		tenantName:        tenant.Name,
+		addPlayerTimes:    20,
+		addPlayerNum:      5,
+		rankingRequestNum: 10,
+	}
+	if sc.Option.LoadType == LoadTypeLight {
+		jobConf.rankingRequestNum = 3
 	}
 
-	if err := sc.OrganizerJob(ctx, step, orgAg, scTag, jobConf); err != nil {
-		return err
+	for {
+		if err := sc.OrganizerJob(ctx, step, orgAg, scTag, jobConf); err != nil {
+			return err
+		}
 	}
 
 	return nil
