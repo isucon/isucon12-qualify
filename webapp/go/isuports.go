@@ -162,6 +162,9 @@ func Run() {
 	e.GET("/api/player/competition/:competition_id/ranking", competitionRankingHandler)
 	e.GET("/api/player/competitions", competitionsHandler)
 
+	// 全ロール及び未認証でも使えるhandler
+	e.GET("/api/me", meHandler)
+
 	// ベンチマーカー向けAPI
 	e.POST("/initialize", initializeHandler)
 
@@ -289,23 +292,43 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 			fmt.Sprintf("invalid token: aud field is few or too much: %s", tokenStr),
 		)
 	}
+	tenant, err := retrieveTenantRowFromHeader(c)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, echo.NewHTTPError(http.StatusUnauthorized, "tenant not found")
+		}
+		return nil, fmt.Errorf("error retrieveTenantRowFromHeader at parseViewer: %w", err)
+	}
+	if tenant.Name == "Admin" && r != RoleAdmin {
+		return nil, echo.NewHTTPError(http.StatusUnauthorized, "tenant not found")
+	}
 
-	// JWTに入っているテナント名とHostヘッダのテナント名が一致しているか確認
-	baseHost := getEnv("ISUCON_BASE_HOSTNAME", ".t.isucon.dev")
-	tenantName := strings.TrimSuffix(c.Request().Host, baseHost)
-	if tenantName != aud[0] {
+	if tenant.Name != aud[0] {
 		return nil, echo.NewHTTPError(
 			http.StatusUnauthorized,
 			fmt.Sprintf("invalid token: tenant name is not match with %s: %s", c.Request().Host, tokenStr),
 		)
 	}
 
+	v := &Viewer{
+		role:       r,
+		playerID:   token.Subject(),
+		tenantName: tenant.Name,
+		tenantID:   tenant.ID,
+	}
+	return v, nil
+}
+
+func retrieveTenantRowFromHeader(c echo.Context) (*TenantRow, error) {
+	// JWTに入っているテナント名とHostヘッダのテナント名が一致しているか確認
+	baseHost := getEnv("ISUCON_BASE_HOSTNAME", ".t.isucon.dev")
+	tenantName := strings.TrimSuffix(c.Request().Host, baseHost)
+
 	// SaaS管理者用ドメイン
-	if r == RoleAdmin && tenantName == "admin" {
-		return &Viewer{
-			role:       r,
-			playerID:   token.Subject(),
-			tenantName: "admin",
+	if tenantName == "admin" {
+		return &TenantRow{
+			Name:        "admin",
+			DisplayName: "admin",
 		}, nil
 	}
 
@@ -317,19 +340,9 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		"SELECT * FROM tenant WHERE name = ?",
 		tenantName,
 	); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, echo.NewHTTPError(http.StatusUnauthorized, "tenant not found")
-		}
 		return nil, fmt.Errorf("failed to Select tenant: name=%s, %w", tenantName, err)
 	}
-
-	v := &Viewer{
-		role:       r,
-		playerID:   token.Subject(),
-		tenantName: tenant.Name,
-		tenantID:   tenant.ID,
-	}
-	return v, nil
+	return &tenant, nil
 }
 
 type TenantRow struct {
@@ -1433,6 +1446,60 @@ func competitionsHandler(c echo.Context) error {
 		},
 	}
 	return c.JSON(http.StatusOK, res)
+}
+
+type MeHandlerResult struct {
+	Tenant   *TenantDetail `json:"tenant"`
+	Me       *PlayerDetail `json:"me"`
+	LoggedIn bool          `json:"logged_in"`
+}
+
+func meHandler(c echo.Context) error {
+	tenant, err := retrieveTenantRowFromHeader(c)
+	if err != nil {
+		return fmt.Errorf("error retrieveTenantRowFromHeader: %w", err)
+	}
+	td := &TenantDetail{
+		Name:        tenant.Name,
+		DisplayName: tenant.DisplayName,
+	}
+	v, err := parseViewer(c)
+	if err != nil {
+		var he *echo.HTTPError
+		if ok := errors.As(err, &he); ok && he.Code == http.StatusUnauthorized {
+			return c.JSON(http.StatusOK, SuccessResult{
+				Success: true,
+				Data: MeHandlerResult{
+					Tenant:   td,
+					Me:       nil,
+					LoggedIn: false,
+				},
+			})
+		}
+		return fmt.Errorf("error parseViewer: %w", err)
+	}
+	tenantDB, err := connectToTenantDB(v.tenantID)
+	if err != nil {
+		return fmt.Errorf("error connectToTenantDB: %w", err)
+	}
+	ctx := context.Background()
+	p, err := retrievePlayer(ctx, tenantDB, v.playerID)
+	if err != nil {
+		return fmt.Errorf("error retrievePlayer: %w", err)
+	}
+
+	return c.JSON(http.StatusOK, SuccessResult{
+		Success: true,
+		Data: MeHandlerResult{
+			Tenant: td,
+			Me: &PlayerDetail{
+				ID:             p.ID,
+				DisplayName:    p.DisplayName,
+				IsDisqualified: p.IsDisqualified,
+			},
+			LoggedIn: false,
+		},
+	})
 }
 
 type InitializeHandlerResult struct {
