@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 use App\Application\Settings\SettingsInterface;
+use SQLTrace\Middleware as SQLTraceMiddleware;
 use DI\ContainerBuilder;
+use Doctrine\DBAL\Configuration as DBConfiguration;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Monolog\Handler\StreamHandler;
@@ -45,6 +47,24 @@ return function (ContainerBuilder $containerBuilder) {
             ];
 
             return DriverManager::getConnection($connectionParams);
+        },
+        DBConfiguration::class => function (ContainerInterface $c) {
+            $configuration = new DBConfiguration();
+
+            // sqliteのクエリログを出力する設定
+            // sqltrace を参照
+            $sqliteTraceSettings = $c->get(SettingsInterface::class)->get('sqliteTrace');
+            $traceFilePath = $sqliteTraceSettings['path'];
+            if ($traceFilePath) {
+                $logger = new Logger($sqliteTraceSettings['name']);
+
+                $handler = new StreamHandler($traceFilePath);
+                $logger->pushHandler($handler);
+
+                $configuration->setMiddlewares([new SQLTraceMiddleware($logger)]);
+            }
+
+            return $configuration;
         },
     ]);
 };

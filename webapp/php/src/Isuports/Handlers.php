@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Isuports;
 
 use JsonSerializable;
+use Doctrine\DBAL\Configuration;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception as DBException;
@@ -18,6 +19,7 @@ final class Handlers
 {
     public function __construct(
         private Connection $adminDB,
+        private Configuration $sqliteConfiguration, // sqliteのクエリログを出力する設定
     ) {
     }
 
@@ -39,14 +41,17 @@ final class Handlers
     private function connectToTenantDB(int $id): Connection
     {
         try {
-            return DriverManager::getConnection([
-                'path' => $this->tenantDBPath($id),
-                'driver' => 'pdo_sqlite',
-                'driverOptions' => [
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            return DriverManager::getConnection(
+                params: [
+                    'path' => $this->tenantDBPath($id),
+                    'driver' => 'pdo_sqlite',
+                    'driverOptions' => [
+                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    ],
                 ],
-            ]);
+                config: $this->sqliteConfiguration,
+            );
         } catch (DBException $e) {
             throw new RuntimeException(message: 'failed to open tenant DB: ' . $e->getMessage(), previous: $e);
         }

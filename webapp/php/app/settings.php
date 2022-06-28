@@ -28,6 +28,13 @@ return function (ContainerBuilder $containerBuilder) {
                     'user' => getenv('ISUCON_DB_USER') ?: 'isucon',
                     'password' => getenv('ISUCON_DB_PASSWORD') ?: 'isucon',
                 ],
+                // sqliteのクエリログを出力する設定
+                // 環境変数 ISUCON_SQLITE_TRACE_FILE を設定すると、そのファイルにクエリログをJSON形式で出力する
+                // 未設定なら出力しない
+                'sqliteTrace' => [
+                    'name' => 'sqlite-trace',
+                    'path' => getenv('ISUCON_SQLITE_TRACE_FILE') ?: '',
+                ],
             ]);
         }
     ]);
