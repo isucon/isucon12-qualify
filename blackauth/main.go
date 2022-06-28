@@ -58,9 +58,10 @@ func loginPlayerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cookie := &http.Cookie{
-		Name:  cookieName,
-		Value: fmt.Sprintf("%s", signed),
-		Path:  "/",
+		Name:     cookieName,
+		Value:    fmt.Sprintf("%s", signed),
+		Path:     "/",
+		HttpOnly: true,
 	}
 	http.SetCookie(w, cookie)
 	w.WriteHeader(http.StatusOK)
@@ -83,9 +84,10 @@ func loginOrganizerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cookie := &http.Cookie{
-		Name:  cookieName,
-		Value: fmt.Sprintf("%s", signed),
-		Path:  "/",
+		Name:     cookieName,
+		Value:    fmt.Sprintf("%s", signed),
+		Path:     "/",
+		HttpOnly: true,
 	}
 	http.SetCookie(w, cookie)
 	w.WriteHeader(http.StatusOK)
@@ -106,9 +108,22 @@ func loginAdminHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cookie := &http.Cookie{
-		Name:  cookieName,
-		Value: fmt.Sprintf("%s", signed),
-		Path:  "/",
+		Name:     cookieName,
+		Value:    fmt.Sprintf("%s", signed),
+		Path:     "/",
+		HttpOnly: true,
+	}
+	http.SetCookie(w, cookie)
+	w.WriteHeader(http.StatusOK)
+}
+
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	cookie := &http.Cookie{
+		Name:     cookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Expires:  time.Now().Add(-time.Hour),
 	}
 	http.SetCookie(w, cookie)
 	w.WriteHeader(http.StatusOK)
@@ -140,9 +155,10 @@ func init() {
 func main() {
 
 	// setup handler
-	http.HandleFunc("/auth/player/login", loginPlayerHandler)
-	http.HandleFunc("/auth/organizer/login", loginOrganizerHandler)
-	http.HandleFunc("/auth/admin/login", loginAdminHandler)
+	http.HandleFunc("/auth/login/player", loginPlayerHandler)
+	http.HandleFunc("/auth/login/organizer", loginOrganizerHandler)
+	http.HandleFunc("/auth/login/admin", loginAdminHandler)
+	http.HandleFunc("/auth/logout", logoutHandler)
 	log.Println("starting server on :3001")
 	http.ListenAndServe(":3001", nil)
 }
