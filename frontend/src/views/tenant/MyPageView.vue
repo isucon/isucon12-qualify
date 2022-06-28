@@ -51,7 +51,7 @@ export default defineComponent({
       }
 
       console.log(res.data)
-      competitions.value = res.data.data.Competitions
+      competitions.value = res.data.data.competitions
     }
 
     onMounted(() => {

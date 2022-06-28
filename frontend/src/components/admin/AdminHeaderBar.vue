@@ -1,7 +1,7 @@
 <template>
   <div class="header-bar">
     <h1 class="brand">ISUPORTS</h1>
-    <h2 class="tenant-name">柏の木同盟</h2>
+    <h2 class="subtitle">Admin Panel</h2>
   </div>
 </template>
 
@@ -16,19 +16,17 @@
 
 .brand {
   display: inline-block;
-  font-size: 32px;
-  line-height: 36px;
+  font-size: 38px;
+  line-height: 60px;
   margin: 0;
   padding: 0;
 }
 
-.tenant-name {
+.subtitle {
   margin-left: 2em;
   display: inline-block;
-  font-size: 18px;
+  font-size: 20px;
   line-height: 36px;
 }
-
-
 
 </style>
