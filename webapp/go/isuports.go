@@ -1283,7 +1283,8 @@ type CompetitionRank struct {
 }
 
 type CompetitionRankingHandlerResult struct {
-	Ranks []CompetitionRank `json:"ranks"`
+	Competition CompetitionDetail `json:"competition"`
+	Ranks       []CompetitionRank `json:"ranks"`
 }
 
 // 参加者向けAPI
@@ -1312,7 +1313,8 @@ func competitionRankingHandler(c echo.Context) error {
 	}
 
 	// 大会の存在確認
-	if _, err := retrieveCompetition(ctx, tenantDB, competitionID); err != nil {
+	competition, err := retrieveCompetition(ctx, tenantDB, competitionID)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return echo.NewHTTPError(http.StatusNotFound, "competition not found")
 		}
@@ -1401,6 +1403,11 @@ func competitionRankingHandler(c echo.Context) error {
 	res := SuccessResult{
 		Success: true,
 		Data: CompetitionRankingHandlerResult{
+			Competition: CompetitionDetail{
+				ID:         competition.ID,
+				Title:      competition.Title,
+				IsFinished: competition.FinishedAt.Valid,
+			},
 			Ranks: pagedRanks,
 		},
 	}
