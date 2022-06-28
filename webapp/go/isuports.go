@@ -1105,7 +1105,7 @@ func competitionResultHandler(c echo.Context) error {
 	for _, ps := range playerScoreRows {
 		if _, err := tenantDB.NamedExecContext(
 			ctx,
-			"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_number, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_number, :created_at, :updated_at)",
+			"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_num, :created_at, :updated_at)",
 			ps,
 		); err != nil {
 			return fmt.Errorf(
@@ -1231,8 +1231,8 @@ func playerHandler(c echo.Context) error {
 		if err := tenantDB.GetContext(
 			ctx,
 			&ps,
-			// 最後にCSVに登場したスコアを採用する = row_numberが一番行もの
-			"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_number DESC LIMIT 1",
+			// 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
+			"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1",
 			v.tenantID,
 			c.ID,
 			p.ID,
@@ -1353,7 +1353,7 @@ func competitionRankingHandler(c echo.Context) error {
 	if err := tenantDB.SelectContext(
 		ctx,
 		&pss,
-		"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_number DESC",
+		"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
 		tenant.ID,
 		competitionID,
 	); err != nil {
@@ -1362,8 +1362,8 @@ func competitionRankingHandler(c echo.Context) error {
 	ranks := make([]CompetitionRank, 0, len(pss))
 	scoredPlayerSet := make(map[string]struct{}, len(pss))
 	for _, ps := range pss {
-		// player_scoreが同一player_id内ではrow_numberの降順でソートされているので
-		// 現れたのが2回目以降のplayer_idはより大きいrow_numberでスコアが出ているとみなせる
+		// player_scoreが同一player_id内ではrow_numの降順でソートされているので
+		// 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
 		if _, ok := scoredPlayerSet[ps.PlayerID]; ok {
 			continue
 		}
