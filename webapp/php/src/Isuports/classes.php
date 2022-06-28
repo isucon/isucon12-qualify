@@ -27,6 +27,26 @@ final class SuccessResult implements JsonSerializable
     }
 }
 
+final class FailureResult implements JsonSerializable
+{
+    public function __construct(
+        private bool $success,
+        private string $message = '',
+    ) {
+    }
+
+    /**
+     * @return array{status: bool, message: string}
+     */
+    public function jsonSerialize(): array
+    {
+        return [
+            'status' => $this->success,
+            'message' => $this->message,
+        ];
+    }
+}
+
 final class TenantDetail implements JsonSerializable
 {
     public function __construct(

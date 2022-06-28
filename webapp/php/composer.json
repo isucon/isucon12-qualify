@@ -21,6 +21,9 @@
         }
     },
     "autoload": {
+        "files": [
+            "src/Isuports/classes.php"
+        ],
         "psr-4": {
             "App\\": "src/"
         }

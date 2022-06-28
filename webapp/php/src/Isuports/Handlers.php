@@ -9,8 +9,6 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use UnexpectedValueException;
 
-require __DIR__ . '/classes.php';
-
 final class Handlers
 {
     public function meHandler(Request $request, Response $response): Response
