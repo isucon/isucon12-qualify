@@ -36,7 +36,7 @@ export default defineComponent({
     const account = ref('')
     const handleSubmit = async () => {
       try {
-        const res = await axios.post('/auth/player/login', new URLSearchParams({
+        const res = await axios.post('/auth/login/player', new URLSearchParams({
           id: account.value,
         }))
 

@@ -2,11 +2,20 @@
   <div class="header-bar">
     <h1 class="brand">ISUPORTS</h1>
     <h2 class="subtitle">{{ tenantName }}</h2>
+
+    <div class="switch-role">
+      <button
+        type="button"
+        @click="handleAssumeOrganizerRole"
+      >主催者モードに切り替える</button>
+    </div>
   </div>
 </template>
 
 <script lang="ts">
 import { defineComponent } from 'vue'
+import { useRouter } from 'vue-router'
+import axios from 'axios'
 
 type Props = {
   tenantName: string
@@ -20,6 +29,22 @@ export default defineComponent({
       default: '鎌倉ISUPORTS同好会',
     },
   },
+  setup() {
+    const router = useRouter()
+
+    const handleAssumeOrganizerRole = async () => {
+      try {
+        const res = await axios.post('/auth/login/organizer')
+        router.push('/organizer/')
+      } catch (e) {
+        window.alert('failed to assume organizer role')
+      }
+    }
+
+    return {
+      handleAssumeOrganizerRole,
+    }
+  }
 })
 </script>
 
@@ -48,6 +73,9 @@ export default defineComponent({
   line-height: 36px;
 }
 
-
+.switch-role {
+  float: right;
+  margin-top: 12px;
+}
 
 </style>
