@@ -12,6 +12,13 @@ use Slim\Factory\ServerRequestCreatorFactory;
 
 require __DIR__ . '/../vendor/autoload.php';
 
+error_reporting(E_ALL);
+
+set_error_handler(fn (int $code, string $description, string $file, int $line): bool => match ($code) {
+    E_NOTICE, E_WARNING => throw new ErrorException("$description in $file on line $line", $code),
+    default => false,
+});
+
 // Instantiate PHP-DI ContainerBuilder
 $containerBuilder = new ContainerBuilder();
 
