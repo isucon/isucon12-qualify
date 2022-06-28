@@ -7,7 +7,7 @@ jobs:
         go:
           - 1.18
     name: Build
-    runs-on: self-hosted
+    runs-on: [self-hosted, core16]
     steps:
 
     - name: Set up Go
