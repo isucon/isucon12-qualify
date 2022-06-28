@@ -2,6 +2,7 @@
     "name": "isucon/isucon-12-qualify",
     "require": {
         "php": "^8.0",
+        "doctrine/dbal": "^3.3",
         "monolog/monolog": "^2.6",
         "php-di/php-di": "^6.4",
         "slim/psr7": "^1.5",
