@@ -8,6 +8,9 @@
     <arg name="colors"/>
 
     <!-- inherit rules from: -->
+    <rule ref="PSR1.Classes.ClassDeclaration">
+        <exclude-pattern>src/Isuports/classes\.php</exclude-pattern>
+    </rule>
     <rule ref="PSR12"/>
     <rule ref="Generic.Arrays.DisallowLongArraySyntax"/>
 
