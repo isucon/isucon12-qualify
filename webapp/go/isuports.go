@@ -517,10 +517,7 @@ func tenantsAddHandler(c echo.Context) error {
 			DisplayName: displayName,
 		},
 	}
-	if err := c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res}); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-	return nil
+	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
 }
 
 // テナント名が規則に沿っているかチェックする
@@ -1411,11 +1408,7 @@ func competitionRankingHandler(c echo.Context) error {
 			Ranks: pagedRanks,
 		},
 	}
-	if err := c.JSON(http.StatusOK, res); err != nil {
-		return fmt.Errorf("error c.JSON: %w", err)
-	}
-
-	return nil
+	return c.JSON(http.StatusOK, res)
 }
 
 type CompetitionsHandlerResult struct {
