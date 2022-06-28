@@ -19,6 +19,30 @@ final class Handlers
     ) {
     }
 
+    /**
+     * テナントDBのパスを返す
+     */
+    private function tenantDBPath(int $id): string
+    {
+        $tenantDBDir = getenv('ISUCON_TENENT_DB_DIR') ?: __DIR__ . '/../../../tenant_db';
+
+        return $tenantDBDir . DIRECTORY_SEPARATOR . sprintf('%d.db', $id);
+    }
+
+    /**
+     * テナントDBに接続する
+     *
+     * @throws RuntimeException
+     */
+    private function connectToTenantDB(int $id): PDO
+    {
+        try {
+            return new PDO(dsn: 'sqlite:' . $this->tenantDBPath($id));
+        } catch (PDOException $e) {
+            throw new RuntimeException(message: 'failed to open tenant DB: ' . $e->getMessage(), previous: $e);
+        }
+    }
+
     public function meHandler(Request $request, Response $response): Response
     {
         // TODO: 仮実装
