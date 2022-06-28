@@ -1522,6 +1522,17 @@ func meHandler(c echo.Context) error {
 	ctx := context.Background()
 	p, err := retrievePlayer(ctx, tenantDB, v.playerID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return c.JSON(http.StatusOK, SuccessResult{
+				Success: true,
+				Data: MeHandlerResult{
+					Tenant:   td,
+					Me:       nil,
+					Role:     RoleNone,
+					LoggedIn: false,
+				},
+			})
+		}
 		return fmt.Errorf("error retrievePlayer: %w", err)
 	}
 
