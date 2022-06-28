@@ -1,7 +1,33 @@
 {
     "name": "isucon/isucon-12-qualify",
-    "require": {},
+    "require": {
+        "php": "^8.0",
+        "monolog/monolog": "^2.6",
+        "php-di/php-di": "^6.4",
+        "slim/psr7": "^1.5",
+        "slim/slim": "^4.10"
+    },
+    "require-dev": {
+        "jangregor/phpstan-prophecy": "^1.0.0",
+        "phpstan/extension-installer": "^1.1.0",
+        "phpstan/phpstan": "^1.7",
+        "squizlabs/php_codesniffer": "^3.6"
+    },
+    "config": {
+        "process-timeout": 0,
+        "sort-packages": true,
+        "allow-plugins": {
+            "phpstan/extension-installer": true
+        }
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
     "scripts": {
-        "start": "php -S 0.0.0.0:3000 -t public public/index.php"
+        "start": "php -S 0.0.0.0:3000 -t public public/index.php",
+        "style": "./vendor/bin/phpcs ./app ./public ./src",
+        "analyse": "./vendor/bin/phpstan analyse ./app ./public ./src"
     }
 }

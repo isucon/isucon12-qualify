@@ -1,0 +1,8 @@
+parameters:
+  level: 4
+  paths:
+    - src
+  ignoreErrors:
+    -
+      message: '#^If condition is always#'
+      path: public/index.php
