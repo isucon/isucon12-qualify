@@ -438,7 +438,7 @@ func CreatePlayerData(
 			return competitionScores[i].CreatedAt < competitionScores[j].CreatedAt
 		})
 		for i := range competitionScores {
-			competitionScores[i].RowNumber = int64(i + 1)
+			competitionScores[i].RowNum = int64(i + 1)
 		}
 		scores = append(scores, competitionScores...)
 	}
