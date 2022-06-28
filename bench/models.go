@@ -168,6 +168,5 @@ type CompetitionData struct {
 }
 type PlayerData struct {
 	ID          string
-	Name        string
 	DisplayName string
 }
