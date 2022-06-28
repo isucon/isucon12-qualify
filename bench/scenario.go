@@ -170,34 +170,24 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		sc.WorkerCh <- wkr
 	}
 
-	// 軽いテナント
-	// TODO: deprecated
-	{
-		wkr, err := sc.ExistingTenantScenarioWorker(step, 1, false)
-		if err != nil {
-			return err
-		}
-		sc.WorkerCh <- wkr
-	}
-	// 重いテナント
-	// TODO: deprecated
-	{
-		wkr, err := sc.ExistingTenantScenarioWorker(step, 1, true)
-		if err != nil {
-			return err
-		}
-		sc.WorkerCh <- wkr
-	}
-
-	// プレイヤー
-	// TODO: deprecated
-	{
-		wkr, err := sc.PlayerScenarioWorker(step, 1)
-		if err != nil {
-			return err
-		}
-		sc.WorkerCh <- wkr
-	}
+	// // 軽いテナント
+	// // TODO: deprecated
+	// {
+	// 	wkr, err := sc.ExistingTenantScenarioWorker(step, 1, false)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	sc.WorkerCh <- wkr
+	// }
+	// // 重いテナント
+	// // TODO: deprecated
+	// {
+	// 	wkr, err := sc.ExistingTenantScenarioWorker(step, 1, true)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	sc.WorkerCh <- wkr
+	// }
 
 	// workerを起動する
 	for {
