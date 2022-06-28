@@ -15,7 +15,7 @@ CREATE TABLE player (
   id VARCHAR(255) NOT NULL PRIMARY KEY,
   tenant_id BIGINT NOT NULL,
   display_name TEXT NOT NULL,
-  is_disqualified INTEGER NOT NULL,
+  is_disqualified BOOLEAN NOT NULL,
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
 );
