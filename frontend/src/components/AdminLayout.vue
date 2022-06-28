@@ -1,7 +1,7 @@
 <template>
   <div class="main">
     <div class="header">
-      <HeaderBar />
+      <AdminHeaderBar />
     </div>
     <div class="body">
       <router-view />
@@ -11,12 +11,12 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue'
-import HeaderBar from '@/components/admin/HeaderBar.vue'
+import AdminHeaderBar from '@/components/admin/AdminHeaderBar.vue'
 
 export default defineComponent({
   name: 'AdminLayout',
   components: {
-    HeaderBar,
+    AdminHeaderBar,
   },
 })
 </script>
@@ -44,6 +44,7 @@ export default defineComponent({
   color: white;
   filter: drop-shadow(0px 2px 3px rgba(0, 0, 0, 0.4));
   position: sticky;
+  height: 70px;
   top: 0;
   left: 0;
   right: 0;

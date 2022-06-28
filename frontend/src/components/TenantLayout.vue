@@ -1,7 +1,10 @@
 <template>
   <div class="main">
     <div class="header">
-      <HeaderBar />
+      <TenantHeaderBar
+        :tenant-name="tenantDisplayName"
+        :is-logged-in="isLoggedIn"
+      />
     </div>
     <div class="body">
       <router-view />
@@ -11,12 +14,24 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue'
-import HeaderBar from '@/components/tenant/HeaderBar.vue'
+import TenantHeaderBar from '@/components/tenant/TenantHeaderBar.vue'
+
+import { useLoginStatus } from '@/assets/hooks/useLoginStatus'
+
+import axios from 'axios'
 
 export default defineComponent({
   name: 'TenantLayout',
   components: {
-    HeaderBar,
+    TenantHeaderBar,
+  },
+  setup() {
+    const { isLoggedIn, tenantDisplayName } = useLoginStatus()
+
+    return {
+      tenantDisplayName,
+      isLoggedIn,
+    }
   },
 })
 </script>
