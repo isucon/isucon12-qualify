@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -17,18 +18,18 @@ func (peacefulTenantScenarioWorker) String() string {
 }
 func (w *peacefulTenantScenarioWorker) Process(ctx context.Context) { w.worker.Process(ctx) }
 
-func (sc *Scenario) PeacefulTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32, isHeavyTenant bool) (Worker, error) {
+func (sc *Scenario) PeacefulTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32) (Worker, error) {
 	scTag := ScenarioTagOrganizerPeacefulTenant
 
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		if err := sc.PeacefulTenantScenario(ctx, step, scTag, isHeavyTenant); err != nil {
+		if err := sc.PeacefulTenantScenario(ctx, step, scTag); err != nil {
 			sc.ScenarioError(scTag, err)
 			time.Sleep(SleepOnError)
 		}
 	},
 		// // 無限回繰り返す
 		worker.WithInfinityLoop(),
-		worker.WithUnlimitedParallelism(),
+		worker.WithMaxParallelism(1),
 	)
 	if err != nil {
 		return nil, err
@@ -39,60 +40,74 @@ func (sc *Scenario) PeacefulTenantScenarioWorker(step *isucandar.BenchmarkStep, 
 	}, nil
 }
 
-func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag, isHeavyTenant bool) error {
-	report := timeReporter(scTag)
+func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag) error {
+	report := timeReporter(string(scTag))
 	defer report()
 	sc.ScenarioStart(scTag)
 
-	var tenantName string
-	if isHeavyTenant {
-		tenantName = "isucon"
-	} else {
-		var data *InitialDataRow
-		for {
-			data = sc.InitialData.Choise()
-			if data.TenantName != "isucon" {
-				break
-			}
-		}
-		tenantName = data.TenantName
-	}
+	// TODO: 破壊的なシナリオ用IDを考える とりあえず後ろ20件
+	index := int64((len(sc.InitialDataTenant) - 20) + rand.Intn(20))
+	tenant := sc.InitialDataTenant[index]
 
-	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
+	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")
 	if err != nil {
 		return err
 	}
 
-	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
-	orgJobConf := &OrganizerJobConfig{
-		orgAg:       orgAg,
-		scTag:       scTag,
-		tenantName:  tenantName,
-		scoreRepeat: 2,
+	// player一覧を取る
+	var playerIDs []string
+	{
+		res, err := GetOrganizerPlayersListAction(ctx, orgAg)
+		v := ValidateResponse("テナントのプレイヤー一覧取得", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayersList) error {
+				for _, player := range r.Data.Players {
+					playerIDs = append(playerIDs, player.ID)
+				}
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETOrganizerPlayersList, scTag)
+		} else {
+			return v
+		}
+	}
+	playerID := playerIDs[rand.Intn(len(playerIDs))]
+
+	// プレイヤーを1人失格にする
+	{
+		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerID, orgAg)
+		v := ValidateResponse("プレイヤーを失格にする", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
+				_ = r
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
+		} else {
+			return v
+		}
 	}
 
-	for {
-		if err := sc.OrganizerJob(ctx, step, orgJobConf); err != nil {
-			return err
-		}
-
-		// テナント請求ダッシュボードの閲覧
-		{
-			res, err := GetOrganizerBillingAction(ctx, orgAg)
-			v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPIBilling) error {
-					_ = r
-					return nil
-				}))
-
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
-			} else {
-				return v
-			}
-		}
-		orgJobConf.scoreRepeat++
+	_, playerAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, playerID)
+	if err != nil {
+		return err
 	}
+
+	{
+		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
+		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(403))
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+		} else {
+			return v
+		}
+	}
+
+	// sleep 1s ~ 1.5s
+	sleepms := 1000 + rand.Intn(500)
+	time.Sleep(time.Millisecond * time.Duration(sleepms))
 
 	return nil
 }

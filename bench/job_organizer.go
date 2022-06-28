@@ -39,7 +39,9 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 				return nil
 			}),
 		)
-		if !v.IsEmpty() {
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETOrganizerPlayersList, conf.scTag)
+		} else {
 			return v
 		}
 	}

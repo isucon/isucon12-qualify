@@ -52,6 +52,7 @@ type Scenario struct {
 	ScenarioCountMutex sync.Mutex
 
 	InitialData        InitialDataRows
+	InitialDataTenant  InitialDataTenantMap
 	DisqualifiedPlayer map[string]struct{}
 	RawKey             *rsa.PrivateKey
 
@@ -106,6 +107,10 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 		sc.InitialData, err = GetInitialData()
 		if err != nil {
 			return fmt.Errorf("初期データのロードに失敗しました %s", err)
+		}
+		sc.InitialDataTenant, err = GetInitialDataTenant()
+		if err != nil {
+			return fmt.Errorf("初期データ(テナント)のロードに失敗しました %s", err)
 		}
 
 		block, _ := pem.Decode([]byte(keysrc))
@@ -179,9 +184,18 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		sc.WorkerCh <- wkr
 	}
 
-	// 思いテナント(id=1)を見るworker
+	// 重いテナント(id=1)を見るworker
 	{
 		wkr, err := sc.ExistingTenantScenarioWorker(step, 1, true)
+		if err != nil {
+			return err
+		}
+		sc.WorkerCh <- wkr
+	}
+
+	// 破壊的な変更を許容するシナリオ
+	{
+		wkr, err := sc.PeacefulTenantScenarioWorker(step, 1)
 		if err != nil {
 			return err
 		}

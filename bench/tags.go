@@ -12,6 +12,7 @@ const (
 
 	// for organizer endpoint
 	// 参加者操作
+	ScoreGETOrganizerPlayersList         score.ScoreTag = "GET /organizer/api/players/list"
 	ScorePOSTOrganizerPlayersAdd         score.ScoreTag = "POST /organizer/api/players/add"
 	ScorePOSTOrganizerPlayerDisqualified score.ScoreTag = "POST /organizer/api/player/:player_name/disqualified"
 	// 大会操作
@@ -48,6 +49,7 @@ var ResultScoreMap = map[score.ScoreTag]int64{
 	ScorePOSTAdminTenantsAdd:             1,
 	ScoreGETAdminTenantsBilling:          1,
 	ScorePOSTOrganizerPlayersAdd:         1,
+	ScoreGETOrganizerPlayersList:         1,
 	ScorePOSTOrganizerPlayerDisqualified: 1,
 	ScorePOSTOrganizerCompetitionsAdd:    1,
 	ScorePOSTOrganizerCompetitionFinish:  1,

@@ -108,11 +108,11 @@ func (ac *Account) GetAgent() (*agent.Agent, error) {
 	return ag, nil
 }
 
-type Model interface {
-	InitialDataRow
+type LoadModel interface {
+	InitialDataRow | InitialDataTenantRow
 }
 
-func LoadFromJSONFile[T Model](jsonFile string) ([]*T, error) {
+func LoadFromJSONFile[T LoadModel](jsonFile string) ([]*T, error) {
 	// 引数に渡されたファイルを開く
 	file, err := os.Open(jsonFile)
 	if err != nil {
@@ -131,6 +131,9 @@ func LoadFromJSONFile[T Model](jsonFile string) ([]*T, error) {
 	return objects, nil
 }
 
+type InitialDataRow data.BenchmarkerSource
+type InitialDataRows []*InitialDataRow
+
 func GetInitialData() (InitialDataRows, error) {
 	data, err := LoadFromJSONFile[InitialDataRow]("./benchmarker.json")
 	if err != nil {
@@ -139,12 +142,25 @@ func GetInitialData() (InitialDataRows, error) {
 	return data, nil
 }
 
-type InitialDataRow data.BenchmarkerSource
-type InitialDataRows []*InitialDataRow
-
 func (idrs InitialDataRows) Choise() *InitialDataRow {
 	n := rand.Intn(len(idrs))
 	return idrs[n]
+}
+
+type InitialDataTenantRow data.BenchmarkerTenantSource
+type InitialDataTenantMap map[int64]*InitialDataTenantRow
+
+func GetInitialDataTenant() (InitialDataTenantMap, error) {
+	data, err := LoadFromJSONFile[InitialDataTenantRow]("./benchmarker_tenant.json")
+	if err != nil {
+		return nil, err
+	}
+	dataMap := InitialDataTenantMap{}
+	for _, data := range data {
+		dataMap[data.TenantID] = data
+	}
+
+	return dataMap, nil
 }
 
 type ScoreRow struct {
