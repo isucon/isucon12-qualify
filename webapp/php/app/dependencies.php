@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Application\Settings\SettingsInterface;
 use DI\ContainerBuilder;
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\DriverManager;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
 use Monolog\Processor\UidProcessor;
@@ -26,18 +28,23 @@ return function (ContainerBuilder $containerBuilder) {
 
             return $logger;
         },
-        PDO::class => function (ContainerInterface $c) {
+        Connection::class => function (ContainerInterface $c) {
             $databaseSettings = $c->get(SettingsInterface::class)->get('database');
 
-            $dsn = vsprintf('mysql:host=%s;dbname=%s;port=%d', [
-                $databaseSettings['host'],
-                $databaseSettings['database'],
-                $databaseSettings['port']
-            ]);
+            $connectionParams = [
+                'dbname' => $databaseSettings['database'],
+                'user' => $databaseSettings['user'],
+                'password' => $databaseSettings['password'],
+                'host' => $databaseSettings['host'],
+                'driver' => 'pdo_mysql',
+                'driverOptions' => [
+                    PDO::ATTR_PERSISTENT => true,
+                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                ],
+            ];
 
-            return new PDO($dsn, $databaseSettings['user'], $databaseSettings['password'], [
-                PDO::ATTR_PERSISTENT => true,
-            ]);
+            return DriverManager::getConnection($connectionParams);
         },
     ]);
 };
