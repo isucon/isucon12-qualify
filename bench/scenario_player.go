@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -67,37 +68,40 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		}
 	}
 
-	{
-		res, err := GetPlayerAction(ctx, playerID, playerAg)
-		v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPIPlayer) error {
-				_ = r
-				return nil
-			}),
-		)
-		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
-		} else {
-			return v
-		}
-	}
-
-	for _, comp := range competitions {
-		{
-			res, err := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", playerAg)
-			v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+	for i := 0; i < 100; i++ {
+		if rand.Intn(100) < 30 {
+			res, err := GetPlayerAction(ctx, playerID, playerAg)
+			v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
+				WithSuccessResponse(func(r ResponseAPIPlayer) error {
 					_ = r
 					return nil
 				}),
 			)
 			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
+				sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 			} else {
 				return v
 			}
+		} else {
+			for _, comp := range competitions {
+				{
+					res, err := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", playerAg)
+					v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
+						WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+							_ = r
+							return nil
+						}),
+					)
+					if v.IsEmpty() {
+						sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
+					} else {
+						return v
+					}
+				}
+			}
 		}
-	}
+		time.Sleep(time.Millisecond * time.Duration(rand.Intn(1000)))
 
+	}
 	return nil
 }

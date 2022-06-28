@@ -80,7 +80,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	{
-		AdminLogger.Printf("Playerを追加します tenant: %s players: %d", tenant.Name, addPlayerNum)
+		AdminLogger.Printf("[%s] [tenant:%s] Playerを追加します players: %d", scTag, tenant.Name, addPlayerNum)
 		res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
 		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
@@ -100,7 +100,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		}
 	}
 
-	// 大会のランキングを参照するプレイヤーのworker
+	// プレイヤーのworker
 	for _, player := range players {
 		wkr, err := sc.PlayerScenarioWorker(step, 1, tenant.Name, player.ID)
 		if err != nil {
@@ -110,14 +110,34 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	orgJobConf := &OrganizerJobConfig{
-		scTag:      scTag,
-		tenantName: tenant.Name,
-		players:    players,
+		scTag:       scTag,
+		tenantName:  tenant.Name,
+		players:     players,
+		scoreRepeat: 2,
 	}
+
+	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
 	for {
 		if err := sc.OrganizerJob(ctx, step, orgAg, scTag, orgJobConf); err != nil {
 			return err
 		}
+
+		// テナント請求ダッシュボードの閲覧
+		{
+			res, err := GetOrganizerBillingAction(ctx, orgAg)
+			v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
+				WithSuccessResponse(func(r ResponseAPIBilling) error {
+					_ = r
+					return nil
+				}))
+
+			if v.IsEmpty() {
+				sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
+			} else {
+				return v
+			}
+		}
+		orgJobConf.scoreRepeat++
 	}
 
 	return nil

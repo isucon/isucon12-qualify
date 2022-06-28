@@ -31,6 +31,10 @@ const (
 // シナリオ分別用タグ
 type ScenarioTag string
 
+func (st ScenarioTag) String() string {
+	return string(st)
+}
+
 const (
 	ScenarioTagAdmin                   ScenarioTag = "Admin"
 	ScenarioTagOrganizerNewTenant      ScenarioTag = "OrganizerNewTenant"

@@ -199,7 +199,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 			go func(w Worker) {
 				defer wg.Done()
 				wkr := w
-				AdminLogger.Printf("workerを増やします (%s)", wkr)
+				AdminLogger.Printf("workerを増やします [%s]", wkr)
 				wkr.Process(ctx)
 			}(w)
 			// TODO: エラー総数で打ち切りにする？専用のchannelで待ち受ける？5秒ごとにstep.Errorsを確認してもいいかも
