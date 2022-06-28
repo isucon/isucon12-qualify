@@ -58,6 +58,11 @@ type BenchmarkerSource struct {
 	IsDisqualified bool   `json:"is_disqualified"`
 }
 
+type BenchmarkerTenantSource struct {
+	TenantID   int64  `json:"tenant_id"`
+	TenantName string `json:"tenant_name"`
+}
+
 func init() {
 	os.Setenv("TZ", "UTC")
 	diff := Now().Add(time.Second).Sub(Epoch)
@@ -88,6 +93,7 @@ func Run(tenantsNum int) error {
 	defer db.Close()
 
 	benchSrcs := make([]*BenchmarkerSource, 0)
+	benchTenantSrcs := make([]*BenchmarkerTenantSource, 0)
 	for i := 0; i < tenantsNum; i++ {
 		log.Println("create tenant")
 		tenant := CreateTenant(i == 0)
@@ -102,6 +108,10 @@ func Run(tenantsNum int) error {
 		}
 		samples := len(players)
 		benchSrcs = append(benchSrcs, lo.Samples(b, samples)...)
+		benchTenantSrcs = append(benchTenantSrcs, &BenchmarkerTenantSource{
+			TenantID:   tenant.ID,
+			TenantName: tenant.Name,
+		})
 	}
 	if err := storeMaxID(db); err != nil {
 		return err
@@ -110,6 +120,12 @@ func Run(tenantsNum int) error {
 		return err
 	} else {
 		json.NewEncoder(f).Encode(benchSrcs)
+		f.Close()
+	}
+	if f, err := os.Create("benchmarker_tenant.json"); err != nil {
+		return err
+	} else {
+		json.NewEncoder(f).Encode(benchTenantSrcs)
 		f.Close()
 	}
 	return nil

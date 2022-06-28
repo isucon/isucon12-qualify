@@ -8,20 +8,20 @@ import (
 	"github.com/isucon/isucandar/worker"
 )
 
-type existingTenantScenarioWorker struct {
+type popularTenantScenarioWorker struct {
 	worker *worker.Worker
 }
 
-func (existingTenantScenarioWorker) String() string {
-	return "ExistingTenantScenarioWorker"
+func (popularTenantScenarioWorker) String() string {
+	return "PopularTenantScenarioWorker"
 }
-func (w *existingTenantScenarioWorker) Process(ctx context.Context) { w.worker.Process(ctx) }
+func (w *popularTenantScenarioWorker) Process(ctx context.Context) { w.worker.Process(ctx) }
 
-func (sc *Scenario) ExistingTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32, isHeavyTenant bool) (Worker, error) {
+func (sc *Scenario) PopularTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32, isHeavyTenant bool) (Worker, error) {
 	scTag := ScenarioTagOrganizerPopularTenant
 
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		if err := sc.ExistingTenantScenario(ctx, step, scTag, isHeavyTenant); err != nil {
+		if err := sc.PopularTenantScenario(ctx, step, scTag, isHeavyTenant); err != nil {
 			sc.ScenarioError(scTag, err)
 			time.Sleep(SleepOnError)
 		}
@@ -34,13 +34,17 @@ func (sc *Scenario) ExistingTenantScenarioWorker(step *isucandar.BenchmarkStep, 
 		return nil, err
 	}
 	w.SetParallelism(p)
-	return &existingTenantScenarioWorker{
+	return &popularTenantScenarioWorker{
 		worker: w,
 	}, nil
 }
 
-func (sc *Scenario) ExistingTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag, isHeavyTenant bool) error {
-	report := timeReporter("既存テナントシナリオ")
+func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag, isHeavyTenant bool) error {
+	if isHeavyTenant {
+		scTag = scTag + "HeavyTenant"
+	}
+
+	report := timeReporter(string(scTag))
 	defer report()
 	sc.ScenarioStart(scTag)
 

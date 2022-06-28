@@ -175,18 +175,19 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		sc.WorkerCh <- wkr
 	}
 
-	// 軽いテナント(id!=1)を見るworker
+	// 重いテナント(id=1)を見るworker
 	{
-		wkr, err := sc.ExistingTenantScenarioWorker(step, 1, false)
+		wkr, err := sc.PopularTenantScenarioWorker(step, 1, true)
 		if err != nil {
 			return err
 		}
 		sc.WorkerCh <- wkr
 	}
 
-	// 重いテナント(id=1)を見るworker
+	// 軽いテナント(id!=1)を見るworker
+	// TODO: 現状増やすきっかけが無いので初期から並列数多くてもよいかも
 	{
-		wkr, err := sc.ExistingTenantScenarioWorker(step, 1, true)
+		wkr, err := sc.PopularTenantScenarioWorker(step, 1, false)
 		if err != nil {
 			return err
 		}
