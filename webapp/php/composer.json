@@ -1,0 +1,7 @@
+{
+    "name": "isucon/isucon-12-qualify",
+    "require": {},
+    "scripts": {
+        "start": "php -S 0.0.0.0:3000 -t public public/index.php"
+    }
+}
