@@ -26,7 +26,7 @@ CREATE TABLE player_score (
   player_id VARCHAR(255) NOT NULL,
   competition_id VARCHAR(255) NOT NULL,
   score BIGINT NOT NULL,
-  row_number BIGINT NOT NULL,
+  row_num BIGINT NOT NULL,
   created_at BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
 );
