@@ -26,5 +26,18 @@ return function (ContainerBuilder $containerBuilder) {
 
             return $logger;
         },
+        PDO::class => function (ContainerInterface $c) {
+            $databaseSettings = $c->get(SettingsInterface::class)->get('database');
+
+            $dsn = vsprintf('mysql:host=%s;dbname=%s;port=%d', [
+                $databaseSettings['host'],
+                $databaseSettings['database'],
+                $databaseSettings['port']
+            ]);
+
+            return new PDO($dsn, $databaseSettings['user'], $databaseSettings['password'], [
+                PDO::ATTR_PERSISTENT => true,
+            ]);
+        },
     ]);
 };

@@ -5,12 +5,20 @@ declare(strict_types=1);
 namespace App\Isuports;
 
 use JsonSerializable;
+use PDO;
+use PDOException;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
+use RuntimeException;
 use UnexpectedValueException;
 
 final class Handlers
 {
+    public function __construct(
+        private PDO $adminDB,
+    ) {
+    }
+
     public function meHandler(Request $request, Response $response): Response
     {
         // TODO: 仮実装

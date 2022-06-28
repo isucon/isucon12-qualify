@@ -21,6 +21,13 @@ return function (ContainerBuilder $containerBuilder) {
                     'path' => 'php://stdout',
                     'level' => Logger::DEBUG,
                 ],
+                'database' => [
+                    'host' => getenv('ISUCON_DB_HOST') ?: '127.0.0.1',
+                    'port' => getenv('ISUCON_DB_PORT') ?: '3306',
+                    'database' => getenv('ISUCON_DB_NAME') ?: 'isuports',
+                    'user' => getenv('ISUCON_DB_USER') ?: 'isucon',
+                    'password' => getenv('ISUCON_DB_PASSWORD') ?: 'isucon',
+                ],
             ]);
         }
     ]);
