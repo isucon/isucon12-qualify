@@ -157,11 +157,12 @@ func Run() {
 	e.POST("/api/organizer/competition/:competition_id/finish", competitionFinishHandler)
 	e.POST("/api/organizer/competition/:competition_id/result", competitionResultHandler)
 	e.GET("/api/organizer/billing", billingHandler)
+	e.GET("/api/organizer/competitions", organizerCompetitionsHandler)
 
 	// 参加者向けAPI
 	e.GET("/api/player/player/:player_id", playerHandler)
 	e.GET("/api/player/competition/:competition_id/ranking", competitionRankingHandler)
-	e.GET("/api/player/competitions", competitionsHandler)
+	e.GET("/api/player/competitions", playerCompetitionsHandler)
 
 	// 全ロール及び未認証でも使えるhandler
 	e.GET("/api/me", meHandler)
@@ -529,10 +530,13 @@ func validateTenantName(name string) error {
 }
 
 type BillingReport struct {
-	CompetitionID    string `json:"competition_id"`
-	CompetitionTitle string `json:"competition_title"`
-	PlayerCount      int64  `json:"player_count"`
-	BillingYen       int64  `json:"billing_yen"`
+	CompetitionID     string `json:"competition_id"`
+	CompetitionTitle  string `json:"competition_title"`
+	PlayerCount       int64  `json:"player_count"`        // スコアを登録した参加者数
+	VisitorCount      int64  `json:"visitor_count"`       // ランキングを閲覧だけした(スコアを登録していない)参加者数
+	BillingPlayerYen  int64  `json:"billing_player_yen"`  // 請求金額 スコアを登録した参加者分
+	BillingVisitorYen int64  `json:"billing_visitor_yen"` // 請求金額 ランキングを閲覧だけした(スコアを登録していない)参加者分
+	BillingYen        int64  `json:"billing_yen"`         // 合計請求金額
 }
 
 type VisitHistoryRow struct {
@@ -555,6 +559,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 		return nil, fmt.Errorf("error retrieveCompetition: %w", err)
 	}
 
+	// ランキングにアクセスした参加者のIDを取得する
 	vhs := []VisitHistorySummaryRow{}
 	if err := adminDB.SelectContext(
 		ctx,
@@ -565,14 +570,13 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 	); err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("error Select visit_history: tenantID=%d, competitionID=%s, %w", tenantID, comp.ID, err)
 	}
-	billingMap := map[string]int64{}
+	billingMap := map[string]string{}
 	for _, vh := range vhs {
 		// competition.finished_atよりもあとの場合は、終了後に訪問したとみなして大会開催内アクセス済みとみなさない
 		if comp.FinishedAt.Valid && comp.FinishedAt.Int64 < vh.MinCreatedAt {
 			continue
 		}
-		// scoreに登録されていないplayerでアクセスした人 * 10
-		billingMap[vh.PlayerID] = 10
+		billingMap[vh.PlayerID] = "visitor"
 	}
 
 	// player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
@@ -581,6 +585,8 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 		return nil, fmt.Errorf("error flockByTenantID: %w", err)
 	}
 	defer fl.Close()
+
+	// スコアを登録した参加者のIDを取得する
 	scoredPlayerIDs := []string{}
 	if err := tenantDB.SelectContext(
 		ctx,
@@ -592,26 +598,31 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 	}
 	for _, pid := range scoredPlayerIDs {
 		if _, ok := billingMap[pid]; ok {
-			// scoreに登録されているplayerでアクセスした人 * 100
-			billingMap[pid] = 100
-		} else {
-			// scoreに登録されているplayerでアクセスしていない人 * 50
-			billingMap[pid] = 50
+			// スコアが登録されている参加者
+			billingMap[pid] = "player"
 		}
 	}
 
-	var billingYen int64
-	// 大会が終了している場合は課金を計算する(開催中の場合は常に 0)
+	// 大会が終了している場合のみ請求金額が確定するので計算する
+	var playerCount, visitorCount int64
 	if comp.FinishedAt.Valid {
-		for _, v := range billingMap {
-			billingYen += v
+		for _, category := range billingMap {
+			switch category {
+			case "player":
+				playerCount++
+			case "visitor":
+				visitorCount++
+			}
 		}
 	}
 	return &BillingReport{
-		CompetitionID:    comp.ID,
-		CompetitionTitle: comp.Title,
-		PlayerCount:      int64(len(scoredPlayerIDs)),
-		BillingYen:       billingYen,
+		CompetitionID:     comp.ID,
+		CompetitionTitle:  comp.Title,
+		PlayerCount:       playerCount,
+		VisitorCount:      visitorCount,
+		BillingPlayerYen:  100 * playerCount, // スコアを登録した参加者は100円
+		BillingVisitorYen: 10 * visitorCount, // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
+		BillingYen:        100*playerCount + 10*visitorCount,
 	}, nil
 }
 
@@ -1418,7 +1429,7 @@ type CompetitionsHandlerResult struct {
 // 参加者向けAPI
 // GET /api/player/competitions
 // 大会の一覧を取得する
-func competitionsHandler(c echo.Context) error {
+func playerCompetitionsHandler(c echo.Context) error {
 	ctx := context.Background()
 
 	v, err := parseViewer(c)
@@ -1435,6 +1446,33 @@ func competitionsHandler(c echo.Context) error {
 	if err := authorizePlayer(ctx, tenantDB, v.playerID); err != nil {
 		return err
 	}
+	return competitionsHandler(c, v, tenantDB)
+}
+
+// 主催者向けAPI
+// GET /api/organizer/competitions
+// 大会の一覧を取得する
+func organizerCompetitionsHandler(c echo.Context) error {
+	v, err := parseViewer(c)
+	if err != nil {
+		return err
+	}
+
+	if v.role != RoleOrganizer {
+		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
+	}
+
+	tenantDB, err := connectToTenantDB(v.tenantID)
+	if err != nil {
+		return err
+	}
+	defer tenantDB.Close()
+
+	return competitionsHandler(c, v, tenantDB)
+}
+
+func competitionsHandler(c echo.Context, v *Viewer, tenantDB dbOrTx) error {
+	ctx := context.Background()
 
 	cs := []CompetitionRow{}
 	if err := tenantDB.SelectContext(

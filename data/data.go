@@ -310,14 +310,14 @@ func CreateTenant(isFirst bool) *isuports.TenantRow {
 	if isFirst {
 		// これだけ特別
 		created = Epoch
-		name, displayName = "isucon", "ISUCONglomerate"
+		name, displayName = "isucon", "ISUコングロマリット"
 	} else {
 		created = fake.Time().TimeBetween(
 			Epoch.Add(time.Duration(id)*time.Hour*3),
 			Epoch.Add(time.Duration(id+1)*time.Hour*3),
 		)
 		name = fmt.Sprintf("%s-%d", fake.Internet().Slug(), id)
-		displayName = fake.Company().Name()
+		displayName = FakeTenantName()
 	}
 	tenant := isuports.TenantRow{
 		ID:          id,
@@ -382,7 +382,7 @@ func CreateCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 	competition := isuports.CompetitionRow{
 		TenantID:  tenant.ID,
 		ID:        strconv.FormatInt(GenID(created), 10),
-		Title:     fake.Music().Name(),
+		Title:     FakeCompetitionName(),
 		CreatedAt: created,
 	}
 	if isFinished {

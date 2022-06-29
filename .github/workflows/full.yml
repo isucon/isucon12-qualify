@@ -7,7 +7,7 @@ jobs:
         go:
           - 1.18
     name: Build
-    runs-on: [self-hosted]
+    runs-on: [self-hosted, core2]
     services:
       db:
         image: mysql:8.0.29
@@ -53,11 +53,12 @@ jobs:
         run: |
           make ci
 
-      - name: "前ベンチが完全にタイムアウトするまで少しだけ待つ"
-        run: |
-          sleep 5
+      # 2coreのself hosted runnerに限りがあるので一時コメントアウト
+      # - name: "前ベンチが完全にタイムアウトするまで少しだけ待つ"
+      #   run: |
+      #     sleep 5
 
-      - name: "run bench(load-type light)"
-        working-directory: ./bench
-        run: |
-          make ci-loadtype-light
+      # - name: "run bench(load-type light)"
+      #   working-directory: ./bench
+      #   run: |
+      #     make ci-loadtype-light

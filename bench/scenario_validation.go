@@ -455,11 +455,22 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 					return fmt.Errorf("対象の大会のIDが違います (want: %s, got: %s)", competitionID, r.Data.Reports[0].CompetitionID)
 				}
 				// score登録者 rankingアクセスあり: 100 yen x 1 player
-				// score登録者 rankingアクセスなし:  50 yen x (playerNum - 2) player
 				// score未登録者 rankingアクセスあり:  10 yen x 1 player
-				billingYen := int64((100 * 1) + (50 * (playerNum - 2)) + (10 * 1))
+				if r.Data.Reports[0].PlayerCount != 1 {
+					return fmt.Errorf("大会の参加者数が違います competitionID: %s (want: %d, got: %d)", competitionID, 1, r.Data.Reports[0].PlayerCount)
+				}
+				if r.Data.Reports[0].VisitorCount != 1 {
+					return fmt.Errorf("大会の閲覧者数が違います competitionID: %s (want: %d, got: %d)", competitionID, 1, r.Data.Reports[0].VisitorCount)
+				}
+				if r.Data.Reports[0].BillingPlayerYen != 100 {
+					return fmt.Errorf("大会の請求金額内訳(参加者分)が違います competitionID: %s (want: %d, got: %d)", competitionID, 100, r.Data.Reports[0].BillingPlayerYen)
+				}
+				if r.Data.Reports[0].BillingVisitorYen != 10 {
+					return fmt.Errorf("大会の請求金額内訳(閲覧者)が違います competitionID: %s (want: %d, got: %d)", competitionID, 10, r.Data.Reports[0].BillingVisitorYen)
+				}
+				billingYen := int64((100 * 1) + (10 * 1))
 				if billingYen != r.Data.Reports[0].BillingYen {
-					return fmt.Errorf("大会の請求金額が違います competitionID: %s (want: %d, got: %d)", competitionID, billingYen, r.Data.Reports[0].BillingYen)
+					return fmt.Errorf("大会の請求金額合計が違います competitionID: %s (want: %d, got: %d)", competitionID, billingYen, r.Data.Reports[0].BillingYen)
 				}
 
 				return nil
