@@ -471,13 +471,15 @@ func tenantsAddHandler(c echo.Context) error {
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.tenantName != "admin" {
+	}
+	if v.tenantName != "admin" {
 		// admin: SaaS管理者用の特別なテナント名
 		return echo.NewHTTPError(
 			http.StatusNotFound,
 			fmt.Sprintf("%s has not this API", v.tenantName),
 		)
-	} else if v.role != RoleAdmin {
+	}
+	if v.role != RoleAdmin {
 		return echo.NewHTTPError(http.StatusForbidden, "admin role required")
 	}
 
@@ -1001,7 +1003,8 @@ func competitionResultHandler(c echo.Context) error {
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role != RoleOrganizer {
+	}
+	if v.role != RoleOrganizer {
 		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
 	}
 
@@ -1142,7 +1145,8 @@ func billingHandler(c echo.Context) error {
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	} else if v.role != RoleOrganizer {
+	}
+	if v.role != RoleOrganizer {
 		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
 	}
 
@@ -1198,6 +1202,9 @@ func playerHandler(c echo.Context) error {
 	v, err := parseViewer(c)
 	if err != nil {
 		return err
+	}
+	if v.role != RolePlayer {
+		return echo.NewHTTPError(http.StatusForbidden, "role player required")
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
@@ -1304,6 +1311,9 @@ func competitionRankingHandler(c echo.Context) error {
 	v, err := parseViewer(c)
 	if err != nil {
 		return err
+	}
+	if v.role != RolePlayer {
+		return echo.NewHTTPError(http.StatusForbidden, "role player required")
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
@@ -1441,6 +1451,9 @@ func playerCompetitionsHandler(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	if v.role != RolePlayer {
+		return echo.NewHTTPError(http.StatusForbidden, "role player required")
+	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
@@ -1462,7 +1475,6 @@ func organizerCompetitionsHandler(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-
 	if v.role != RoleOrganizer {
 		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
 	}
