@@ -3,6 +3,7 @@ package data
 import (
 	crand "crypto/rand"
 	"encoding/binary"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -42,16 +43,41 @@ func UniqueRandomString(n int) string {
 
 // https://github.com/isucon/isucon10-final/blob/b2d2291d9938fefc879a6c8a2f65bd6335f2b873/benchmarker/random/team_name.go
 
-func TeamName() string {
-	return generatePrefix1() + generatePrefix2() + generateMiddle() + generateSuffix()
+func FakeCompetitionName() string {
+	p := generateCompetitionPrefix()
+	if p == "" {
+		return p + generatePrefix2() + generateMiddle() + generateSuffix() + generateCompetitionSuffix()
+	} else {
+		return p + generatePrefix2() + generateMiddle() + generateSuffix()
+	}
 }
 
-func generatePrefix1() string {
+func FakeTenantName() string {
+	return generateTenantPrefix() + generatePrefix2() + generateMiddle() + generateSuffix()
+}
+
+func generateTenantPrefix() string {
 	if rand.Intn(10) < 2 {
-		return "大会"
+		return "チーム"
 	} else {
 		return ""
 	}
+}
+
+func generateCompetitionPrefix() string {
+	if n := rand.Intn(40); n != 0 && n < 10 {
+		return fmt.Sprintf("第%d回 ", n)
+	} else {
+		return ""
+	}
+}
+
+func generateCompetitionSuffix() string {
+	return []string{"杯", "カップ", "大会",
+		fmt.Sprintf(" vol.%d", rand.Intn(10)),
+		fmt.Sprintf(" #%d", rand.Intn(10)),
+		"",
+	}[rand.Intn(6)]
 }
 
 var prefix2Data = []string{
