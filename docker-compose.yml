@@ -6,7 +6,7 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d
       - ./nginx/tls:/etc/nginx/tls
-      #- ./public:/public
+      - ./public:/public
     ports:
       - "443:443"
     network_mode: host
