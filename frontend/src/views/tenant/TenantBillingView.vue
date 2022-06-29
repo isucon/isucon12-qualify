@@ -44,8 +44,11 @@ type BillingReport = {
   competition_title: string
   player_count: number
   visitor_count: number
+<<<<<<< HEAD
   billing_player_yen: number
   billing_visitor_yen: number
+=======
+>>>>>>> 28a17169d6026a491c02a4bb31d4f78d97afa81c
   billing_yen: number
 }
 
@@ -117,7 +120,6 @@ th.visitor-count,
 th.billing-yen {
   text-align: center;
 }
-
 
 .supplement {
   font-size: 0.75em;
