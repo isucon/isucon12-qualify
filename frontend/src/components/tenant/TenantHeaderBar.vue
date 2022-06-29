@@ -8,6 +8,10 @@
         type="button"
         @click="handleAssumeOrganizerRole"
       >主催者モードに切り替える</button>
+      <button
+        type="button"
+        @click="handleLogout"
+      >ログアウト</button>
     </div>
   </div>
 </template>
@@ -41,8 +45,18 @@ export default defineComponent({
       }
     }
 
+    const handleLogout = async () => {
+      try {
+        const res = await axios.post('/auth/logout')
+        router.push('/')
+      } catch (e) {
+        window.alert('failed to logout')
+      }
+    }
+
     return {
       handleAssumeOrganizerRole,
+      handleLogout,
     }
   }
 })
