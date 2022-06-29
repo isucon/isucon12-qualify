@@ -1,6 +1,7 @@
 const { defineConfig } = require("@vue/cli-service");
 module.exports = defineConfig({
   transpileDependencies: true,
+  outputDir: '../public',
   devServer: {
     allowedHosts: ['.t.isucon.dev', '.powawa.net'],
     https: {

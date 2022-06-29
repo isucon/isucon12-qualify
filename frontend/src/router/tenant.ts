@@ -2,6 +2,7 @@ import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import LandingPageView from '../views/tenant/LandingPageView.vue'
 import MyPageView from '../views/tenant/MyPageView.vue'
 import SingleCompetitionView from '../views/tenant/SingleCompetitionView.vue'
+import SinglePlayerView from '../views/tenant/SinglePlayerView.vue'
 import OrganizerMainView from '../views/tenant/OrganizerMainView.vue'
 import PlayerListView from '../views/tenant/PlayerListView.vue'
 import CompetitionListView from '../views/tenant/CompetitionListView.vue'
@@ -22,6 +23,11 @@ const routes: Array<RouteRecordRaw> = [
     path: "/competition/:competition_id",
     name: "competition",
     component: SingleCompetitionView,
+  },
+  {
+    path: "/player/:player_id",
+    name: "player",
+    component: SinglePlayerView,
   },
   {
     path: "/organizer",

@@ -26,9 +26,9 @@
         >
           <td class="competition-id">{{ b.competition_id }}</td>
           <td class="competition-title">{{ b.competition_title }}</td>
-          <td class="player-count">{{ b.player_count }}</td>
-          <td class="visitor-count">{{ b.visitor_count ?? 0 }}</td>
-          <td class="billing-yen">{{ b.billing_yen }}</td>
+          <td class="player-count">{{ b.player_count }}人 <span class="supplement">({{ b.billing_player_yen.toLocaleString() }}円)</span></td>
+          <td class="visitor-count">{{ b.visitor_count }}人 <span class="supplement">({{ b.billing_visitor_yen.toLocaleString() }}円)</span></td>
+          <td class="billing-yen">{{ b.billing_yen.toLocaleString() }}円</td>
         </tr>
       </tbody>
     </table>
@@ -44,6 +44,8 @@ type BillingReport = {
   competition_title: string
   player_count: number
   visitor_count: number
+  billing_player_yen: number
+  billing_visitor_yen: number
   billing_yen: number
 }
 
@@ -116,4 +118,8 @@ th.billing-yen {
   text-align: center;
 }
 
+
+.supplement {
+  font-size: 0.75em;
+}
 </style>

@@ -20,7 +20,7 @@
           :key="r.rank"
         >
           <td class="rank-number">{{ r.rank }}</td>
-          <td class="player-id">{{ r.player_id }}</td>
+          <td class="player-id">{{ r.player_id }} <router-link :to="`/player/${r.player_id}`">→</router-link></td>
           <td class="player-display-name">{{ r.player_display_name }}</td>
           <td class="rank-score">{{ r.score }}</td>
         </tr>
