@@ -73,9 +73,6 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 					completed = true
 					return nil
 				}
-				// for _, tenant := range r.Data.Tenants {
-				// 	AdminLogger.Printf("%s: %d yen", tenant.Name, tenant.BillingYen)
-				// }
 				beforeTenantID = r.Data.Tenants[len(r.Data.Tenants)-1].ID
 				return nil
 			}),

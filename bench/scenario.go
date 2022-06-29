@@ -52,6 +52,7 @@ type Scenario struct {
 	ScenarioCountMutex sync.Mutex
 
 	InitialData        InitialDataRows
+	InitialDataTenant  InitialDataTenantMap
 	DisqualifiedPlayer map[string]struct{}
 	RawKey             *rsa.PrivateKey
 
@@ -106,6 +107,10 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 		sc.InitialData, err = GetInitialData()
 		if err != nil {
 			return fmt.Errorf("初期データのロードに失敗しました %s", err)
+		}
+		sc.InitialDataTenant, err = GetInitialDataTenant()
+		if err != nil {
+			return fmt.Errorf("初期データ(テナント)のロードに失敗しました %s", err)
 		}
 
 		block, _ := pem.Decode([]byte(keysrc))
@@ -170,29 +175,28 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		sc.WorkerCh <- wkr
 	}
 
-	// 軽いテナント
-	// TODO: deprecated
+	// 重いテナント(id=1)を見るworker
 	{
-		wkr, err := sc.ExistingTenantScenarioWorker(step, 1, false)
-		if err != nil {
-			return err
-		}
-		sc.WorkerCh <- wkr
-	}
-	// 重いテナント
-	// TODO: deprecated
-	{
-		wkr, err := sc.ExistingTenantScenarioWorker(step, 1, true)
+		wkr, err := sc.PopularTenantScenarioWorker(step, 1, true)
 		if err != nil {
 			return err
 		}
 		sc.WorkerCh <- wkr
 	}
 
-	// プレイヤー
-	// TODO: deprecated
+	// 軽いテナント(id!=1)を見るworker
+	// TODO: 現状増やすきっかけが無いので初期から並列数多くてもよいかも
 	{
-		wkr, err := sc.PlayerScenarioWorker(step, 1)
+		wkr, err := sc.PopularTenantScenarioWorker(step, 1, false)
+		if err != nil {
+			return err
+		}
+		sc.WorkerCh <- wkr
+	}
+
+	// 破壊的な変更を許容するシナリオ
+	{
+		wkr, err := sc.PeacefulTenantScenarioWorker(step, 1)
 		if err != nil {
 			return err
 		}
@@ -209,7 +213,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 			go func(w Worker) {
 				defer wg.Done()
 				wkr := w
-				AdminLogger.Printf("workerを増やします (%s)", wkr)
+				AdminLogger.Printf("workerを増やします [%s]", wkr)
 				wkr.Process(ctx)
 			}(w)
 			// TODO: エラー総数で打ち切りにする？専用のchannelで待ち受ける？5秒ごとにstep.Errorsを確認してもいいかも
