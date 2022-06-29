@@ -43,6 +43,11 @@ const routes: Array<RouteRecordRaw> = [
     name: "billing",
     component: TenantBillingView,
   },
+  {
+    path: '/:catchall(.*)',
+    name: 'notfound',
+    redirect: '/',
+  },
 ];
 
 const router = createRouter({

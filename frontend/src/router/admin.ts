@@ -4,14 +4,19 @@ import AdminView from '../views/admin/AdminView.vue'
 
 const routes: Array<RouteRecordRaw> = [
   {
-    path: "/",
-    name: "home",
+    path: '/',
+    name: 'home',
     component: HomeView,
   },
   {
-    path: "/admin/",
-    name: "admin",
+    path: '/admin/',
+    name: 'admin',
     component: AdminView,
+  },
+  {
+    path: '/:catchall(.*)',
+    name: 'notfound',
+    redirect: '/',
   },
 ]
 
