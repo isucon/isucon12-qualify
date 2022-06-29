@@ -471,15 +471,13 @@ func tenantsAddHandler(c echo.Context) error {
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	}
-	if v.tenantName != "admin" {
+	} else if v.tenantName != "admin" {
 		// admin: SaaS管理者用の特別なテナント名
 		return echo.NewHTTPError(
 			http.StatusNotFound,
 			fmt.Sprintf("%s has not this API", v.tenantName),
 		)
-	}
-	if v.role != RoleAdmin {
+	} else if v.role != RoleAdmin {
 		return echo.NewHTTPError(http.StatusForbidden, "admin role required")
 	}
 
@@ -640,7 +638,7 @@ type TenantsBillingHandlerResult struct {
 }
 
 // SaaS管理者用API
-// テナントごとの課金レポートを最大20件、テナントのid降順で取得する
+// テナントごとの課金レポートを最大10件、テナントのid降順で取得する
 // POST /api/admin/tenants/billing
 // URL引数beforeを指定した場合、指定した値よりもidが小さいテナントの課金レポートを取得する
 func tenantsBillingHandler(c echo.Context) error {
@@ -713,7 +711,7 @@ func tenantsBillingHandler(c echo.Context) error {
 			tb.BillingYen += report.BillingYen
 		}
 		tenantBillings = append(tenantBillings, tb)
-		if len(tenantBillings) >= 20 {
+		if len(tenantBillings) >= 10 {
 			break
 		}
 	}
@@ -1003,8 +1001,7 @@ func competitionResultHandler(c echo.Context) error {
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	}
-	if v.role != RoleOrganizer {
+	} else if v.role != RoleOrganizer {
 		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
 	}
 
@@ -1145,8 +1142,7 @@ func billingHandler(c echo.Context) error {
 	v, err := parseViewer(c)
 	if err != nil {
 		return fmt.Errorf("error parseViewer: %w", err)
-	}
-	if v.role != RoleOrganizer {
+	} else if v.role != RoleOrganizer {
 		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
 	}
 
@@ -1202,9 +1198,6 @@ func playerHandler(c echo.Context) error {
 	v, err := parseViewer(c)
 	if err != nil {
 		return err
-	}
-	if v.role != RolePlayer {
-		return echo.NewHTTPError(http.StatusForbidden, "role player required")
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
@@ -1295,7 +1288,6 @@ type CompetitionRank struct {
 	Score             int64  `json:"score"`
 	PlayerID          string `json:"player_id"`
 	PlayerDisplayName string `json:"player_display_name"`
-	RowNum            int64  `json:"-"`
 }
 
 type CompetitionRankingHandlerResult struct {
@@ -1311,9 +1303,6 @@ func competitionRankingHandler(c echo.Context) error {
 	v, err := parseViewer(c)
 	if err != nil {
 		return err
-	}
-	if v.role != RolePlayer {
-		return echo.NewHTTPError(http.StatusForbidden, "role player required")
 	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
@@ -1398,13 +1387,9 @@ func competitionRankingHandler(c echo.Context) error {
 			Score:             ps.Score,
 			PlayerID:          p.ID,
 			PlayerDisplayName: p.DisplayName,
-			RowNum:            ps.RowNum,
 		})
 	}
 	sort.Slice(ranks, func(i, j int) bool {
-		if ranks[i].Score == ranks[j].Score {
-			return ranks[i].RowNum < ranks[j].RowNum
-		}
 		return ranks[i].Score > ranks[j].Score
 	})
 	pagedRanks := make([]CompetitionRank, 0, 100)
@@ -1451,9 +1436,6 @@ func playerCompetitionsHandler(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	if v.role != RolePlayer {
-		return echo.NewHTTPError(http.StatusForbidden, "role player required")
-	}
 
 	tenantDB, err := connectToTenantDB(v.tenantID)
 	if err != nil {
@@ -1475,6 +1457,7 @@ func organizerCompetitionsHandler(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+
 	if v.role != RoleOrganizer {
 		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
 	}
