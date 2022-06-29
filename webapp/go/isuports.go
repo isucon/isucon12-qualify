@@ -157,11 +157,12 @@ func Run() {
 	e.POST("/api/organizer/competition/:competition_id/finish", competitionFinishHandler)
 	e.POST("/api/organizer/competition/:competition_id/result", competitionResultHandler)
 	e.GET("/api/organizer/billing", billingHandler)
+	e.GET("/api/organizer/competitions", organizerCompetitionsHandler)
 
 	// 参加者向けAPI
 	e.GET("/api/player/player/:player_id", playerHandler)
 	e.GET("/api/player/competition/:competition_id/ranking", competitionRankingHandler)
-	e.GET("/api/player/competitions", competitionsHandler)
+	e.GET("/api/player/competitions", playerCompetitionsHandler)
 
 	// 全ロール及び未認証でも使えるhandler
 	e.GET("/api/me", meHandler)
@@ -1428,7 +1429,7 @@ type CompetitionsHandlerResult struct {
 // 参加者向けAPI
 // GET /api/player/competitions
 // 大会の一覧を取得する
-func competitionsHandler(c echo.Context) error {
+func playerCompetitionsHandler(c echo.Context) error {
 	ctx := context.Background()
 
 	v, err := parseViewer(c)
@@ -1445,6 +1446,33 @@ func competitionsHandler(c echo.Context) error {
 	if err := authorizePlayer(ctx, tenantDB, v.playerID); err != nil {
 		return err
 	}
+	return competitionsHandler(c, v, tenantDB)
+}
+
+// 主催者向けAPI
+// GET /api/organizer/competitions
+// 大会の一覧を取得する
+func organizerCompetitionsHandler(c echo.Context) error {
+	v, err := parseViewer(c)
+	if err != nil {
+		return err
+	}
+
+	if v.role != RoleOrganizer {
+		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
+	}
+
+	tenantDB, err := connectToTenantDB(v.tenantID)
+	if err != nil {
+		return err
+	}
+	defer tenantDB.Close()
+
+	return competitionsHandler(c, v, tenantDB)
+}
+
+func competitionsHandler(c echo.Context, v *Viewer, tenantDB dbOrTx) error {
+	ctx := context.Background()
 
 	cs := []CompetitionRow{}
 	if err := tenantDB.SelectContext(
