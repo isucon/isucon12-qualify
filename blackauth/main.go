@@ -49,7 +49,7 @@ func loginPlayerHandler(w http.ResponseWriter, r *http.Request) {
 	token.Set(jwt.SubjectKey, id)
 	token.Set(jwt.AudienceKey, tenant)
 	token.Set("role", "player")
-	token.Set(jwt.ExpirationKey, time.Now().Add(time.Hour).Unix())
+	token.Set(jwt.ExpirationKey, time.Now().Add(24*time.Hour).Unix())
 
 	signed, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, privateKey))
 	if err != nil {
@@ -58,9 +58,10 @@ func loginPlayerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cookie := &http.Cookie{
-		Name:  cookieName,
-		Value: fmt.Sprintf("%s", signed),
-		Path:  "/",
+		Name:     cookieName,
+		Value:    fmt.Sprintf("%s", signed),
+		Path:     "/",
+		HttpOnly: true,
 	}
 	http.SetCookie(w, cookie)
 	w.WriteHeader(http.StatusOK)
@@ -74,7 +75,7 @@ func loginOrganizerHandler(w http.ResponseWriter, r *http.Request) {
 	token.Set(jwt.SubjectKey, "organizer")
 	token.Set(jwt.AudienceKey, tenant)
 	token.Set("role", "organizer")
-	token.Set(jwt.ExpirationKey, time.Now().Add(time.Hour).Unix())
+	token.Set(jwt.ExpirationKey, time.Now().Add(24*time.Hour).Unix())
 
 	signed, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, privateKey))
 	if err != nil {
@@ -83,9 +84,10 @@ func loginOrganizerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cookie := &http.Cookie{
-		Name:  cookieName,
-		Value: fmt.Sprintf("%s", signed),
-		Path:  "/",
+		Name:     cookieName,
+		Value:    fmt.Sprintf("%s", signed),
+		Path:     "/",
+		HttpOnly: true,
 	}
 	http.SetCookie(w, cookie)
 	w.WriteHeader(http.StatusOK)
@@ -97,7 +99,7 @@ func loginAdminHandler(w http.ResponseWriter, r *http.Request) {
 	token.Set(jwt.SubjectKey, "admin")
 	token.Set(jwt.AudienceKey, "admin")
 	token.Set("role", "admin")
-	token.Set(jwt.ExpirationKey, time.Now().Add(time.Hour).Unix())
+	token.Set(jwt.ExpirationKey, time.Now().Add(24*time.Hour).Unix())
 
 	signed, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, privateKey))
 	if err != nil {
@@ -106,9 +108,22 @@ func loginAdminHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cookie := &http.Cookie{
-		Name:  cookieName,
-		Value: fmt.Sprintf("%s", signed),
-		Path:  "/",
+		Name:     cookieName,
+		Value:    fmt.Sprintf("%s", signed),
+		Path:     "/",
+		HttpOnly: true,
+	}
+	http.SetCookie(w, cookie)
+	w.WriteHeader(http.StatusOK)
+}
+
+func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	cookie := &http.Cookie{
+		Name:     cookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Expires:  time.Now().Add(-time.Hour),
 	}
 	http.SetCookie(w, cookie)
 	w.WriteHeader(http.StatusOK)
@@ -118,28 +133,32 @@ var privateKey *rsa.PrivateKey
 
 func init() {
 	// load private key
-	//pemFilePath := os.Getenv("ISUCON_PEM_PATH")
-	pemFilePath := "isuports.pem"
+	pemFilePath := os.Getenv("ISUCON_PEM_PATH")
+	if pemFilePath == "" {
+		pemFilePath = "isuports.pem"
+	}
 	f, err := os.Open(pemFilePath)
 	if err != nil {
-		log.Fatalf("failed to open pem file: %w", err)
+		log.Fatalf("failed to open pem file: %s", err)
 	}
 	buf, err := ioutil.ReadAll(f)
 	if err != nil {
-		log.Fatalf("failed to read file: %w", err)
+		log.Fatalf("failed to read file: %s", err)
 	}
 	block, _ := pem.Decode(buf)
 	privateKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
-		log.Fatalf("failed to parse private key: %w", err)
+		log.Fatalf("failed to parse private key: %s", err)
 	}
 }
 
 func main() {
 
 	// setup handler
-	http.HandleFunc("/api/player/login", loginPlayerHandler)
-	http.HandleFunc("/api/organizer/login", loginOrganizerHandler)
-	http.HandleFunc("/api/admin/login", loginAdminHandler)
+	http.HandleFunc("/auth/login/player", loginPlayerHandler)
+	http.HandleFunc("/auth/login/organizer", loginOrganizerHandler)
+	http.HandleFunc("/auth/login/admin", loginAdminHandler)
+	http.HandleFunc("/auth/logout", logoutHandler)
+	log.Println("starting server on :3001")
 	http.ListenAndServe(":3001", nil)
 }
