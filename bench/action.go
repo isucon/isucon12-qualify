@@ -138,6 +138,15 @@ func GetOrganizerBillingAction(ctx context.Context, ag *agent.Agent) (*http.Resp
 	return ag.Do(ctx, req)
 }
 
+func GetOrganizerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
+	req, err := ag.GET("/api/organizer/competitions")
+	if err != nil {
+		return nil, err
+	}
+
+	return ag.Do(ctx, req)
+}
+
 func GetPlayerAction(ctx context.Context, playerID string, ag *agent.Agent) (*http.Response, error) {
 	req, err := ag.GET("/api/player/player/" + playerID)
 	if err != nil {

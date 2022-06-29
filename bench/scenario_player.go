@@ -73,7 +73,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		if len(competitions) != 0 {
 			break
 		}
-		sleepms := rand.Intn(500)
+		sleepms := 500 + rand.Intn(500)
 		time.Sleep(time.Millisecond * time.Duration(sleepms))
 	}
 
@@ -125,7 +125,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		}
 	}
 
-	sleepms := rand.Intn(1000)
+	sleepms := 1000 + rand.Intn(1000)
 	time.Sleep(time.Millisecond * time.Duration(sleepms))
 
 	return nil
