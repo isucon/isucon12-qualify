@@ -1050,7 +1050,7 @@ func competitionResultHandler(c echo.Context) error {
 		return fmt.Errorf("error r.Read at header: %w", err)
 	}
 	if !reflect.DeepEqual(headers, []string{"player_id", "score"}) {
-		return fmt.Errorf("invalid CSV headers: %#v", headers)
+		return echo.NewHTTPError(http.StatusBadRequest, "invalid CSV headers")
 	}
 
 	// / DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする

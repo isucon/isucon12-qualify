@@ -242,6 +242,20 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		if !v.IsEmpty() {
 			return v
 		}
+		// カラムの並び順が逆のCSVを入稿
+		invalidCSV = "score,player_id\n1,invalid_csv"
+		res, err = PostOrganizerCompetitionResultAction(ctx, competitionID, []byte(invalidCSV), orgAg)
+		v = ValidateResponse("大会結果CSV入稿: 不正リクエスト(カラムの並び順が違う)", step, res, err, WithStatusCode(400))
+		if !v.IsEmpty() {
+			return v
+		}
+		// 余計なカラムがあるCSVを入稿
+		invalidCSV = "score,player_id,superfluity\n1,invalid_csv,dasoku"
+		res, err = PostOrganizerCompetitionResultAction(ctx, competitionID, []byte(invalidCSV), orgAg)
+		v = ValidateResponse("大会結果CSV入稿: 不正リクエスト(余計なカラムがあるCSV)", step, res, err, WithStatusCode(400))
+		if !v.IsEmpty() {
+			return v
+		}
 	}
 	// 大会参加者API
 	_, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[0])
