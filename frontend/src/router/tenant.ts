@@ -6,7 +6,6 @@ import OrganizerMainView from '../views/tenant/OrganizerMainView.vue'
 import PlayerListView from '../views/tenant/PlayerListView.vue'
 import CompetitionListView from '../views/tenant/CompetitionListView.vue'
 import TenantBillingView from '../views/tenant/TenantBillingView.vue'
-import TenantAuditLogView from '../views/tenant/TenantAuditLogView.vue'
 
 const routes: Array<RouteRecordRaw> = [
   {
@@ -43,11 +42,6 @@ const routes: Array<RouteRecordRaw> = [
     path: "/organizer/billing",
     name: "billing",
     component: TenantBillingView,
-  },
-  {
-    path: "/organizer/auditlog",
-    name: "auditlog",
-    component: TenantAuditLogView,
   },
 ];
 
