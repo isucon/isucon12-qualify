@@ -34,25 +34,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	noScorePlayerIndex := playerNum - 1      // スコア未登録プレイヤー この値以降にはスコアは登録されない
 
 	// SaaS管理者のagent作成
-	// _, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
-	// if err != nil {
-	// 	return err
-	// }
-
-	// admin billingが重いので例外としてvalidationは60sまで許容
-	// TODO: 後で戻す
-	opt := sc.Option
-	opt.RequestTimeout = time.Second * 60 // AdminBillingのみタイムアウトを60秒まで許容
-	admin := &Account{
-		Role:       AccountRoleAdmin,
-		TenantName: "admin",
-		PlayerID:   "admin",
-		Option:     opt,
-	}
-	if err := admin.SetJWT(sc.RawKey, true); err != nil {
-		return err
-	}
-	adminAg, err := admin.GetAgent()
+	_, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
 	if err != nil {
 		return err
 	}
@@ -501,10 +483,11 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	{
 		// ページング無しで今回操作したテナントが含まれていることを確認
 		res, err := GetAdminTenantsBillingAction(ctx, "", adminAg)
-		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
+		v := ValidateResponse("テナント別の請求ダッシュボード(最大10件)", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
-				if 1 > len(r.Data.Tenants) {
-					return fmt.Errorf("請求ダッシュボードの結果がありません")
+				// 初期データがあるので上限ま取ってこれる
+				if 10 != len(r.Data.Tenants) {
+					return fmt.Errorf("請求ダッシュボードの結果の数が違います (want: %d, got: %d)", len(r.Data.Tenants), 10)
 				}
 				tenantNameMap := make(map[string]struct{})
 				for _, tenant := range r.Data.Tenants {

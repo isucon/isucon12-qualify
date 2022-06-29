@@ -713,7 +713,7 @@ func tenantsBillingHandler(c echo.Context) error {
 			tb.BillingYen += report.BillingYen
 		}
 		tenantBillings = append(tenantBillings, tb)
-		if len(tenantBillings) >= 20 {
+		if len(tenantBillings) >= 10 {
 			break
 		}
 	}
