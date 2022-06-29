@@ -105,8 +105,8 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 		}
 	}
 
-	// sleep 1s ~ 1.5s
-	sleepms := 1000 + rand.Intn(500)
+	// sleep 1.0s ~ 2.0s
+	sleepms := 1000 + rand.Intn(1000)
 	time.Sleep(time.Millisecond * time.Duration(sleepms))
 
 	return nil

@@ -20,7 +20,8 @@ const (
 	ScorePOSTOrganizerCompetitionFinish score.ScoreTag = "POST /organizer/api/competition/:competition_id/finish"
 	ScorePOSTOrganizerCompetitionResult score.ScoreTag = "POST /organizer/api/competition/:competition_id/result"
 	// テナント操作
-	ScoreGETOrganizerBilling score.ScoreTag = "GET /organizer/api/billing"
+	ScoreGETOrganizerBilling      score.ScoreTag = "GET /organizer/api/billing"
+	ScoreGETOrganizerCompetitions score.ScoreTag = "GET /api/organizer/competitions"
 
 	// for player
 	// 参加者からの閲覧
@@ -55,11 +56,10 @@ var ResultScoreMap = map[score.ScoreTag]int64{
 	ScorePOSTOrganizerCompetitionFinish:  1,
 	ScorePOSTOrganizerCompetitionResult:  1,
 	ScoreGETOrganizerBilling:             1,
-
-	// TODO: 要調整 初期から万単位がでるので*1/100みたいなのをしたい
-	ScoreGETPlayerDetails:      1,
-	ScoreGETPlayerRanking:      1,
-	ScoreGETPlayerCompetitions: 1,
+	ScoreGETOrganizerCompetitions:        1,
+	ScoreGETPlayerDetails:                1,
+	ScoreGETPlayerRanking:                1,
+	ScoreGETPlayerCompetitions:           1,
 }
 
 // 各tagのリスト

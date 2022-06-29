@@ -101,12 +101,20 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	// プレイヤーのworker
-	for _, player := range players {
-		wkr, err := sc.PlayerScenarioWorker(step, 1, tenant.Name, player.ID)
-		if err != nil {
-			return err
+	{
+		// TODO: 要調整 10人くらいで試してみる
+		i := 0
+		for _, player := range players {
+			if 10 < i {
+				break
+			}
+			i++
+			wkr, err := sc.PlayerScenarioWorker(step, 1, tenant.Name, player.ID)
+			if err != nil {
+				return err
+			}
+			sc.WorkerCh <- wkr
 		}
-		sc.WorkerCh <- wkr
 	}
 
 	orgJobConf := &OrganizerJobConfig{

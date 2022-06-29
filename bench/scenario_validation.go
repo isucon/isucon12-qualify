@@ -242,6 +242,20 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		if !v.IsEmpty() {
 			return v
 		}
+		// カラムの並び順が逆のCSVを入稿
+		invalidCSV = "score,player_id\n1,invalid_csv"
+		res, err = PostOrganizerCompetitionResultAction(ctx, competitionID, []byte(invalidCSV), orgAg)
+		v = ValidateResponse("大会結果CSV入稿: 不正リクエスト(カラムの並び順が違う)", step, res, err, WithStatusCode(400))
+		if !v.IsEmpty() {
+			return v
+		}
+		// 余計なカラムがあるCSVを入稿
+		invalidCSV = "score,player_id,superfluity\n1,invalid_csv,dasoku"
+		res, err = PostOrganizerCompetitionResultAction(ctx, competitionID, []byte(invalidCSV), orgAg)
+		v = ValidateResponse("大会結果CSV入稿: 不正リクエスト(余計なカラムがあるCSV)", step, res, err, WithStatusCode(400))
+		if !v.IsEmpty() {
+			return v
+		}
 	}
 	// 大会参加者API
 	_, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[0])
@@ -464,6 +478,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		// NOTE: 不正リクエストチェックなし
 	}
 
+	// 大会一覧取得(player API)
 	{
 		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
 		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
@@ -478,6 +493,22 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return v
 		}
 		// NOTE: 不正なリクエストチェックはなし
+	}
+
+	// 大会一覧取得(organizer API)
+	{
+		res, err := GetOrganizerCompetitionsAction(ctx, orgAg)
+		v := ValidateResponse("主催者API テナント内の大会一覧取得", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitions) error {
+				if 1 != len(r.Data.Competitions) {
+					return fmt.Errorf("テナントに含まれる大会の数が違います (want: %d, got: %d)", 1, len(r.Data.Competitions))
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
 	}
 
 	{
