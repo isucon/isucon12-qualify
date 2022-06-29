@@ -2,10 +2,7 @@ import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
 import LandingPageView from '../views/tenant/LandingPageView.vue'
 import MyPageView from '../views/tenant/MyPageView.vue'
 import SingleCompetitionView from '../views/tenant/SingleCompetitionView.vue'
-<<<<<<< HEAD
 import SinglePlayerView from '../views/tenant/SinglePlayerView.vue'
-=======
->>>>>>> 28a17169d6026a491c02a4bb31d4f78d97afa81c
 import OrganizerMainView from '../views/tenant/OrganizerMainView.vue'
 import PlayerListView from '../views/tenant/PlayerListView.vue'
 import CompetitionListView from '../views/tenant/CompetitionListView.vue'
@@ -52,14 +49,11 @@ const routes: Array<RouteRecordRaw> = [
     name: "billing",
     component: TenantBillingView,
   },
-<<<<<<< HEAD
   {
     path: '/:catchall(.*)',
     name: 'notfound',
     redirect: '/',
   },
-=======
->>>>>>> 28a17169d6026a491c02a4bb31d4f78d97afa81c
 ];
 
 const router = createRouter({
