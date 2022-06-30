@@ -17,6 +17,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -45,7 +46,13 @@ var (
 	sqliteDriverName = "sqlite3"
 
 	idgen katsubushi.Generator
+
+	playerHandlerResultCache sync.Map
 )
+
+func init() {
+	playerHandlerResultCache = sync.Map{}
+}
 
 // 環境変数を取得する、なければデフォルト値を返す
 func getEnv(key string, defaultValue string) string {
@@ -1238,6 +1245,15 @@ func playerHandler(c echo.Context) error {
 	if playerID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "player_id is required")
 	}
+
+	if cached, ok := playerHandlerResultCache.Load(playerID); ok {
+		res := SuccessResult{
+			Success: true,
+			Data: cached.(PlayerHandlerResult),
+		}
+		return c.JSON(http.StatusOK, res)
+	}
+
 	p, err := retrievePlayer(ctx, tenantDB, playerID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -1284,17 +1300,18 @@ func playerHandler(c echo.Context) error {
 			Score:            ps.Score,
 		})
 	}
-
+	data := PlayerHandlerResult{
+		Player: PlayerDetail{
+			ID:             p.ID,
+			DisplayName:    p.DisplayName,
+			IsDisqualified: p.IsDisqualified,
+		},
+		Scores: psds,
+	}
+	playerHandlerResultCache.Store(playerID, data)
 	res := SuccessResult{
 		Success: true,
-		Data: PlayerHandlerResult{
-			Player: PlayerDetail{
-				ID:             p.ID,
-				DisplayName:    p.DisplayName,
-				IsDisqualified: p.IsDisqualified,
-			},
-			Scores: psds,
-		},
+		Data: data,
 	}
 	return c.JSON(http.StatusOK, res)
 }
