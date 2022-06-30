@@ -42,6 +42,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETOrganizerPlayersList, conf.scTag)
 		} else {
+			sc.AddErrorCount()
 			return v
 		}
 	}
@@ -57,6 +58,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionsAdd, conf.scTag)
 		} else {
+			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 			return v
 		}
 	}
@@ -83,12 +85,11 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionResult, conf.scTag)
 		} else {
-			if !v.Canceled {
-				return v
+			if v.Canceled {
+				return nil
 			}
-			// NOTE: CSV入稿はCritical Error
-			sc.AddCriticalCount()
-			break
+			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
+			return v
 		}
 	}
 
@@ -104,6 +105,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionFinish, conf.scTag)
 		} else {
+			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 			return v
 		}
 	}

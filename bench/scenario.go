@@ -57,6 +57,7 @@ type Scenario struct {
 	RawKey             *rsa.PrivateKey
 
 	WorkerCh        chan Worker
+	ErrorCh         chan struct{}
 	CriticalErrorCh chan struct{}
 }
 
@@ -159,6 +160,7 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 
 	sc.WorkerCh = make(chan Worker, 10)
 	sc.CriticalErrorCh = make(chan struct{}, 10)
+	sc.ErrorCh = make(chan struct{}, 10)
 
 	// 最初に起動するシナリオ
 	// AdminBillingを見続けて新規テナントを追加する
@@ -207,6 +209,7 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 		sc.WorkerCh <- wkr
 	}
 
+	errorCount := 0
 	criticalCount := 0
 	end := false
 
@@ -222,13 +225,23 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 				AdminLogger.Printf("workerを増やします [%s]", wkr)
 				wkr.Process(ctx)
 			}(w)
-		case <-sc.CriticalErrorCh: // Criticalなエラー総数で打ち切りにする
+		case <-sc.ErrorCh:
+			errorCount++
+		case <-sc.CriticalErrorCh:
+			errorCount++
 			criticalCount++
-			if 30 <= criticalCount {
-				AdminLogger.Printf("Criticalなエラーが30件を越えたので負荷テストを打ち切ります")
-				cancel()
-				end = true
-			}
+		}
+
+		if 30 <= errorCount {
+			AdminLogger.Printf("エラーが30件を越えたので負荷テストを打ち切ります")
+			cancel()
+			end = true
+		}
+
+		if 10 <= criticalCount {
+			AdminLogger.Printf("Criticalなエラーが10件を越えたので負荷テストを打ち切ります")
+			cancel()
+			end = true
 		}
 
 		if end {

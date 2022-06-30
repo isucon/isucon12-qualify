@@ -61,6 +61,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
 		} else {
+			sc.AddErrorCount()
 			return v
 		}
 	}
@@ -96,6 +97,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
 		} else {
+			sc.AddErrorCount()
 			return v
 		}
 	}
@@ -142,6 +144,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
 			} else {
+				sc.AddErrorCount()
 				return v
 			}
 		}

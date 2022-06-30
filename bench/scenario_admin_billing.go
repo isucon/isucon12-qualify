@@ -80,6 +80,7 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
 		} else {
+			sc.AddErrorCount()
 			return v
 		}
 		// id=1が重いので、light modeなら一回で終わる

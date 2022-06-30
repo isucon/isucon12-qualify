@@ -92,6 +92,7 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
 			} else {
+				sc.AddErrorCount()
 				return v
 			}
 		}
