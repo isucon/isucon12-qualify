@@ -86,6 +86,8 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			if !v.Canceled {
 				return v
 			}
+			// NOTE: CSV入稿はCritical Error
+			sc.AddCriticalCount()
 			break
 		}
 	}

@@ -122,3 +122,7 @@ func (sc *Scenario) GetAccountAndAgent(role, tenantName, playerID string) (*Acco
 	}
 	return ac, agent, nil
 }
+
+func (sc *Scenario) AddCriticalCount() {
+	sc.CriticalErrorCh <- struct{}{}
+}

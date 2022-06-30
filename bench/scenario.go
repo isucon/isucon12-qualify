@@ -56,7 +56,8 @@ type Scenario struct {
 	DisqualifiedPlayer map[string]struct{}
 	RawKey             *rsa.PrivateKey
 
-	WorkerCh chan Worker
+	WorkerCh        chan Worker
+	CriticalErrorCh chan struct{}
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -146,7 +147,9 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 // ベンチ本編
 // isucandar.LoadScenario を満たすメソッド
 // isucandar.Benchmark の Load ステップで実行される
-func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) error {
+func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error {
+	ctx, cancel := context.WithCancel(c)
+
 	if sc.Option.PrepareOnly {
 		return nil
 	}
@@ -155,6 +158,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 	wg := &sync.WaitGroup{}
 
 	sc.WorkerCh = make(chan Worker, 10)
+	sc.CriticalErrorCh = make(chan struct{}, 10)
 
 	// 最初に起動するシナリオ
 	// AdminBillingを見続けて新規テナントを追加する
@@ -204,10 +208,12 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 	}
 
 	// workerを起動する
+	criticalCount := 0
+	end := false
 	for {
 		select {
 		case <-ctx.Done():
-			break
+			end = true
 		case w := <-sc.WorkerCh:
 			wg.Add(1)
 			go func(w Worker) {
@@ -216,7 +222,18 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 				AdminLogger.Printf("workerを増やします [%s]", wkr)
 				wkr.Process(ctx)
 			}(w)
-			// TODO: エラー総数で打ち切りにする？専用のchannelで待ち受ける？5秒ごとにstep.Errorsを確認してもいいかも
+		case <-sc.CriticalErrorCh:
+			// Criticalなエラー総数で打ち切りにする
+			criticalCount++
+			if 30 <= criticalCount {
+				AdminLogger.Printf("Criticalなエラーが30件を越えたので負荷テストを打ち切ります")
+				cancel()
+				end = true
+			}
+		}
+
+		if end {
+			break
 		}
 	}
 	wg.Wait()
