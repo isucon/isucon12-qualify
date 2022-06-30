@@ -69,6 +69,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETOrganizerPlayersList, scTag)
 		} else {
+			sc.AddErrorCount()
 			return v
 		}
 	}
@@ -86,6 +87,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
 		} else {
+			sc.AddCriticalCount() // Organizer APIの更新系はcritical
 			return v
 		}
 	}
@@ -101,6 +103,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
 		} else {
+			sc.AddErrorCount()
 			return v
 		}
 	}

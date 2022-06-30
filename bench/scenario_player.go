@@ -65,6 +65,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
 			} else {
+				sc.AddErrorCount()
 				return v
 			}
 		}
@@ -97,6 +98,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
 			} else {
+				sc.AddErrorCount()
 				return v
 			}
 		}
@@ -120,6 +122,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 			} else {
+				sc.AddErrorCount()
 				return v
 			}
 		}
