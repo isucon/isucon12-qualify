@@ -155,7 +155,7 @@ func Run() {
 	// テナント管理者向けAPI - 大会管理
 	e.POST("/api/organizer/competitions/add", competitionsAddHandler)
 	e.POST("/api/organizer/competition/:competition_id/finish", competitionFinishHandler)
-	e.POST("/api/organizer/competition/:competition_id/result", competitionResultHandler)
+	e.POST("/api/organizer/competition/:competition_id/score", competitionScoreHandler)
 	e.GET("/api/organizer/billing", billingHandler)
 	e.GET("/api/organizer/competitions", organizerCompetitionsHandler)
 
@@ -995,10 +995,14 @@ func competitionFinishHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, SuccessResult{Success: true})
 }
 
+type ScoreHandlerResult struct {
+	Rows int64 `json:"rows"`
+}
+
 // テナント管理者向けAPI
-// POST /api/organizer/competition/:competition_id/result
-// 大会の結果をCSVでアップロードする
-func competitionResultHandler(c echo.Context) error {
+// POST /api/organizer/competition/:competition_id/score
+// 大会のスコアをCSVでアップロードする
+func competitionScoreHandler(c echo.Context) error {
 	ctx := context.Background()
 	v, err := parseViewer(c)
 	if err != nil {
@@ -1130,7 +1134,10 @@ func competitionResultHandler(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, SuccessResult{Success: true})
+	return c.JSON(http.StatusOK, SuccessResult{
+		Success: true,
+		Data:    ScoreHandlerResult{Rows: int64(len(playerScoreRows))},
+	})
 }
 
 type BillingHandlerResult struct {

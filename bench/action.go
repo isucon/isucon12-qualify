@@ -109,7 +109,7 @@ func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId str
 	return ag.Do(ctx, req)
 }
 
-func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId string, csv []byte, ag *agent.Agent) (*http.Response, error) {
+func PostOrganizerCompetitionScoreAction(ctx context.Context, competitionId string, csv []byte, ag *agent.Agent) (*http.Response, error) {
 	body := &bytes.Buffer{}
 	mw := multipart.NewWriter(body)
 	fw, err := mw.CreateFormFile("scores", "nandemoii")
@@ -121,7 +121,7 @@ func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId str
 
 	mw.Close()
 
-	req, err := ag.POST("/api/organizer/competition/"+competitionId+"/result", body)
+	req, err := ag.POST("/api/organizer/competition/"+competitionId+"/score", body)
 	if err != nil {
 		return nil, err
 	}

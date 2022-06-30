@@ -292,4 +292,5 @@ type ResponseAPICompetitionRankingFinish struct {
 }
 type ResponseAPICompetitionResult struct {
 	ResponseAPIBase
+	Data isuports.ScoreHandlerResult `json:"data"`
 }

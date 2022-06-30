@@ -18,7 +18,7 @@ const (
 	// 大会操作
 	ScorePOSTOrganizerCompetitionsAdd   score.ScoreTag = "POST /organizer/api/competitions/add"
 	ScorePOSTOrganizerCompetitionFinish score.ScoreTag = "POST /organizer/api/competition/:competition_id/finish"
-	ScorePOSTOrganizerCompetitionResult score.ScoreTag = "POST /organizer/api/competition/:competition_id/result"
+	ScorePOSTOrganizerCompetitionScore  score.ScoreTag = "POST /organizer/api/competition/:competition_id/score"
 	// テナント操作
 	ScoreGETOrganizerBilling      score.ScoreTag = "GET /organizer/api/billing"
 	ScoreGETOrganizerCompetitions score.ScoreTag = "GET /api/organizer/competitions"
@@ -54,7 +54,7 @@ var ResultScoreMap = map[score.ScoreTag]int64{
 	ScorePOSTOrganizerPlayerDisqualified: 1,
 	ScorePOSTOrganizerCompetitionsAdd:    1,
 	ScorePOSTOrganizerCompetitionFinish:  1,
-	ScorePOSTOrganizerCompetitionResult:  1,
+	ScorePOSTOrganizerCompetitionScore:   1,
 	ScoreGETOrganizerBilling:             1,
 	ScoreGETOrganizerCompetitions:        1,
 	ScoreGETPlayerDetails:                1,
@@ -78,7 +78,7 @@ var (
 		ScorePOSTOrganizerPlayerDisqualified,
 		ScorePOSTOrganizerCompetitionsAdd,
 		ScorePOSTOrganizerCompetitionFinish,
-		ScorePOSTOrganizerCompetitionResult,
+		ScorePOSTOrganizerCompetitionScore,
 		ScoreGETOrganizerBilling,
 		ScoreGETPlayerDetails,
 		ScoreGETPlayerRanking,
