@@ -2,7 +2,6 @@ package bench
 
 import (
 	"context"
-	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
@@ -23,7 +22,7 @@ func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.NewTenantScenario(ctx, step); err != nil {
 			sc.ScenarioError(scTag, err)
-			time.Sleep(SleepOnError)
+			SleepWithCtx(ctx, SleepOnError)
 		}
 	},
 		worker.WithInfinityLoop(),
@@ -120,10 +119,11 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	orgJobConf := &OrganizerJobConfig{
-		orgAg:       orgAg,
-		scTag:       scTag,
-		tenantName:  tenant.Name,
-		scoreRepeat: 2,
+		orgAg:         orgAg,
+		scTag:         scTag,
+		tenantName:    tenant.Name,
+		scoreRepeat:   2,
+		scoreInterval: 1000, // 結果の検証時には3s、負荷かける用は1s
 	}
 
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する

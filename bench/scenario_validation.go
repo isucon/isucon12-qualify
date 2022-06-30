@@ -400,8 +400,18 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 
-	// 大会の終了(organizer/competition/finish)後は反映まで1sの猶予がある
-	time.Sleep(time.Second * 1)
+	// 大会の終了(organizer/competition/finish)後は反映まで3sの猶予がある
+	SleepWithCtx(ctx, time.Second*3)
+
+	// 不正リクエストチェック 終了済みの大会へスコアを入稿する
+	{
+		csv := "player_id,score\nclosed_competition,100"
+		res, err := PostOrganizerCompetitionResultAction(ctx, competitionID, []byte(csv), orgAg)
+		v := ValidateResponse("大会結果CSV入稿: 不正リクエスト(終了済みの大会)", step, res, err, WithStatusCode(400))
+		if !v.IsEmpty() {
+			return v
+		}
+	}
 
 	// 最終的なランキングが正しいことを確認
 	{

@@ -3,6 +3,7 @@ package bench
 import (
 	"context"
 	"math/rand"
+	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/agent"
@@ -10,10 +11,11 @@ import (
 )
 
 type OrganizerJobConfig struct {
-	orgAg       *agent.Agent
-	scTag       ScenarioTag
-	tenantName  string // 対象テナント
-	scoreRepeat int
+	orgAg         *agent.Agent
+	scTag         ScenarioTag
+	tenantName    string // 対象テナント
+	scoreRepeat   int
+	scoreInterval int // スコアCSVを入稿するインターバル
 }
 
 // 大会を作成, スコアを増やしながら入れる, 確定する
@@ -92,6 +94,8 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 			return v
 		}
+
+		SleepWithCtx(ctx, time.Millisecond*time.Duration(conf.scoreInterval))
 	}
 
 	// 大会結果確定 x 1

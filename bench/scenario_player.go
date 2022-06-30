@@ -26,7 +26,7 @@ func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32,
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.PlayerScenario(ctx, step, scTag, tenantName, playerID); err != nil {
 			sc.ScenarioError(scTag, err)
-			time.Sleep(SleepOnError)
+			SleepWithCtx(ctx, SleepOnError)
 		}
 	},
 		// 無限回繰り返す
@@ -75,7 +75,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			break
 		}
 		sleepms := 500 + rand.Intn(500)
-		time.Sleep(time.Millisecond * time.Duration(sleepms))
+		SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 	}
 
 	// 大会を一つ選ぶ
@@ -129,7 +129,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	}
 
 	sleepms := 1000 + rand.Intn(1000)
-	time.Sleep(time.Millisecond * time.Duration(sleepms))
+	SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 
 	return nil
 }

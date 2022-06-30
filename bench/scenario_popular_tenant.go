@@ -2,7 +2,6 @@ package bench
 
 import (
 	"context"
-	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
@@ -23,7 +22,7 @@ func (sc *Scenario) PopularTenantScenarioWorker(step *isucandar.BenchmarkStep, p
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.PopularTenantScenario(ctx, step, scTag, isHeavyTenant); err != nil {
 			sc.ScenarioError(scTag, err)
-			time.Sleep(SleepOnError)
+			SleepWithCtx(ctx, SleepOnError)
 		}
 	},
 		// // 無限回繰り返す
@@ -69,10 +68,11 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
 	orgJobConf := &OrganizerJobConfig{
-		orgAg:       orgAg,
-		scTag:       scTag,
-		tenantName:  tenantName,
-		scoreRepeat: 2,
+		orgAg:         orgAg,
+		scTag:         scTag,
+		tenantName:    tenantName,
+		scoreRepeat:   2,
+		scoreInterval: 1000, // 結果の検証時には3s、負荷かける用は1s
 	}
 
 	for {

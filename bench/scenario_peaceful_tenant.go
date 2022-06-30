@@ -24,7 +24,7 @@ func (sc *Scenario) PeacefulTenantScenarioWorker(step *isucandar.BenchmarkStep, 
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.PeacefulTenantScenario(ctx, step, scTag); err != nil {
 			sc.ScenarioError(scTag, err)
-			time.Sleep(SleepOnError)
+			SleepWithCtx(ctx, SleepOnError)
 		}
 	},
 		// // 無限回繰り返す
@@ -110,7 +110,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 
 	// sleep 1.0s ~ 2.0s
 	sleepms := 1000 + rand.Intn(1000)
-	time.Sleep(time.Millisecond * time.Duration(sleepms))
+	SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 
 	return nil
 }
