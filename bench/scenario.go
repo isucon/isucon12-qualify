@@ -207,14 +207,14 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 		sc.WorkerCh <- wkr
 	}
 
-	// workerを起動する
 	criticalCount := 0
 	end := false
+
 	for {
 		select {
 		case <-ctx.Done():
 			end = true
-		case w := <-sc.WorkerCh:
+		case w := <-sc.WorkerCh: // workerを起動する
 			wg.Add(1)
 			go func(w Worker) {
 				defer wg.Done()
@@ -222,8 +222,7 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 				AdminLogger.Printf("workerを増やします [%s]", wkr)
 				wkr.Process(ctx)
 			}(w)
-		case <-sc.CriticalErrorCh:
-			// Criticalなエラー総数で打ち切りにする
+		case <-sc.CriticalErrorCh: // Criticalなエラー総数で打ち切りにする
 			criticalCount++
 			if 30 <= criticalCount {
 				AdminLogger.Printf("Criticalなエラーが30件を越えたので負荷テストを打ち切ります")
