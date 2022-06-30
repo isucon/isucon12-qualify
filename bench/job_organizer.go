@@ -75,7 +75,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		csv := score.CSV()
 
 		AdminLogger.Printf("[%s] [tenant:%s] CSV入稿 %d回目 len(%d)", conf.scTag, conf.tenantName, count+1, len(csv))
-		res, err := PostOrganizerCompetitionResultAction(ctx, comp.ID, []byte(csv), conf.orgAg)
+		res, err := PostOrganizerCompetitionScoreAction(ctx, comp.ID, []byte(csv), conf.orgAg)
 		v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
 				_ = r
@@ -85,7 +85,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 				return nil
 			}))
 		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionResult, conf.scTag)
+			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionScore, conf.scTag)
 		} else {
 			if !v.Canceled {
 				return v
