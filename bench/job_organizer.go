@@ -86,6 +86,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionResult, conf.scTag)
 		} else {
 			if v.Canceled {
+				// context.Doneによって打ち切られた場合はエラーカウントしない
 				return nil
 			}
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
