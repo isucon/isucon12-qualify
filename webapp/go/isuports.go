@@ -995,6 +995,10 @@ func competitionFinishHandler(c echo.Context) error {
 	return c.JSON(http.StatusOK, SuccessResult{Success: true})
 }
 
+type ResultHandlerResult struct {
+	Rows int64 `json:"rows"`
+}
+
 // テナント管理者向けAPI
 // POST /api/organizer/competition/:competition_id/result
 // 大会の結果をCSVでアップロードする
@@ -1130,7 +1134,10 @@ func competitionResultHandler(c echo.Context) error {
 		}
 	}
 
-	return c.JSON(http.StatusOK, SuccessResult{Success: true})
+	return c.JSON(http.StatusOK, SuccessResult{
+		Success: true,
+		Data:    ResultHandlerResult{Rows: rowNum},
+	})
 }
 
 type BillingHandlerResult struct {
