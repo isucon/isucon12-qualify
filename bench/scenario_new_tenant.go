@@ -97,7 +97,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
 		} else {
-			sc.AddErrorCount()
+			sc.AddCriticalCount()
 			return v
 		}
 	}
