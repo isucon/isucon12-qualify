@@ -1030,6 +1030,12 @@ func competitionResultHandler(c echo.Context) error {
 
 	var rowNum int64
 	playerScoreRows := []PlayerScoreRow{}
+	type csvRow struct {
+		PlayerID string
+		Score int64
+		RowNum int64
+	}
+	csvRows := make([]csvRow, 0, 10000)
 	for {
 		rowNum++
 		row, err := r.Read()
@@ -1042,40 +1048,51 @@ func competitionResultHandler(c echo.Context) error {
 		if len(row) != 2 {
 			return fmt.Errorf("row must have two columns: %#v", row)
 		}
-		playerID, scoreStr := row[0], row[1]
-		if _, err := retrievePlayer(ctx, tenantDB, playerID); err != nil {
+		var score int64
+		if score, err = strconv.ParseInt(row[1], 10, 64); err != nil {
+			return echo.NewHTTPError(
+				http.StatusBadRequest,
+				fmt.Sprintf("error strconv.ParseUint: scoreStr=%s, %s", row[1], err),
+			)
+		}
+		csvRows = append(csvRows, csvRow{PlayerID: row[0], Score: score, RowNum: rowNum})
+	}
+	seen := make(map[string]struct{})
+	// 逆順
+	now := time.Now().Unix()
+	for i := len(csvRows)-1; i >= 0; i-- {
+		row := csvRows[i]
+		if _, ok := seen[row.PlayerID]; ok {
+			// 一度見たPlayerIDはskipしてよい
+			continue
+		}
+		seen[row.PlayerID] = struct{}{}
+		if _, err := retrievePlayer(ctx, tenantDB, row.PlayerID); err != nil {
 			// 存在しない参加者が含まれている
 			if errors.Is(err, sql.ErrNoRows) {
 				return echo.NewHTTPError(
 					http.StatusBadRequest,
-					fmt.Sprintf("player not found: %s", playerID),
+					fmt.Sprintf("player not found: %s", row.PlayerID),
 				)
 			}
 			return fmt.Errorf("error retrievePlayer: %w", err)
-		}
-		var score int64
-		if score, err = strconv.ParseInt(scoreStr, 10, 64); err != nil {
-			return echo.NewHTTPError(
-				http.StatusBadRequest,
-				fmt.Sprintf("error strconv.ParseUint: scoreStr=%s, %s", scoreStr, err),
-			)
 		}
 		id, err := dispenseID(ctx)
 		if err != nil {
 			return fmt.Errorf("error dispenseID: %w", err)
 		}
-		now := time.Now().Unix()
 		playerScoreRows = append(playerScoreRows, PlayerScoreRow{
 			ID:            id,
 			TenantID:      v.tenantID,
-			PlayerID:      playerID,
+			PlayerID:      row.PlayerID,
 			CompetitionID: competitionID,
-			Score:         score,
-			RowNum:        rowNum,
+			Score:         row.Score,
+			RowNum:        row.RowNum,
 			CreatedAt:     now,
 			UpdatedAt:     now,
 		})
 	}
+	c.Logger().Infof("/result csv %d rows, insert %d rows", len(csvRows), len(playerScoreRows))
 
 	tx, err := tenantDB.BeginTxx(ctx, nil)
 	if err != nil {
@@ -1100,7 +1117,6 @@ func competitionResultHandler(c echo.Context) error {
 				"error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNum=%d, createdAt=%d, updatedAt=%d, %w",
 				ps.ID, ps.TenantID, ps.PlayerID, ps.CompetitionID, ps.Score, ps.RowNum, ps.CreatedAt, ps.UpdatedAt, err,
 			)
-
 		}
 	}
 	tx.Commit()
