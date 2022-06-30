@@ -1096,12 +1096,25 @@ func competitionResultHandler(c echo.Context) error {
 		return fmt.Errorf("error Delete player_score: tenantID=%d, competitionID=%s, %w", v.tenantID, competitionID, err)
 	}
 
-	if _, err := tx.NamedExecContext(
-		ctx,
-		"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_num, :created_at, :updated_at)",
-		playerScoreRows,
-	); err != nil {
-		return fmt.Errorf("error Insert player_score bulk")
+	var i int
+	cont := true
+	for cont {
+		j := i + 1000
+		if len(playerScoreRows) < j {
+			j = len(playerScoreRows) 
+			cont = false
+		}
+		if len(playerScoreRows[i:j]) == 0 {
+			break
+		}
+		if _, err := tx.NamedExecContext(
+			ctx,
+			"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_num, :created_at, :updated_at)",
+			playerScoreRows[i:j],
+		); err != nil {
+			return fmt.Errorf("error Insert player_score bulk %w", err)
+		}
+		i = j
 	}
 
 	tx.Commit()
