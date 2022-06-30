@@ -380,6 +380,34 @@ func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id string) (*PlayerRow
 	return &p, nil
 }
 
+// 参加者を取得する
+func retrievePlayers(ctx context.Context, tenantDB dbOrTx, ids []string) ([]PlayerRow, error) {
+	var ps []PlayerRow
+	if len(ids) == 0 {
+		return ps, nil
+	}
+	sql, params, err := sqlx.In("SELECT * FROM player WHERE id IN(?)", ids)
+	if err != nil {
+		return nil, err
+	}
+	if err := tenantDB.SelectContext(ctx, &ps, sql, params...); err != nil {
+		return nil, fmt.Errorf("error Select players: id=%v %w", params, err)
+	}
+	return ps, nil
+}
+
+func retrievePlayersMap(ctx context.Context, tenantDB dbOrTx, ids []string) (map[string]PlayerRow, error) {
+	players, err := retrievePlayers(ctx, tenantDB, ids)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]PlayerRow, len(players))
+	for _, player := range players {
+		m[player.ID] = player
+	}
+	return m, nil
+}
+
 // 参加者を認可する
 // 参加者向けAPIで呼ばれる
 func authorizePlayer(ctx context.Context, tenantDB dbOrTx, id string) error {
@@ -1360,6 +1388,7 @@ func competitionRankingHandler(c echo.Context) error {
 	}
 	ranks := make([]CompetitionRank, 0, len(pss))
 	scoredPlayerSet := make(map[string]struct{}, len(pss))
+	playerIDs := []string{}
 	for _, ps := range pss {
 		// player_scoreが同一player_id内ではrow_numの降順でソートされているので
 		// 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
@@ -1367,16 +1396,16 @@ func competitionRankingHandler(c echo.Context) error {
 			continue
 		}
 		scoredPlayerSet[ps.PlayerID] = struct{}{}
-		p, err := retrievePlayer(ctx, tenantDB, ps.PlayerID)
-		if err != nil {
-			return fmt.Errorf("error retrievePlayer: %w", err)
-		}
+		playerIDs = append(playerIDs, ps.PlayerID)
 		ranks = append(ranks, CompetitionRank{
 			Score:             ps.Score,
-			PlayerID:          p.ID,
-			PlayerDisplayName: p.DisplayName,
+			PlayerID:          ps.PlayerID,
 			RowNum:            ps.RowNum,
 		})
+	}
+	playersMap, err := retrievePlayersMap(ctx, tenantDB, playerIDs)
+	if err != nil {
+		return err
 	}
 	sort.Slice(ranks, func(i, j int) bool {
 		if ranks[i].Score == ranks[j].Score {
@@ -1393,7 +1422,7 @@ func competitionRankingHandler(c echo.Context) error {
 			Rank:              int64(i + 1),
 			Score:             rank.Score,
 			PlayerID:          rank.PlayerID,
-			PlayerDisplayName: rank.PlayerDisplayName,
+			PlayerDisplayName: playersMap[rank.PlayerID].DisplayName,
 		})
 		if len(pagedRanks) >= 100 {
 			break
