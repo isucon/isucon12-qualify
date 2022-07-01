@@ -1,5 +1,5 @@
 name: Full Test
-on: [push]
+on: [pull_request]
 jobs:
   test:
     strategy:
@@ -58,6 +58,8 @@ jobs:
         working-directory: ./bench
         run: |
           make ci-with-comment
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
 
       # 2coreのself hosted runnerに限りがあるので一時コメントアウト
       # - name: "前ベンチが完全にタイムアウトするまで少しだけ待つ"
