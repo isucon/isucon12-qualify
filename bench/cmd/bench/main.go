@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -104,7 +105,17 @@ func main() {
 	scenario.PrintScenarioCount()
 	score, addition, deduction := SumScore(result)
 	bench.ContestantLogger.Printf("SCORE: %d (+%d %d)", score, addition, -deduction)
-	bench.ContestantLogger.Printf("RESULT: %#v", AllTagBreakdown(result))
+	br := AllTagBreakdown(result)
+	tags := make([]string, 0, len(br))
+	for tag, score := range br {
+		tags = append(tags, fmt.Sprintf("%s: %d", tag, score))
+	}
+	sort.Slice(tags, func(i, j int) bool {
+		return tags[i] < tags[j]
+	})
+	for _, tag := range tags {
+		fmt.Println(tag)
+	}
 	bench.AdminLogger.Printf("%s", pp.Sprint(AllTagBreakdown(result)))
 
 	// 0点以下(fail)ならエラーで終了
