@@ -11,7 +11,11 @@ prepare: bench
 	./bench -duration 5s
 
 ci: bench
-	./bench -target-addr 127.0.0.1:3000 -target-url http://t.isucon.dev
+	rm -f ci.log
+	./bench -target-addr 127.0.0.1:3000 -target-url http://t.isucon.dev | tee ci.log
+
+ci-with-comment: ci
+	gh issue comment $$(echo $GITHUB_REF | sed -e 's/[^0-9]//g') --body-file ci.log
 
 ci-loadtype-light: bench
 	./bench -target-addr 127.0.0.1:3000 -target-url http://t.isucon.dev -load-type light

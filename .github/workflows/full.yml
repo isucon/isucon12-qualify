@@ -51,7 +51,7 @@ jobs:
       - name: "run bench(default)"
         working-directory: ./bench
         run: |
-          make ci
+          make ci-with-comment
 
       # 2coreのself hosted runnerに限りがあるので一時コメントアウト
       # - name: "前ベンチが完全にタイムアウトするまで少しだけ待つ"
