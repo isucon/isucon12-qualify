@@ -28,7 +28,7 @@ jobs:
         run: |
           sudo rm -fr /home/github/work/isucon12-qualify/isucon12-qualify/go
 
-      - name: Check out code into the Go module directory
+      - name: Check out code
         uses: actions/checkout@v3
 
       - name: "setup containers"
