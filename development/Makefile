@@ -1,7 +1,7 @@
 .PHONY: install-initialdata init-mysql run-bench run-bench-noload clean
 
 up/%:
-	docker compose -f docker-compose-$*.yml -f docker-compose-common.yml up
+	docker compose -f docker-compose-$*.yml -f docker-compose-common.yml up $(OPT)
 
 down/%:
 	docker compose -f docker-compose-$*.yml -f docker-compose-common.yml down
@@ -18,6 +18,10 @@ run-bench:
 
 run-bench-noload:
 	docker compose -f docker-compose-common.yml exec bench ./run_local.sh -prepare-only
+
+run-bench-ci:
+	timeout 60 ./wait-for http://localhost:3000/
+	docker compose -f docker-compose-common.yml exec bench make ci-with-comment
 
 ../initial_data.tar.gz:
 	gh release list | awk '/Latest/{print $$3}' | xargs gh release download --dir ..

@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -u
+
+while sleep 1
+do
+	curl -s $1
+	if [ $? -eq 0 ]; then
+		break
+	fi
+	echo -n .
+done
