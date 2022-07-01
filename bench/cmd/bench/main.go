@@ -117,7 +117,6 @@ func main() {
 		fmt.Println(tag)
 	}
 	bench.AdminLogger.Printf("%s", pp.Sprint(AllTagBreakdown(result)))
-
 	// 0点以下(fail)ならエラーで終了
 	if option.ExitErrorOnFail && score <= 0 {
 		os.Exit(1)
