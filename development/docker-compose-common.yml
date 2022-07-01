@@ -44,7 +44,9 @@ services:
     stdin_open: true
     tty: true
     environment:
-      ISUCON_JWT_KEY_FILE: ./isuports.pem
+      - GH_TOKEN
+      - GITHUB_REF_NAME
+      - ISUCON_JWT_KEY_FILE=./isuports.pem
     volumes:
       - ../:/home/isucon
       - tenant_db:/home/isucon/webapp/tenant_db
