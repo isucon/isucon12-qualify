@@ -617,8 +617,8 @@ type TenantsBillingHandlerResult struct {
 }
 
 // SaaS管理者用API
-// テナントごとの課金レポートを最大20件、テナントのid降順で取得する
-// POST /api/admin/tenants/billing
+// テナントごとの課金レポートを最大10件、テナントのid降順で取得する
+// GET /api/admin/tenants/billing
 // URL引数beforeを指定した場合、指定した値よりもidが小さいテナントの課金レポートを取得する
 func tenantsBillingHandler(c echo.Context) error {
 	if host := c.Request().Host; host != getEnv("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
