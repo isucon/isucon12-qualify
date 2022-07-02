@@ -1,5 +1,7 @@
 import os
 import sqlite3
+from dataclasses import dataclass
+from typing import Any, Optional
 
 import mysql.connector
 from flask import Flask
@@ -35,6 +37,109 @@ def connect_to_tenant_db(id: int):
     return sqlite3.connect(path)
 
 
+@dataclass
+class SuccessResult:
+    success: bool
+    data: Any
+
+
+@dataclass
+class FailureResult:
+    success: bool
+    message: str
+
+
+@dataclass
+class Viewer:
+    """アクセスしたきた人の情報"""
+
+    role: str
+    player_id: str
+    tenant_name: str
+    tenant_id: int
+
+
+@dataclass
+class TenantRow:
+    id: int
+    name: str
+    display_name: str
+    created_at: int
+    updated_at: int
+
+
+@dataclass
+class PlayerRow:
+    tenant_id: int
+    id: str
+    display_name: str
+    is_disqualified: bool
+    created_at: int
+    updated_at: int
+
+
+@dataclass
+class CompetitionRow:
+    tenant_id: int
+    id: str
+    title: str
+    finished_at: Optional[int]
+    created_at: int
+    updated_at: int
+
+
+@dataclass
+class PlayerScoreRow:
+    tenant_id: int
+    id: str
+    player_id: str
+    competition_id: str
+    score: int
+    row_num: int
+    created_at: int
+    updated_at: int
+
+
+@dataclass
+class TenantDetail:
+    name: str
+    display_name: str
+
+
+@dataclass
+class BillingReport:
+    competition_id: str
+    competition_title: str
+    player_count: int  # スコアを登録した参加者数
+    visitor_count: int  # ランキングを閲覧だけした(スコアを登録していない)参加者数
+    billing_player_yen: int  # 請求金額 スコアを登録した参加者分
+    billing_visitor_yen: int  # 請求金額 ランキングを閲覧だけした(スコアを登録していない)参加者分
+    billing_yen: int  # 合計請求金額
+
+
+@dataclass
+class VisitHistoryRow:
+    player_id: str
+    tenant_id: int
+    competition_id: str
+    created_at: int
+    updated_at: int
+
+
+@dataclass
+class VisitHistorySummaryRow:
+    player_id: str
+    min_created_at: int
+
+
+@dataclass
+class TenantWithBilling:
+    id: str
+    name: str
+    display_name: str
+    billing: int
+
+
 @app.route("/api/admin/tenants/add", methods=["POST"])
 def admin_add_tenants():
     """
@@ -42,6 +147,13 @@ def admin_add_tenants():
     テナントを追加する
     """
     raise NotImplementedError()  # TODO
+
+
+@dataclass
+class PlayerDetail:
+    id: str
+    display_name: str
+    is_disqualified: bool
 
 
 @app.route("/api/admin/tenants/billing", methods=["GET"])
@@ -79,6 +191,13 @@ def organizer_disqualified_players(player_id: str):
     参加者を失格にする
     """
     raise NotImplementedError()  # TODO
+
+
+@dataclass
+class CompetitionDetail:
+    id: str
+    title: str
+    is_finished: bool
 
 
 @app.route("/api/organizer/competitions/add", methods=["POST"])
@@ -126,6 +245,12 @@ def organizer_get_competitions():
     raise NotImplementedError()  # TODO
 
 
+@dataclass
+class PlayerScoreDetail:
+    competition_title: str
+    score: int
+
+
 @app.route("/api/player/player/<player_id>", methods=["GET"])
 def player_get_detail(player_id: str):
     """
@@ -133,6 +258,15 @@ def player_get_detail(player_id: str):
     参加者の詳細情報を取得する
     """
     raise NotImplementedError()  # TODO
+
+
+@dataclass
+class CompetitionRank:
+    rank: int
+    score: int
+    player_id: str
+    player_display_name: str
+    row_num: int
 
 
 @app.route("/api/player/competition/<competition_id>/ranking", methods=["GET"])
