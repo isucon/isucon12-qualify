@@ -18,8 +18,11 @@ final class Statement extends AbstractStatementMiddleware implements StatementIn
     /** @var array<int,mixed>|array<string,mixed> */
     private array $params = [];
 
-    public function __construct(StatementInterface $statement, private LoggerInterface $logger, private string $sql)
-    {
+    public function __construct(
+        StatementInterface $statement,
+        private LoggerInterface $logger,
+        private string $sql,
+    ) {
         parent::__construct($statement);
     }
 

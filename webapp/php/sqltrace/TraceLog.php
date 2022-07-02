@@ -18,7 +18,13 @@ final class TraceLog implements JsonSerializable
     }
 
     /**
-     * @return array{time: string, statement: string, args: array, query_time: float, affected_rows: int}
+     * @return array{
+     *     time: string,
+     *     statement: string,
+     *     args: array,
+     *     query_time: float,
+     *     affected_rows: int
+     * }
      */
     public function jsonSerialize(): array
     {

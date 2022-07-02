@@ -15,8 +15,10 @@ use Psr\Log\LoggerInterface;
  */
 final class Connection extends AbstractConnectionMiddleware implements ConnectionInterface
 {
-    public function __construct(ConnectionInterface $connection, private LoggerInterface $logger)
-    {
+    public function __construct(
+        ConnectionInterface $connection,
+        private LoggerInterface $logger,
+    ) {
         parent::__construct($connection);
     }
 

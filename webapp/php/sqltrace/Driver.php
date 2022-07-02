@@ -13,16 +13,15 @@ use Psr\Log\LoggerInterface;
  */
 final class Driver extends AbstractDriverMiddleware implements DriverInterface
 {
-    public function __construct(DriverInterface $driver, private LoggerInterface $logger)
-    {
+    public function __construct(
+        DriverInterface $driver,
+        private LoggerInterface $logger,
+    ) {
         parent::__construct($driver);
     }
 
     public function connect(array $params): Connection
     {
-        return new Connection(
-            parent::connect($params),
-            $this->logger
-        );
+        return new Connection(parent::connect($params), $this->logger);
     }
 }
