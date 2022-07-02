@@ -1,6 +1,9 @@
 parameters:
   level: 4
   paths:
+    - app
+    - public
+    - sqltrace
     - src
   ignoreErrors:
     -

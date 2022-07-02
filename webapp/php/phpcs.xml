@@ -15,5 +15,8 @@
     <rule ref="Generic.Arrays.DisallowLongArraySyntax"/>
 
     <!-- Paths to check -->
+    <file>app</file>
+    <file>public</file>
+    <file>sqltrace</file>
     <file>src</file>
 </ruleset>

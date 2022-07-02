@@ -32,7 +32,7 @@
     },
     "scripts": {
         "start": "php -S 0.0.0.0:3000 -t public public/index.php",
-        "style": "./vendor/bin/phpcs ./app ./public ./src",
-        "analyse": "./vendor/bin/phpstan analyse ./app ./public ./src"
+        "style": "./vendor/bin/phpcs",
+        "analyse": "./vendor/bin/phpstan"
     }
 }
