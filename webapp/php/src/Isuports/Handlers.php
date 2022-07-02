@@ -13,10 +13,23 @@ use PDO;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use RuntimeException;
+use Slim\Exception\HttpInternalServerErrorException;
+use Slim\Exception\HttpUnauthorizedException;
 use UnexpectedValueException;
 
 final class Handlers
 {
+    private const TENANT_DB_SCHEMA_FILE_PATH = __DIR__ . '/../../../sql/tenant/10_schema.sql';
+    private const INITIALIZE_SCRIPT = __DIR__ . '/../../../sql/init.sh';
+
+    private const ROLE_ADMIN = 'admin';
+    private const ROLE_ORGANIZER = 'organizer';
+    private const ROLE_PLAYER = 'player';
+    private const ROLE_NONE = 'none';
+
+    // 正しいテナント名の正規表現
+    private const TENANT_NAME_REGEXP = '/^[a-z][a-z0-9-]{0,61}[a-z0-9]$/';
+
     public function __construct(
         private Connection $adminDB,
         private Configuration $sqliteConfiguration, // sqliteのクエリログを出力する設定
@@ -28,9 +41,27 @@ final class Handlers
      */
     private function tenantDBPath(int $id): string
     {
-        $tenantDBDir = getenv('ISUCON_TENENT_DB_DIR') ?: __DIR__ . '/../../../tenant_db';
+        $tenantDBDir = getenv('ISUCON_TENANT_DB_DIR') ?: __DIR__ . '/../../../tenant_db';
 
         return $tenantDBDir . DIRECTORY_SEPARATOR . sprintf('%d.db', $id);
+    }
+
+    /**
+     * テナントDBを新規に作成する
+     */
+    private function createTenantDB(int $id): void
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * システム全体で一意なIDを生成する
+     */
+    private function dispenseID(): string
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
     }
 
     /**
@@ -57,23 +88,360 @@ final class Handlers
         }
     }
 
+    /**
+     * リクエストヘッダをパースしてViewerを返す
+     */
+    private function parseViewer(Request $request): Viewer
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    private function retrieveTenantRowFromHeader(Request $request): TenantRow
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * 参加者を取得する
+     *
+     * @throws RuntimeException
+     */
+    private function retrievePlayer(Connection $tenantDB, string $id): ?PlayerRow
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * 参加者を認可する
+     * 参加者向けAPIで呼ばれる
+     */
+    private function authorizePlayer(Connection $tenantDB, string $id): void
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * 大会を取得する
+     */
+    private function retrieveCompetition(Connection $tenantDB, string $id): CompetitionRow
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * 排他ロックのためのファイル名を生成する
+     */
+    private function lockFilePath(int $id): string
+    {
+        $tenantDBDir = getenv('ISUCON_TENANT_DB_DIR') ?: __DIR__ . '/../../../tenant_db';
+
+        return $tenantDBDir . DIRECTORY_SEPARATOR . sprintf('%d.lock', $id);
+    }
+
+    /**
+     * 排他ロックする
+     *
+     * @return resource
+     * @throws RuntimeException
+     */
+    private function flockByTenantID(int $tenantID): mixed
+    {
+        $p = $this->lockFilePath($tenantID);
+
+        /** @var resource $fl */
+        $fl = fopen($p, 'w+');
+        if (flock($fl, LOCK_EX) === false) {
+            throw new RuntimeException(sprintf('error flock.Lock: path=%s', $p));
+        }
+
+        return $fl;
+    }
+
+    /**
+     * SasS管理者用API
+     * テナントを追加する
+     * POST /api/admin/tenants/add
+     */
+    public function tenantsAddHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * テナント名が規則に沿っているかチェックする
+     */
+    private function validateTenantName(string $name): bool
+    {
+        return preg_match(self::TENANT_NAME_REGEXP, $name) === 1;
+    }
+
+    /**
+     * 大会ごとの課金レポートを計算する
+     */
+    private function billingReportByCompetition(
+        Connection $tenantDB,
+        int $tenantID,
+        string $competitionID,
+    ): BillingReport {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * SaaS管理者用API
+     * テナントごとの課金レポートを最大20件、テナントのid降順で取得する
+     * POST /api/admin/tenants/billing
+     * URL引数beforeを指定した場合、指定した値よりもidが小さいテナントの課金レポートを取得する
+     */
+    public function tenantsBillingHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * テナント管理者向けAPI
+     * GET /api/organizer/players
+     * 参加者一覧を返す
+     */
+    public function playersListHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * テナント管理者向けAPI
+     * GET /api/organizer/players/add
+     * テナントに参加者を追加する
+     */
+    public function playersAddHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * テナント管理者向けAPI
+     * POST /api/organizer/player/:player_id/disqualified
+     * 参加者を失格にする
+     */
+    public function playerDisqualifiedHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * テナント管理者向けAPI
+     * POST /api/organizer/competitions/add
+     * 大会を追加する
+     */
+    public function competitionsAddHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * テナント管理者向けAPI
+     * POST /api/organizer/competition/:competition_id/finish
+     * 大会を終了する
+     */
+    public function competitionFinishHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * テナント管理者向けAPI
+     * POST /api/organizer/competition/:competition_id/score
+     * 大会のスコアをCSVでアップロードする
+     */
+    public function competitionScoreHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * テナント管理者向けAPI
+     * GET /api/organizer/billing
+     * テナント内の課金レポートを取得する
+     */
+    public function billingHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * 参加者向けAPI
+     * GET /api/player/player/:player_id
+     * 参加者の詳細情報を取得する
+     */
+    public function playerHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * 参加者向けAPI
+     * GET /api/player/competition/:competition_id/ranking
+     * 大会ごとのランキングを取得する
+     */
+    public function competitionRankingHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * 参加者向けAPI
+     * GET /api/player/competitions
+     * 大会の一覧を取得する
+     */
+    public function playerCompetitionsHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * 主催者向けAPI
+     * GET /api/organizer/competitions
+     * 大会の一覧を取得する
+     */
+    public function organizerCompetitionsHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    private function competitionsHandler(Response $response, Viewer $v, Connection $tenantDB): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
+    }
+
+    /**
+     * 共通API
+     * GET /api/me
+     * JWTで認証した結果、テナントやユーザ情報を返す
+     */
     public function meHandler(Request $request, Response $response): Response
     {
-        // TODO: 仮実装
+        try {
+            $tenant = $this->retrieveTenantRowFromHeader($request);
+        } catch (RuntimeException $e) {
+            throw new HttpInternalServerErrorException(
+                $request,
+                sprintf('error retrieveTenantRowFromHeader: %s', $e->getMessage()),
+                $e,
+            );
+        }
         $td = new TenantDetail(
-            name: 'test',
-            displayName: 'テスト',
+            name: $tenant->name,
+            displayName: $tenant->displayName,
         );
+
+        try {
+            $v = $this->parseViewer($request);
+        } catch (HttpUnauthorizedException) {
+            return $this->jsonResponse($response, new SuccessResult(
+                success: true,
+                data: new MeHandlerResult(
+                    tenant: $td,
+                    me: null,
+                    role: self::ROLE_NONE,
+                    loggedIn: false,
+                ),
+            ));
+        } catch (RuntimeException $e) {
+            throw new HttpInternalServerErrorException(
+                $request,
+                sprintf('error parseViewer: %s', $e->getMessage()),
+                $e,
+            );
+        }
+
+        if ($v->role === self::ROLE_ADMIN || $v->role === self::ROLE_ORGANIZER) {
+            return $this->jsonResponse($response, new SuccessResult(
+                success: true,
+                data: new MeHandlerResult(
+                    tenant: $td,
+                    me: null,
+                    role: $v->role,
+                    loggedIn: true,
+                ),
+            ));
+        }
+
+        try {
+            $tenantDB = $this->connectToTenantDB($v->tenantID);
+        } catch (RuntimeException $e) {
+            throw new HttpInternalServerErrorException(
+                $request,
+                sprintf('error connectToTenantDB: %s', $e->getMessage()),
+                $e,
+            );
+        }
+
+        try {
+            $p = $this->retrievePlayer($tenantDB, $v->playerID);
+        } catch (RuntimeException $e) {
+            throw new HttpInternalServerErrorException(
+                $request,
+                sprintf('error retrievePlayer: %s', $e->getMessage()),
+                $e,
+            );
+        }
+
+        if (is_null($p)) {
+            return $this->jsonResponse($response, new SuccessResult(
+                success: true,
+                data: new MeHandlerResult(
+                    tenant: $td,
+                    me: null,
+                    role: self::ROLE_NONE,
+                    loggedIn: false,
+                ),
+            ));
+        }
 
         return $this->jsonResponse($response, new SuccessResult(
             success: true,
             data: new MeHandlerResult(
                 tenant: $td,
-                me: null,
-                role: Role::ofNone(),
+                me: new PlayerDetail(
+                    id: $p->id,
+                    displayName: $p->displayName,
+                    isDisqualified: $p->isDisqualified,
+                ),
+                role: $v->role,
                 loggedIn: false,
             ),
         ));
+    }
+
+    /**
+     * ベンチマーカー向けAPI
+     * POST /initialize
+     * ベンチマーカーが起動したときに最初に呼ぶ
+     * データベースの初期化などが実行されるため、スキーマを変更した場合などは適宜改変すること
+     */
+    public function initializeHandler(Request $request, Response $response): Response
+    {
+        // TODO: 実装
+        throw new \LogicException('not implemented');
     }
 
     /**
