@@ -1,0 +1,48 @@
+name: Ruby CI
+on:
+  push:
+    branches: [main]
+    paths:
+      - bench/**/*
+      - webapp/ruby/**/*
+      - development/backend-ruby/**/*
+      - development/docker-compose-common.yml
+      - development/docker-compose-ruby.yml
+      - development/Makefile
+      - .github/workflows/ruby.yml
+  pull_request:
+    paths:
+      - bench/**/*
+      - webapp/ruby/**/*
+      - development/backend-ruby/**/*
+      - development/docker-compose-common.yml
+      - development/docker-compose-ruby.yml
+      - development/Makefile
+      - .github/workflows/ruby.yml
+jobs:
+  test:
+    name: Build
+    runs-on: [self-hosted, core2]
+    steps:
+      - name: cleanup
+        run: |
+          sudo rm -fr /home/github/work/isucon12-qualify/isucon12-qualify/go
+
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: "setup containers"
+        run: |
+          make initial_data
+          make down/ruby
+          make up/ruby OPT=-d
+          make install_initial_data
+        working-directory: ./development
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "run bench"
+        working-directory: ./development
+        run: |
+          make run-bench-ci
