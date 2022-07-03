@@ -1,11 +1,14 @@
 import os
 import sqlite3
+import subprocess
 from dataclasses import dataclass
 from typing import Any, Optional
 
 import mysql.connector
-from flask import Flask
+from flask import Flask, jsonify
 from sqlalchemy.pool import QueuePool
+
+INITIALIZE_SCRIPT = "../sql/init.sh"
 
 app = Flask(__name__)
 
@@ -296,6 +299,12 @@ def get_me():
     raise NotImplementedError()  # TODO
 
 
+@dataclass
+class InitializeHandlerResult:
+    lang: str
+    appeal: str
+
+
 @app.route("/initialize", methods=["POST"])
 def bench_initialize():
     """
@@ -303,7 +312,18 @@ def bench_initialize():
     ベンチマーカーが起動したときに最初に呼ぶ
     データベースの初期化などが実行されるため、スキーマを変更した場合などは適宜改変すること
     """
-    raise NotImplementedError()  # TODO
+    try:
+        subprocess.run([INITIALIZE_SCRIPT], shell=True)
+    except subprocess.CalledProcessError as e:
+        return f"error subprocess.run: {e.output} {e.stderr}"
+
+    res = InitializeHandlerResult(
+        lang="python",
+        # 頑張ったポイントやこだわりポイントがあれば書いてください
+        # 競技中の最後に計測したものを参照して、講評記事などで使わせていただきます
+        appeal="",
+    )
+    return jsonify(SuccessResult(success=True, data=res))
 
 
 if __name__ == "__main__":
