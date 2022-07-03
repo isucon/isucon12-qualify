@@ -6,3 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+actix-web = "4.1.0"
+lazy_static = "1.4.0"
+regex = "1.5.6"
+sqlx = { version = "0.6.0", default-features = false, features = ["macros", "runtime-actix-rustls", "mysql","sqlite", "chrono"] }
+tokio = { version = "1.19.2", features = ["fs", "process"] }
