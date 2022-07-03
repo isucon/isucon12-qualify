@@ -20,11 +20,9 @@ services:
       - ../webapp:/home/isucon/webapp
       - tenant_db:/home/isucon/webapp/tenant_db
       - initial_data:/home/isucon/initial_data
-      - gopkg:/home/isucon/rust/pkg
     init: true
     restart: always
 
 volumes:
-  gopkg:
   tenant_db:
   initial_data:
