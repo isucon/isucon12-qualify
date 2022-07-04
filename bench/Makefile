@@ -5,7 +5,7 @@ run: bench
 	./bench
 
 prepare: bench
-	./bench -prepare-only
+	./bench -prepare-only -strict-prepare=false
 
 5s: bench
 	./bench -duration 5s
@@ -18,7 +18,7 @@ ci-with-comment: ci
 	./pr-comment ci.log
 
 ci-loadtype-light: bench
-	./bench -target-addr 127.0.0.1:3000 -target-url http://t.isucon.dev -load-type light
+	./bench -target-addr 127.0.0.1:3000 -target-url http://t.isucon.dev -load-type light -strict-prepare=false
 
 .PHONY: clean
 clean:
