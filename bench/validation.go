@@ -196,7 +196,7 @@ func WithSuccessResponse[T ResponseAPI](validates ...func(res T) error) Response
 		if !v.IsSuccess() {
 			return failure.NewError(
 				ErrFailed,
-				fmt.Errorf("成功したAPIレスポンスの.resultはtrueである必要があります %s %s status %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode),
+				fmt.Errorf("成功したAPIレスポンスの.statusはtrueである必要があります %s %s status %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode),
 			)
 		}
 		for _, validate := range validates {
@@ -228,7 +228,7 @@ func WithErrorResponse[T ResponseAPI]() ResponseValidator {
 		if v.IsSuccess() {
 			return failure.NewError(
 				ErrFailed,
-				fmt.Errorf("失敗したAPIレスポンスの.resultはfalseである必要があります %s %s %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode),
+				fmt.Errorf("失敗したAPIレスポンスの.statusはfalseである必要があります %s %s %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode),
 			)
 		}
 		if v.ErrorMessage() == "" {
