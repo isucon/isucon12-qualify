@@ -12,7 +12,7 @@ prepare: bench
 
 ci: bench
 	rm -f ci.log
-	./bench -target-addr 127.0.0.1:443 -target-url https://t.isucon.dev | tee ci.log
+	./bench -target-addr 127.0.0.1:443 -target-url https://t.isucon.dev -strict-prepare=false | tee ci.log
 
 ci-with-comment: ci
 	./pr-comment ci.log
