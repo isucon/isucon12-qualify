@@ -576,10 +576,8 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 		return nil, fmt.Errorf("error Select count player_score: tenantID=%d, competitionID=%s, %w", tenantID, competitonID, err)
 	}
 	for _, pid := range scoredPlayerIDs {
-		if _, ok := billingMap[pid]; ok {
-			// スコアが登録されている参加者
-			billingMap[pid] = "player"
-		}
+		// スコアが登録されている参加者
+		billingMap[pid] = "player"
 	}
 
 	// 大会が終了している場合のみ請求金額が確定するので計算する
