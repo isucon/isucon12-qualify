@@ -50,7 +50,9 @@ type Scenario struct {
 
 	ScenarioScoreMap   sync.Map // map[string]*int64
 	ScenarioCountMap   map[ScenarioTag][]int
+	WorkerCountMap     map[string]int
 	ScenarioCountMutex sync.Mutex
+	WorkerCountMutex   sync.Mutex
 
 	InitialData        InitialDataRows
 	InitialDataTenant  InitialDataTenantMap
@@ -58,7 +60,6 @@ type Scenario struct {
 	RawKey             *rsa.PrivateKey
 
 	WorkerCh        chan Worker
-	WorkerCountMap  map[string]int
 	ErrorCh         chan struct{}
 	CriticalErrorCh chan struct{}
 }
@@ -73,6 +74,9 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	sc.DisqualifiedPlayer = map[string]struct{}{}
 	sc.ScenarioCountMutex = sync.Mutex{}
 
+	sc.WorkerCountMap = make(map[string]int)
+	sc.WorkerCountMutex = sync.Mutex{}
+
 	sc.ScenarioScoreMap = sync.Map{}
 	sc.ScenarioCountMap = make(map[ScenarioTag][]int)
 	for _, key := range ScenarioTagList {
@@ -80,6 +84,10 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 		sc.ScenarioScoreMap.Store(string(key), &n)
 		sc.ScenarioCountMap[key] = []int{0, 0}
 	}
+
+	sc.WorkerCh = make(chan Worker, 10)
+	sc.CriticalErrorCh = make(chan struct{}, 10)
+	sc.ErrorCh = make(chan struct{}, 10)
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(sc.Option.TargetURL)
@@ -159,11 +167,6 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 	ContestantLogger.Println("負荷テストを開始します")
 	defer ContestantLogger.Println("負荷テストを終了します")
 	wg := &sync.WaitGroup{}
-
-	sc.WorkerCh = make(chan Worker, 10)
-	sc.CriticalErrorCh = make(chan struct{}, 10)
-	sc.ErrorCh = make(chan struct{}, 10)
-	sc.WorkerCountMap = make(map[string]int)
 
 	// 最初に起動するシナリオ
 	// AdminBillingを見続けて新規テナントを追加する
@@ -268,6 +271,8 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 }
 
 func (sc Scenario) CountWorker(name string) {
+	sc.WorkerCountMutex.Lock()
+	defer sc.WorkerCountMutex.Unlock()
 	if _, ok := sc.WorkerCountMap[name]; !ok {
 		sc.WorkerCountMap[name] = 0
 	}
@@ -276,6 +281,8 @@ func (sc Scenario) CountWorker(name string) {
 }
 
 func (sc Scenario) CountdownWorker(name string) {
+	sc.WorkerCountMutex.Lock()
+	defer sc.WorkerCountMutex.Unlock()
 	sc.WorkerCountMap[name]--
 }
 
