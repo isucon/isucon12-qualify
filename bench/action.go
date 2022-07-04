@@ -21,15 +21,6 @@ func PostInitializeAction(ctx context.Context, ag *agent.Agent) (*http.Response,
 	return ag.Do(ctx, req)
 }
 
-func GetRootAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
-	req, err := ag.GET("/")
-	if err != nil {
-		return nil, err
-	}
-
-	return ag.Do(ctx, req)
-}
-
 func PostAdminTenantsAddAction(ctx context.Context, name, displayName string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
 	form.Set("name", name)

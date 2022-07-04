@@ -4,30 +4,20 @@ import "github.com/isucon/isucandar/score"
 
 // シナリオで発生するスコアのタグ
 const (
-	ScoreGETRoot score.ScoreTag = "GET /"
-
-	// for admin endpoint
-	ScorePOSTAdminTenantsAdd    score.ScoreTag = "POST /admin/api/tenants/add"
-	ScoreGETAdminTenantsBilling score.ScoreTag = "GET /admin/api/tenants/billing"
-
-	// for organizer endpoint
-	// 参加者操作
-	ScoreGETOrganizerPlayersList         score.ScoreTag = "GET /organizer/api/players/list"
-	ScorePOSTOrganizerPlayersAdd         score.ScoreTag = "POST /organizer/api/players/add"
-	ScorePOSTOrganizerPlayerDisqualified score.ScoreTag = "POST /organizer/api/player/:player_name/disqualified"
-	// 大会操作
-	ScorePOSTOrganizerCompetitionsAdd   score.ScoreTag = "POST /organizer/api/competitions/add"
-	ScorePOSTOrganizerCompetitionFinish score.ScoreTag = "POST /organizer/api/competition/:competition_id/finish"
-	ScorePOSTOrganizerCompetitionResult score.ScoreTag = "POST /organizer/api/competition/:competition_id/result"
-	// テナント操作
-	ScoreGETOrganizerBilling      score.ScoreTag = "GET /organizer/api/billing"
-	ScoreGETOrganizerCompetitions score.ScoreTag = "GET /api/organizer/competitions"
-
-	// for player
-	// 参加者からの閲覧
-	ScoreGETPlayerDetails      score.ScoreTag = "GET /player/api/player/:player_name"
-	ScoreGETPlayerRanking      score.ScoreTag = "GET /player/api/competition/:competition_id/ranking"
-	ScoreGETPlayerCompetitions score.ScoreTag = "GET /player/api/competitions"
+	ScorePOSTOrganizerCompetitionResult  score.ScoreTag = "POST /api//organizercompetition/:competition_id/result"
+	ScorePOSTAdminTenantsAdd             score.ScoreTag = "POST /api/admin/tenants/add"
+	ScoreGETAdminTenantsBilling          score.ScoreTag = "GET /api/admin/tenants/billing"
+	ScoreGETOrganizerPlayersList         score.ScoreTag = "GET /api/organizer/players/list"
+	ScorePOSTOrganizerPlayersAdd         score.ScoreTag = "POST /api/organizer/players/add"
+	ScorePOSTOrganizerPlayerDisqualified score.ScoreTag = "POST /api/organizer/player/:player_name/disqualified"
+	ScorePOSTOrganizerCompetitionsAdd    score.ScoreTag = "POST /api/organizer/competitions/add"
+	ScorePOSTOrganizerCompetitionFinish  score.ScoreTag = "POST /api/organizer/competition/:competition_id/finish"
+	ScorePOSTOrganizerCompetitionScore   score.ScoreTag = "POST /api/organizer/competition/:competition_id/score"
+	ScoreGETOrganizerBilling             score.ScoreTag = "GET /api/organizer/billing"
+	ScoreGETOrganizerCompetitions        score.ScoreTag = "GET /api/organizer/competitions"
+	ScoreGETPlayerDetails                score.ScoreTag = "GET /api/player/player/:player_name"
+	ScoreGETPlayerRanking                score.ScoreTag = "GET /api/player/competition/:competition_id/ranking"
+	ScoreGETPlayerCompetitions           score.ScoreTag = "GET /api/player/competitions"
 )
 
 // シナリオ分別用タグ
