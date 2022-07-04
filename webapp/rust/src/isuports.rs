@@ -1,14 +1,19 @@
 use sqlx::{ConnectOptions, Connection};
 use std::any::Any;
+use std::error::Error;
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use actix_web::{web, HttpResponse, Error};
+use std::sync::Arc;
+use actix_web::web;
 use lazy_static::lazy_static;
 use nix::fcntl::{flock, open, FlockArg, OFlag};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::mysql::MySqlConnectOptions;
 use sqlx::sqlite::SqliteConnectOptions;
+use std::time::{SystemTime, UNIX_EPOCH};
+use std::result::Result;
+use std::collections::HashMap;
 
 const TENANT_DB_SCHEMA_FILE_PATH: &str = "../sql/tenant/10_schema.sql";
 const INITIALIZE_SCRIPT: &str = "..sql/init.sh";
@@ -73,15 +78,16 @@ async fn create_tenant_db(id: i64) {
 async fn dispense_id(
     pool: web::Data<sqlx::MySqlPool>,
 )-> Result<String, sqlx::Error> {
-
+    let mut id = 0;
     for _ in 1..100{
-        sqlx::query("REPLACE INTO id_generator (stub) VALUES (?);")
+        let ret = sqlx::query("REPLACE INTO id_generator (stub) VALUES (?);")
             .bind("a")
             .execute(pool.as_ref())
             .await;
+        let id = ret.last_insert_id();
 
     }
-    let id = ret.last_insert_id();
+
     if id != 0{
         Ok(id.to_string())
     }else{
@@ -103,7 +109,7 @@ async fn run() -> std::io::Result<()> {
         .username(&get_env("ISUCON_DB_USER", "isucon"))
         .password(&get_env("ISUCON_DB_PASSWORD", "isucon"))
         .database(&get_env("ISUCON_DB_NAME", "isuports"))
-        .port(&get_env("ISUCON_DB_PORT"), "3306");
+        .port(&get_env("ISUCON_DB_PORT", "3306"));
 
     let pool = sqlx::mysql::MySqlPoolOptions::new()
         .max_connections(10)
@@ -175,13 +181,11 @@ struct Viewer {
     tennant_id: i64,
 }
 
-// リクエストヘッダをパースしてViewerを返す
-fn parse_viewer() {
-    // TODO:
-}
+
 
 // parse request header and return Viewer
-async fn post_authentication(
+async fn parse_viewer(
+    pool: web::Data<sqlx::MySqlPool>,
     request: actix_web::HttpRequest,
     session: actix_session::Session,
 ) -> Viewer{
@@ -197,7 +201,7 @@ async fn post_authentication(
     let key = jsonwebtoken::DecodingKey::from_rsa_pem(key_src.as_bytes());
 
 
-    let token = jsonwebtoken::decode<Viewer>(req_jwt, &key, &jsonwebtoken::Validation::ES256).unwrap();
+    let token = jsonwebtoken::decode(req_jwt, &key, &jsonwebtoken::Validation::ES256).unwrap();
     let token = match jsonwebtoken::decode(req_jwt, &key, &jsonwebtoken::Validation::ES256) {
         Ok(token) => token,
         Err(e) => {
@@ -217,12 +221,12 @@ async fn post_authentication(
     }
     // aud contains one tenant name
     let aud = token.claims.aud;
-    if len(aut) != 1{
+    if aud.len() != 1{
         panic!("invalid audience");
     }
-    let tenant = retrieve_tenant_row_from_header();
+    let tenant = retrieve_tenant_row_from_header(pool, request);
 
-    if tenant.name == "admin" && role != ROLE_ADMIN {
+    if tenant.name == "admin" && tr != ROLE_ADMIN {
         panic!("invalid role");
     }
 
@@ -236,14 +240,35 @@ async fn post_authentication(
         tennant_name: tenant.name,
         tennant_id: tenant.id,
     };
-    Viewer
+    viewer
 }
 
 
 async fn retrieve_tenant_row_from_header(
-    
-) {
-    // TODO:
+    pool: web::Data<sqlx::MySqlPool>,
+    request: actix_web::HttpRequest,
+) -> Option<TenantRow> {
+    // check if jwt tenant name and host header's tenant name is the same
+    let base_host = get_env("ISUCON_BASE_HOSTNAME", ".t.isucon.dev");
+    let tenant_name = request.headers().get("Host").unwrap().to_str().unwrap().trim_start();
+
+    // SaaS管理者用ドメイン
+    if tenant_name == "admin"{
+        return Some(TenantRow{
+            name: "admin".to_string(),
+            display_name: "admin".to_string(),
+            id: 0,
+            created_at: 0,
+            updated_at: 0
+        })
+    }
+
+    sqlx::query(
+        "SELECT * FROM tenants WHERE name = ?")
+    .bind(tenant_name)
+    .fetch_one(&pool).await?;
+
+    None
 
 }
 
@@ -253,11 +278,12 @@ struct TenantRow {
     name: String,
     display_name: String,
     created_at: i64,
-    updatede_at: i64,
+    updated_at: i64,
 }
 
-trait DbOrTx {
+trait dbOrTx {
     // TODO:
+
 }
 
 #[derive(Debug, Serialize)]
@@ -271,30 +297,51 @@ struct PlayerRow {
 }
 
 // 参加者を取得する
-fn retrieve_player() {
-    // TODO:
+async fn retrieve_player(
+    tenant_db: web::Data<sqlx::SqliteConnection>,
+    id: String
+) -> Result<PlayerRow, actix_web::Error> {
+    sqlx::query(
+        "SELECT * FROM player WHERE id = ?")
+    .bind(id)
+    .fetch_one(tenant_db).await?;
 }
 
 // 参加者を認可する
 // 参加者向けAPIで呼ばれる
-fn authorize_player() {
-    // TODO:
+async fn authorize_player(
+    tenant_db: web::Data<sqlx::SqliteConnection>,
+    id: String,
+) -> Result<(), actix_web::Error> {
+    let player = retrieve_player(tenant_db, id);
+    if player.is_disqualified {
+        return  Err(actix_web::error::ErrorBadRequest("player is disqualified"));
+    }
+    Ok(())
 }
+
 
 #[derive(Debug, Serialize)]
 struct CompetitionRow {
     tenant_id: i64,
     id: String,
     title: String,
-    finished_at: i64, // TODO: NullInt64にする
+    finished_at: Option<i64>,
     created_at: i64,
     updated_at: i64,
 }
 
 // 大会を取得する
-fn retrieve_competition() {
-    // TODO:
+async fn retrieve_competition(
+    tenant_db: web::Data<sqlx::SqliteConnection>,
+    id: String
+) -> Result<CompetitionRow, actix_web::Error> {
+    sqlx::query(
+        "SELECT * FROM competition WHERE id = ?")
+    .bind(id)
+    .fetch_one(tenant_db).await?
 }
+
 
 #[derive(Debug, Serialize)]
 struct PlayerScoreRow {
@@ -315,7 +362,7 @@ fn lock_file_path(id: i64) -> String {
 }
 
 // 排他ロックする
-fn flock_by_tenant_id(tenant_id: i64) -> Result<()> {
+fn flock_by_tenant_id(tenant_id: i64) -> Result<Error> {
     let p = lock_file_path(tenant_id);
     let mut lock_file = open(p.as_str(), OFlag::empty(), Mode::empty())?;
     match flock(lock_file, FlockArg::LockExclusiveNonblock) {
@@ -338,18 +385,53 @@ struct TenantsAddHandlerResult {
     tenant: TenantDetail,
 }
 
+#[derive(Debug,Deserialize)]
+struct FormInfo{
+    name: String,
+    display_name: String,
+}
 // SaaS管理者用API
 // テナントを追加する
 // POST /api/admin/tenants/add
 async fn tenants_add_handler(
     pool: web::Data<sqlx::MySqlPool>,
+    request: actix_web::HttpRequest,
     session: actix_session::Session,
-) -> actix_web::Result<actix_web::HttpResponse> {
-    // TODO:
+    form: web::Form<FormInfo>,
+) -> actix_web::Result<impl actix_web::Responder> {
+    let v = parse_viewer(pool, request, session);
+    if v.tenant_name != "admin"{
+        // admin: SaaS管理者用の特別なテナント名
+        return Err(actix_web::error::ErrorUnauthorized("you dont have this API"));
+    }
+    if v.role != ROLE_ADMIN {
+        return Err(actix_web::error::ErrorUnauthorized("admin role required"));
+    }
+    let display_name = form.display_name;
+    let name = form.name;
+    validate_tenant_name(name.as_str())?;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+    let insert_res = sqlx::query(
+        "INSERT INTO tenants (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)")
+    .bind(name)
+    .bind(display_name)
+    .bind(now)
+    .bind(now)
+    .execute(&pool).await?;
+    let id = insert_res.last_insert_id();
+    create_tenant_db(id)?;
+    let res = TenantsAddHandlerResult {
+        tenant: TenantDetail {
+            name: name,
+            display_name: display_name,
+        },
+    };
+    Ok(web::Json(res))
 }
 
 // テナント名が規則に従っているかチェックする
-fn validate_tenant_name(name: String) -> Result<()> {
+fn validate_tenant_name(name: String) -> Result<(),String> {
     if TENANT_NAME_REGEXP.is_match(name.as_str()) {
         Ok(())
     } else {
@@ -384,12 +466,61 @@ struct VisitHistorySummaryRow {
 }
 
 // 大会ごとの課金レポートを計算する
-fn billing_report_by_competition(
-    tenant_db: &dyn DbOrTx,
+async fn billing_report_by_competition(
+    pool: web::Data<sqlx::MySqlPool>,
+    tenant_db: &dyn dbOrTx,
     tenant_id: i64,
     competition_id: String,
-) -> Result<BillingReport> {
+) -> Result<BillingReport, String> {
     // TODO:
+    let comp: CompetitionRow = retrieve_competition(tenant_db, competition_id)?;
+    let vhs = sqlx::query(
+        "SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id")
+        .bind(tenant_id)
+        .bind(comp.id)
+        .fetch_all(tenant_db).await?;
+    let mut billing_map: HashMap<String, String> = HashMap::new();
+    for vh in  vhs{
+        // competition.finished_atよりも後の場合は, 終了後に訪問したとみなして大会開催内アクセス済みと見做さない
+        if comp.finished_at.is_some() && comp.finished_at.unwrap() < vh.min_created_at {
+            continue;
+        }
+        billing_map.insert(vh.player_id, "visitor".to_string());
+    }
+    // player_scoreを読んでいる時に更新が走ると不整合が起こるのでロックを取得する
+    let fl = flock_by_tenant_id(tenant_id)?;
+    sqlx::query(
+        "SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?")
+
+        .bind(tenant_id)
+        .bind(comp.id)
+        .fetch_all(tenant_db).await?
+        .into_iter()
+        .for_each(|ps| {
+            if billing_map.contains_key(&ps) {
+                return;
+            }
+            billing_map.insert(ps, "player".to_string());
+        });
+    let mut player_count = 0;
+    let mut visitor_count = 0;
+    if comp.finished_at.is_sum(){
+        for category in billing_map{
+            match category{
+                "player" => player_count++,
+                "visitor" => visitor_count++,
+            }
+        }
+    }
+    Ok(BillingReport {
+        competition_id: comp.id,
+        competition_title: comp.title,
+        player_count: player_count,
+        visitor_count: visitor_count,
+        billing_player_yen: 100 * player_count,// スコアを登録した参加者は100円
+        billing_visitor_yen: 10 * visitor_count, // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
+        billing_yen: 100 * player_count + 10 * visitor_count,
+    })
 }
 
 #[derive(Debug, Serialize)]
@@ -405,6 +536,10 @@ struct TenantsBillingHandlerResult {
     tenants: Vec<TenantWithBilling>,
 }
 
+#[derive(Serialize, Deserialize)]
+struct BillingQuery{
+    before: String
+}
 // SaaS管理者用API
 // テナントごとの課金レポートを最大10件, テナントのid降順で取得する
 // POST /api/admin/tenants/billing
@@ -412,9 +547,64 @@ struct TenantsBillingHandlerResult {
 async fn tenants_billing_handler(
     pool: web::Data<sqlx::MySqlPool>,
     session: actix_session::Session,
+    request: web::Data<HttpRequest>,
+    query: web::Query<BillingQuery>,
 ) -> actix_web::Result<actix_web::HttpResponse> {
+    let host = request.host().unwrap();
+    if host != get_env("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev"){
+        Ok(actix_web::HttpResponse::NotFound().finish())
+    }
+    let v = parse_viewer(pool, request, session).await?;
+    if v.role != ROLE_ADMIN{
+        Ok(actix_web::HttpResponse::Forbidden().finish())
+    }
+    let before = query.before;
+    let before_id = 0;
+    if before != ""{
+        before_id = match i64::from_str_radix(&before, 10){
+            Ok(id)=> id,
+            Err(_)=> return Ok(actix_web::HttpResponse::BadRequest().body("before is not number")),
+    }
+    // テナントごとに
+	//   大会ごとに
+	//     scoreに登録されているplayerでアクセスした人 * 100
+	//     scoreに登録されているplayerでアクセスしていない人 * 50
+	//     scoreに登録されていないplayerでアクセスした人 * 10
+	//   を合計したものを
+	// テナントの課金とする
+    let ts: TenantRow = sqlx::query(
+        "SELECT * FROM tenant ORDER BY id DESC")
+        .fetch_all(pool)
+        .await?;
+    let tenant_billings = Vec::<TenantWithBilling>::new();
+    for t in ts{
+        if before_id != 0 && before_id <= t.id{
+            continue;
+        }
+        let tb = TenantWithBilling{
+            id: i64::from_str_radix(t.id, 10),
+            name: t.name,
+            display_name: t.display_name,
+        };
+        let tenant_db = connect_to_tenant_db(t.id)?;
+        let cs: Vec<CompetitionRow>=sqlx::query("SELECT * FROM competition WHERE tenant_id=?")
+            .bind(t.id)
+            .fetch_all(tenant_db)
+            .await?;
+        for comp in cs{
+            let report = billing_report_by_competition(pool, tenant_db, t.id, comp.id).await?;
+            tb.billing_yen += report.billing_yen;
+        }
+        tenant_billings.push(tb);
+        if tenant_billings.len() >= 10{
+            break;
+        }
+    }
+    Ok(web::Json(TenantsBillingHandlerResult {
+        tenants: tenant_billings,
+    }))
 
-    // TODO:
+
 }
 
 #[derive(Debug, Serialize)]
@@ -434,9 +624,40 @@ struct PlayersListHandlerResult {
 // 参加者一覧を返す
 async fn players_list_handler(
     pool: web::Data<sqlx::MySqlPool>,
+    request: web::Data<HttpRequest>,
     session: actix_session::Session,
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    // TODO:
+    let v: Viewer = parse_viewer(pool, request, session).await?;
+    if v.role != ROLE_ORGANIZER{
+        Ok(actix_web::HttpResponse::Forbidden().finish())
+    }
+    let tenant_db = connect_to_tenant_db(v.tenant_id)?;
+    let pls: Vec::<PlayerRow> = sqlx::query("SELECT * FROM player WHERE tenant_id=? ORDER BY created_at DESC")
+        .bind(v.tenant_id)
+        .fetch_all(tenant_db)
+        .await?;
+    let pds: Vec<PlayerDetail> = Vec::<PlayerDetail>::new();
+    for p in pls{
+        pds.push(PlayerDetail{
+            id: p.id,
+            display_name: p.display_name,
+            is_disqualified: p.is_disqualified,
+        });
+    }
+    let res = PlayersListHandlerResult{
+        players: pds,
+    };
+    Ok(web::Json(res))
+}
+
+#[derive(Debug,Serialize,Deserialize)]
+struct PlayersAddHandlerResult{
+    players: Vec<PlayerDetail>,
+}
+
+#[derive(Debug,Serialize,Deserialize)]
+struct PlayerAddFormQuery{
+    display_name: String,
 }
 
 // テナント管理者向けAPI
@@ -444,9 +665,40 @@ async fn players_list_handler(
 // テナントに参加者を追加する
 async fn players_add_handler(
     pool: web::Data<sqlx::MySqlPool>,
+    request: web::Data<HttpRequest>,
     session: actix_session::Session,
+    form_param: web::Form<PlayerAddFormQuery>,
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    // TODO:
+    let v: Viewer = parse_viewer(pool, request, session).await?;
+    if v.role != ROLE_ORGANIZER{
+        Ok(actix_web::HttpResponse::Forbidden().finish())
+    }
+    let tenant_db = connect_to_tenant_db(v.tenant_id)?;
+    let display_names = form_param.into_inner().display_name;
+    let pds = Vec::<PlayerDetail>::new();
+    for display_name in display_names{
+        let id = dispense_id(pool)?;
+        let now =   SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        sqlx::query("INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+            .bind(id)
+            .bind(v.tenant_id)
+            .bind(display_name)
+            .bind(false)
+            .bind(now)
+            .bind(now)
+            .execute(tenant_db)
+            .await?;
+        let p = retrieve_player(tenant_db, id);
+        pds.push(PlayerDetail{
+            id: p.id,
+            display_name: p.display_name,
+            is_disqualified: p.is_disqualified,
+        });
+    }
+    let res = PlayersAddHandlerResult{
+            players: pds,
+    };
+
 }
 
 #[derive(Debug, Serialize)]
@@ -454,14 +706,41 @@ struct PlayerDisqualifiedHandlerResult {
     player: PlayerDetail,
 }
 
+#[derive(Serialize,Deserialize)]
+struct DisqualifiedFormQuery {
+    player_id: String,
+}
 // テナント管理者向けAPI
 // POST /api/organizer/player/:player_id/disqualified
 // 参加者を失格にする
 async fn player_disqualified_handler(
     pool: web::Data<sqlx::MySqlPool>,
+    request: web::Data<HttpRequest>,
     session: actix_session::Session,
+    form_param: web::Form<DisqualifiedFormQuery>,
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    // TODO:
+    let v:Viewer = parse_viewer(pool, request, session).await?;
+    if v.role != ROLE_ORGANIZER{
+        Ok(actix_web::HttpResponse::Forbidden().finish())
+    }
+    let tenant_db = connect_to_tenant_db(v.tenant_id)?;
+    let player_id = form_param.into_inner().player_id;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    sqlx::query("UPDATE player SET is_disqualified = ?, updated_at=? WHERE id = ?")
+        .bind(true)
+        .bind(now)
+        .bind(player_id)
+        .execute(tenant_db)
+        .await?;
+    let p:PlayerRow = retrieve_player(tenant_db, player_id)?;
+    let res = PlayerDisqualifiedHandlerResult{
+        player: PlayerDetail{
+            id: p.id,
+            display_name: p.display_name,
+            is_disqualified: p.is_disqualified,
+        },
+    };
+    Ok(web::Json(res))
 }
 
 #[derive(Debug, Serialize)]
@@ -476,24 +755,82 @@ struct CompetitionsAddHandlerResult {
     competition: CompetitionDetail,
 }
 
+#[derive(Debug,Serialize,Deserialize)]
+struct CompetitionAddHandlerFormQuery{
+    title: String,
+}
 // テナント管理者向けAPI
 // POST /api/organizer/competitions/add
 // 大会を追加する
 async fn competitions_add_handler(
     pool: web::Data<sqlx::MySqlPool>,
+    request: web::Data<HttpRequest>,
     session: actix_session::Session,
+    form: web::Form<CompetitionAddHandlerFormQuery>,
+
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    // TODO:
+    let v:Viewer = parse_viewer(pool, request, session).await?;
+    if v.role != ROLE_ORGANIZER{
+        Ok(actix_web::HttpResponse::Forbidden().finish())
+    }
+    let tenant_db = connect_to_tenant_db(v.tenant_id)?;
+    let title = form.into_inner().title;
+    let id = dispense_id(pool)?;
+    sqlx::query("INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?")
+    .bind(id)
+    .bind(v.tenant_id)
+    .bind(title)
+    .bind(None)
+    .bind(now)
+    .bind(now)
+    .execute(tenant_db)
+    .await?;
+    let res = CompetitionsAddHandlerResult{
+        competition: CompetitionDetail{
+            id: id,
+            title: title,
+            is_finished: false,
+        },
+    };
+    Ok(web::Json(res))
 }
 
+
+#[derive(Debug, Serialize)]
+struct CompetitionFinishFormQuery {
+    competition_id: String,
+}
 // テナント管理者向けAPI
 // POST /api/organizer/competitions/:competition_id/finish
 // 大会を終了する
 async fn competition_finish_handler(
     pool: web::Data<sqlx::MySqlPool>,
+    request: web::Data<HttpRequest>,
     session: actix_session::Session,
+    form: web::Form<CompetitionFinishFormQuery>,
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    // TODO:
+    let v:Viewer = parse_viewer(pool, request, session).await?;
+    if v.role != ROLE_ORGANIZER{
+        Ok(actix_web::HttpResponse::Forbidden().finish())
+    }
+    let tenant_db = connect_to_tenant_db(v.tenant_id)?;
+    let id = form.into_inner().competition_id;
+
+
+    retrieve_competition(tenant_db, id)?;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+
+    sqlx::query("UPDATE competition SET finished_at = ?, updated_at=? WHERE id = ?")
+        .bind(now)
+        .bind(now)
+        .bind(id)
+        .execute(tenant_db)
+        .await?;
+
+    let res = SuccessResult{
+        success: true,
+    }
+    Ok(web::Json(res))
 }
 
 #[derive(Debug, Serialize)]
@@ -501,14 +838,42 @@ struct ScoreHandlerResult {
     rows: i64,
 }
 
+#[derive(Debug,Serialize,Deserialize)]
+struct CompetitionScoreHandlerFormQuery{
+    competition_id: String,
+}
 // テナント管理者向けAPI
 // POST /api/organizer/competitions/:competition_id/score
 // 大会のスコアをCSVでアップロードする
 async fn competition_score_handler(
     pool: web::Data<sqlx::MySqlPool>,
+    request: web::Data<HttpRequest>,
     session: actix_session::Session,
+    form: web::Form<CompetitionScoreHandlerFormQuery>,
 ) -> actix_web::Result<actix_web::HttpResponse> {
+    let v = parse_viewer(pool, request, session).await?;
+    if v.role != ROLE_ORGANIZER{
+        Ok(actix_web::HttpResponse::Forbidden().finish())
+    }
+    let tenant_db = connect_to_tenant_db(v.tenant_id)?;
+    let competition_id = form.into_inner().competition_id;
+    if competitionid == ""{
+        return Ok(actix_web::HttpResponse::BadRequest().finish());
+    }
+    let comp = retrieve_competition(tenant_db, competition_id)?;
+    if comp.finished_at.is_some(){
+        let res = FailureResult{
+            failure: false,
+            message: "competition is finished",
+        };
+        return Ok(web::Json(res));
+    }
+    let mut file = form.file("file").unwrap();
+    let mut headers  = Vec::new();
+    file.read_to_end(&mut headers).await?;
     // TODO:
+
+
 }
 
 #[derive(Debug, Serialize)]
@@ -521,9 +886,31 @@ struct BillingHandlerResult {
 // テナント内の課題レポートを取得する
 async fn billing_handler(
     pool: web::Data<sqlx::MySqlPool>,
+    request: web::Data<HttpRequest>,
     session: actix_session::Session,
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    // TODO:
+    let v:Viewer = parse_viewer(pool, request, session).await?;
+    if v.role != ROLE_ORGANIZER{
+        Ok(actix_web::HttpResponse::Forbidden().finish())
+    }
+    let tenant_db = connect_to_tenant_db(v.tenant_id)?;
+
+    let cs: Vec::<CompetitionRow> = sqlx::query("SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at DESC")
+    .bind(v.tenant_id)
+        .fetch_all(tenant_db)
+        .await?;
+    let tbrs = Vec::<BillingReport>::new();
+    for comp in cs{
+        let report:BillingReport = billing_report_by_competition(pool, tenant_db, v.tenant_id, comp.id)?;
+        trbs.push(report);
+    }
+    let res = SuccessResult{
+        success: true,
+        data: BillingHandlerResult{
+            reports: tbrs,
+        },
+    };
+    Ok(web::Json(res))
 }
 
 #[derive(Debug, Serialize)]
@@ -538,14 +925,36 @@ struct PlayerScoreHandlerResult {
     scores: Vec<PlayerScoreDetail>,
 }
 
+#[derive(Debug, Serialize)]
+struct PlayerHandlerQueryParam {
+    player_id: String,
+}
 // 参加者向けAPI
 // GET /api/player/player/:player_id
 // 参加者の詳細情報を取得する
 async fn player_handler(
     pool: web::Data<sqlx::MySqlPool>,
+    request: web::Data<HttpRequest>,
     session: actix_session::Session,
+    from: web::Query<PlayerHandlerQueryParam>,
 ) -> actix_web::Result<actix_web::HttpResponse> {
+    let v:Viewer = parse_viewer(pool, request, session).await?;
+    if v.role != ROLE_PLAYER{
+        Ok(actix_web::HttpResponse::Forbidden().finish())
+    }
+    let tenant_db = connect_to_tenant_db(v.tenant_id)?;
+    authorize_player(tenant_db, v.player_id)?;
+    let player_id = from.into_inner().player_id;
+    if player_id == ""{
+        return Ok(actix_web::HttpResponse::BadRequest().finish());
+    }
+    let p = retrieve_player(tenant_db, player_id)?;
+    let cs: Vec::<CompetitionRow> = sqlx::query("SELECT * FROM competition ORDER BY created_at ASC")
+    .fetch_all(tenant_db)
+    .await?;
+    // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
     // TODO:
+
 }
 
 #[derive(Debug, Serialize)]
@@ -564,13 +973,51 @@ struct CompetitionRankingHandlerResult {
     ranks: Vec<CompetitionRank>,
 }
 
+
+#[derive(Debug, Serialize)]
+struct CompetitionRankingHandlerQueryParam {
+    competition_id: String,
+    rank_after: String,
+}
 // 参加者向けAPI
 // GET /api/player/competition/:competition_id/ranking
 // 大会ごとのランキングを取得する
 async fn competition_ranking_handler(
     pool: web::Data<sqlx::MySqlPool>,
+    request: web::Data<HttpRequest>,
     session: actix_session::Session,
+    form: web::Form<CompetitionRankingHandlerQueryParam>,
 ) -> actix_web::Result<actix_web::HttpResponse> {
+    let v:Viewer = parse_viewer(pool, request, session).await?;
+    if v.role != ROLE_PLAYER{
+        Ok(actix_web::HttpResponse::Forbidden().finish())
+    }
+    let tenant_db = connect_to_tenant_db(v.tenant_id)?;
+    let competition_id = form.into_inner().competition_id;
+    if competition_id == ""{
+        return Ok(actix_web::HttpResponse::BadRequest().finish());
+    }
+    // 大会の存在確認
+    let competition = retrieve_competition(tenant_db, competition_id)?;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let tenant: TenantRow = sqlx::query("SELECT * FROM tenant WHERE id = ?")
+        .bind(v.tenant_id)
+        .fetch_one(tenant_db)
+        .await?;
+    sqlx::query("INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated) VALUES (?, ?, ?, ?, ?)")
+    .bind(v.player_id)
+    .bind(tenant.id)
+    .bind(competition_id)
+    .bind(now)
+    .bind(now)
+    .execute(pool)
+    .await?;
+    let rank_after_str = form.into_inner().rank_after;
+    if rank_after_str != ""{
+        let  rank_after = i64::from_str_radix(&rank_after_str, 10)?;
+    }
+
+    // player_scoreを読んでいる時に更新が走ると不整合が走るのでロックを取得する
     // TODO:
 }
 
@@ -584,9 +1031,16 @@ struct CompetitionsHandlerResult {
 // 大会一覧を取得する
 async fn player_competitions_handler(
     pool: web::Data<sqlx::MySqlPool>,
+    request: web::Data<HttpRequest>,
     session: actix_session::Session,
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    // TODO:
+    let v:Viewer = parse_viewer(pool, request, session).await?;
+    if v.role != ROLE_PLAYER{
+        Ok(actix_web::HttpResponse::Forbidden().finish())
+    }
+    let tenant_db = connect_to_tenant_db(v.tenant_id)?;
+    authorize_player(tenant_db, v.player_id)?;
+    return competitions_handler(pool, request, session).await;
 }
 
 // 主催者向けAPI
@@ -594,12 +1048,19 @@ async fn player_competitions_handler(
 // 大会一覧を取得する
 async fn organizer_competitions_handler(
     pool: web::Data<sqlx::MySqlPool>,
+    request: web::Data<HttpRequest>,
     session: actix_session::Session,
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    // TODO:
+    let v:Viewer = parse_viewer(pool, request, session).await?;
+    if v.role != ROLE_ORGANIZER{
+        Ok(actix_web::HttpResponse::Forbidden().finish())
+    }
+    let tenant_db = connect_to_tenant_db(v.tenant_id)?;
+    authorize_organizer(tenant_db, v.organizer_id)?;
+    return competitions_handler(pool, request, session).await;
 }
 
-fn competitions_handler(v: Option<Viewer>, tenant_db: &dyn DbOrTx) -> Result<()> {
+fn competitions_handler(v: Option<Viewer>, tenant_db: &dyn dbOrTx) -> Result<()> {
     // TODO:
 }
 
