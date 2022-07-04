@@ -617,8 +617,8 @@ type TenantsBillingHandlerResult struct {
 }
 
 // SaaS管理者用API
-// テナントごとの課金レポートを最大20件、テナントのid降順で取得する
-// POST /api/admin/tenants/billing
+// テナントごとの課金レポートを最大10件、テナントのid降順で取得する
+// GET /api/admin/tenants/billing
 // URL引数beforeを指定した場合、指定した値よりもidが小さいテナントの課金レポートを取得する
 func tenantsBillingHandler(c echo.Context) error {
 	if host := c.Request().Host; host != getEnv("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
@@ -663,33 +663,39 @@ func tenantsBillingHandler(c echo.Context) error {
 		if beforeID != 0 && beforeID <= t.ID {
 			continue
 		}
-		tb := TenantWithBilling{
-			ID:          strconv.FormatInt(t.ID, 10),
-			Name:        t.Name,
-			DisplayName: t.DisplayName,
-		}
-		tenantDB, err := connectToTenantDB(t.ID)
-		if err != nil {
-			return fmt.Errorf("failed to connectToTenantDB: %w", err)
-		}
-		defer tenantDB.Close()
-		cs := []CompetitionRow{}
-		if err := tenantDB.SelectContext(
-			ctx,
-			&cs,
-			"SELECT * FROM competition WHERE tenant_id=?",
-			t.ID,
-		); err != nil {
-			return fmt.Errorf("failed to Select competition: %w", err)
-		}
-		for _, comp := range cs {
-			report, err := billingReportByCompetition(ctx, tenantDB, t.ID, comp.ID)
-			if err != nil {
-				return fmt.Errorf("failed to billingReportByCompetition: %w", err)
+		err := func(t TenantRow) error {
+			tb := TenantWithBilling{
+				ID:          strconv.FormatInt(t.ID, 10),
+				Name:        t.Name,
+				DisplayName: t.DisplayName,
 			}
-			tb.BillingYen += report.BillingYen
+			tenantDB, err := connectToTenantDB(t.ID)
+			if err != nil {
+				return fmt.Errorf("failed to connectToTenantDB: %w", err)
+			}
+			defer tenantDB.Close()
+			cs := []CompetitionRow{}
+			if err := tenantDB.SelectContext(
+				ctx,
+				&cs,
+				"SELECT * FROM competition WHERE tenant_id=?",
+				t.ID,
+			); err != nil {
+				return fmt.Errorf("failed to Select competition: %w", err)
+			}
+			for _, comp := range cs {
+				report, err := billingReportByCompetition(ctx, tenantDB, t.ID, comp.ID)
+				if err != nil {
+					return fmt.Errorf("failed to billingReportByCompetition: %w", err)
+				}
+				tb.BillingYen += report.BillingYen
+			}
+			tenantBillings = append(tenantBillings, tb)
+			return nil
+		}(t)
+		if err != nil {
+			return err
 		}
-		tenantBillings = append(tenantBillings, tb)
 		if len(tenantBillings) >= 10 {
 			break
 		}
