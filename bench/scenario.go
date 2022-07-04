@@ -231,9 +231,6 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 		case <-ctx.Done():
 			end = true
 		case w := <-sc.WorkerCh: // workerを起動する
-			if w.String() != "BillingValidateWorker" {
-				continue
-			}
 			wg.Add(1)
 			sc.CountWorker(w.String())
 			go func(w Worker) {

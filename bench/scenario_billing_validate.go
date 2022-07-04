@@ -9,7 +9,6 @@ import (
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
 	"github.com/isucon/isucon12-qualify/data"
-	"github.com/k0kubun/pp/v3"
 )
 
 type billingValidateWorker struct {
@@ -220,7 +219,6 @@ func (sc *Scenario) BillingValidate(ctx context.Context, step *isucandar.Benchma
 			}
 
 			report := r.Data.Reports[0]
-			pp.Println(report)
 			if comp.ID != report.CompetitionID {
 				return fmt.Errorf("対象の大会のIDが違います (want: %s, got: %s)", comp.ID, report.CompetitionID)
 			}
