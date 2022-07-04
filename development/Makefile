@@ -20,8 +20,8 @@ run-bench-noload:
 	docker compose -f docker-compose-common.yml exec bench ./run_local.sh -prepare-only
 
 run-bench-ci:
-	timeout 60 ./wait-for http://localhost:3000/
-	make init-mysql
+	timeout 60 ./wait-for mysql
+	timeout 60 ./wait-for app
 	docker compose -f docker-compose-common.yml exec bench make ci-with-comment
 
 ../initial_data.tar.gz:
