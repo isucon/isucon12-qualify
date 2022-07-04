@@ -54,20 +54,18 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 
 	var competitions []isuports.CompetitionDetail
 	for {
-		{
-			res, err := GetPlayerCompetitionsAction(ctx, playerAg)
-			v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPICompetitions) error {
-					competitions = r.Data.Competitions
-					return nil
-				}),
-			)
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
-			} else {
-				sc.AddErrorCount()
-				return v
-			}
+		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
+		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitions) error {
+				competitions = r.Data.Competitions
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
 		}
 
 		// NOTE: worker発火直後はcompetitionsが無いので登録されるまで待つ
@@ -123,11 +121,10 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 				sc.AddErrorCount()
 				return v
 			}
+			sleepms := rand.Intn(5000)
+			SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 		}
 	}
-
-	sleepms := 1000 + rand.Intn(1000)
-	SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 
 	return nil
 }
