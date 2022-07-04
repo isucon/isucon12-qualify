@@ -1,0 +1,24 @@
+name: Sync to webapp diff branch for porting
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'webapp/go/isuports.go'
+      - 'webapp/go/sqltrace.go'
+      - 'webapp/go/cmd/isuports/main.go'
+
+jobs:
+  sync:
+    name: checkout
+    runs-on: [self-hosted, core16]
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - name: checkout and push from main
+      run: |
+        git checkout do-not-merge/diff-webapp6
+        git checkout main webapp/go/isuports.go webapp/go/sqltrace.go webapp/go/cmd/isuports/main.go
+        git push origin do-not-merge/diff-webapp6
