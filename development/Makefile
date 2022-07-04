@@ -21,6 +21,7 @@ run-bench-noload:
 
 run-bench-ci:
 	timeout 60 ./wait-for mysql
+	make init-mysql
 	timeout 60 ./wait-for app
 	docker compose -f docker-compose-common.yml exec bench make ci-with-comment
 
