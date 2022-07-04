@@ -11,7 +11,7 @@ on:
 jobs:
   sync:
     name: checkout
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, core16]
     steps:
     - name: Check out code
       uses: actions/checkout@v3
