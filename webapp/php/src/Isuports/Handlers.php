@@ -13,7 +13,6 @@ use PDO;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use RuntimeException;
-use Slim\Exception\HttpInternalServerErrorException;
 use Slim\Exception\HttpUnauthorizedException;
 use UnexpectedValueException;
 
@@ -342,10 +341,9 @@ final class Handlers
         try {
             $tenant = $this->retrieveTenantRowFromHeader($request);
         } catch (RuntimeException $e) {
-            throw new HttpInternalServerErrorException(
-                $request,
+            throw new RuntimeException(
                 sprintf('error retrieveTenantRowFromHeader: %s', $e->getMessage()),
-                $e,
+                previous: $e,
             );
         }
         $td = new TenantDetail(
@@ -366,10 +364,9 @@ final class Handlers
                 ),
             ));
         } catch (RuntimeException $e) {
-            throw new HttpInternalServerErrorException(
-                $request,
+            throw new RuntimeException(
                 sprintf('error parseViewer: %s', $e->getMessage()),
-                $e,
+                previous: $e,
             );
         }
 
@@ -388,20 +385,18 @@ final class Handlers
         try {
             $tenantDB = $this->connectToTenantDB($v->tenantID);
         } catch (RuntimeException $e) {
-            throw new HttpInternalServerErrorException(
-                $request,
+            throw new RuntimeException(
                 sprintf('error connectToTenantDB: %s', $e->getMessage()),
-                $e,
+                previous: $e,
             );
         }
 
         try {
             $p = $this->retrievePlayer($tenantDB, $v->playerID);
         } catch (RuntimeException $e) {
-            throw new HttpInternalServerErrorException(
-                $request,
+            throw new RuntimeException(
                 sprintf('error retrievePlayer: %s', $e->getMessage()),
-                $e,
+                previous: $e,
             );
         }
 
