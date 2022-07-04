@@ -21,6 +21,7 @@ const (
 	DefaultInitializeRequestTimeout = time.Second * 30
 	DefaultDuration                 = time.Minute
 	DefaultLoadType                 = bench.LoadTypeDefault
+	DefaultStrictPrepare            = true
 )
 
 func main() {
@@ -41,6 +42,7 @@ func main() {
 	flag.StringVar(&option.DataDir, "data-dir", "data", "Data directory")
 	flag.BoolVar(&option.Debug, "debug", false, "Debug mode")
 	flag.StringVar(&option.LoadType, "load-type", DefaultLoadType, fmt.Sprintf("load type [%s,%s] Default: %s", bench.LoadTypeDefault, bench.LoadTypeLight, DefaultLoadType))
+	flag.BoolVar(&option.StrictPrepare, "strict-prepare", DefaultStrictPrepare, "strict prepare mode. default: true")
 
 	// コマンドライン引数のパースを実行
 	// この時点で各フィールドに値が設定されます
@@ -103,6 +105,7 @@ func main() {
 	// スコア表示
 	scenario.PrintScenarioScoreMap()
 	scenario.PrintScenarioCount()
+	scenario.PrintWorkerCount()
 	score, addition, deduction := SumScore(result)
 	bench.ContestantLogger.Printf("SCORE: %d (+%d %d)", score, addition, -deduction)
 	br := AllTagBreakdown(result)

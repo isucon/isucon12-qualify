@@ -25,7 +25,7 @@ func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p 
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.AdminBillingScenario(ctx, step, scTag); err != nil {
 			sc.ScenarioError(scTag, err)
-			time.Sleep(SleepOnError)
+			SleepWithCtx(ctx, SleepOnError)
 		}
 	},
 		worker.WithInfinityLoop(),

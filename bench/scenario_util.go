@@ -1,6 +1,7 @@
 package bench
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -129,4 +130,13 @@ func (sc *Scenario) AddCriticalCount() {
 
 func (sc *Scenario) AddErrorCount() {
 	sc.ErrorCh <- struct{}{}
+}
+
+func SleepWithCtx(ctx context.Context, sleepTime time.Duration) {
+	tick := time.After(sleepTime)
+	select {
+	case <-ctx.Done():
+	case <-tick:
+	}
+	return
 }

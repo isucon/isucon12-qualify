@@ -13,6 +13,7 @@ import (
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/failure"
+	"github.com/k0kubun/pp/v3"
 )
 
 var (
@@ -49,7 +50,9 @@ type Scenario struct {
 
 	ScenarioScoreMap   sync.Map // map[string]*int64
 	ScenarioCountMap   map[ScenarioTag][]int
+	WorkerCountMap     map[string]int
 	ScenarioCountMutex sync.Mutex
+	WorkerCountMutex   sync.Mutex
 
 	InitialData        InitialDataRows
 	InitialDataTenant  InitialDataTenantMap
@@ -71,6 +74,9 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	sc.DisqualifiedPlayer = map[string]struct{}{}
 	sc.ScenarioCountMutex = sync.Mutex{}
 
+	sc.WorkerCountMap = make(map[string]int)
+	sc.WorkerCountMutex = sync.Mutex{}
+
 	sc.ScenarioScoreMap = sync.Map{}
 	sc.ScenarioCountMap = make(map[ScenarioTag][]int)
 	for _, key := range ScenarioTagList {
@@ -78,6 +84,10 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 		sc.ScenarioScoreMap.Store(string(key), &n)
 		sc.ScenarioCountMap[key] = []int{0, 0}
 	}
+
+	sc.WorkerCh = make(chan Worker, 10)
+	sc.CriticalErrorCh = make(chan struct{}, 10)
+	sc.ErrorCh = make(chan struct{}, 10)
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(sc.Option.TargetURL)
@@ -158,10 +168,6 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 	defer ContestantLogger.Println("負荷テストを終了します")
 	wg := &sync.WaitGroup{}
 
-	sc.WorkerCh = make(chan Worker, 10)
-	sc.CriticalErrorCh = make(chan struct{}, 10)
-	sc.ErrorCh = make(chan struct{}, 10)
-
 	// 最初に起動するシナリオ
 	// AdminBillingを見続けて新規テナントを追加する
 	{
@@ -201,8 +207,18 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 	}
 
 	// 破壊的な変更を許容するシナリオ
+	// TODO: 未完成
 	{
 		wkr, err := sc.PeacefulTenantScenarioWorker(step, 1)
+		if err != nil {
+			return err
+		}
+		sc.WorkerCh <- wkr
+	}
+
+	// Tenant Billingの整合性をチェックするシナリオ
+	{
+		wkr, err := sc.BillingValidateWorker(step, 1)
 		if err != nil {
 			return err
 		}
@@ -219,10 +235,11 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 			end = true
 		case w := <-sc.WorkerCh: // workerを起動する
 			wg.Add(1)
+			sc.CountWorker(w.String())
 			go func(w Worker) {
 				defer wg.Done()
 				wkr := w
-				AdminLogger.Printf("workerを増やします [%s]", wkr)
+				defer sc.CountdownWorker(ctx, wkr.String())
 				wkr.Process(ctx)
 			}(w)
 		case <-sc.ErrorCh:
@@ -232,14 +249,14 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 			criticalCount++
 		}
 
-		if 30 <= errorCount {
-			AdminLogger.Printf("エラーが30件を越えたので負荷テストを打ち切ります")
+		if ConstMaxError <= errorCount {
+			AdminLogger.Printf("エラーが%d件を越えたので負荷テストを打ち切ります", ConstMaxError)
 			cancel()
 			end = true
 		}
 
-		if 10 <= criticalCount {
-			AdminLogger.Printf("Criticalなエラーが10件を越えたので負荷テストを打ち切ります")
+		if ConstMaxCriticalError <= criticalCount {
+			AdminLogger.Printf("Criticalなエラーが%d件を越えたので負荷テストを打ち切ります", ConstMaxCriticalError)
 			cancel()
 			end = true
 		}
@@ -251,4 +268,28 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 	wg.Wait()
 
 	return nil
+}
+
+func (sc Scenario) CountWorker(name string) {
+	sc.WorkerCountMutex.Lock()
+	defer sc.WorkerCountMutex.Unlock()
+	if _, ok := sc.WorkerCountMap[name]; !ok {
+		sc.WorkerCountMap[name] = 0
+	}
+	sc.WorkerCountMap[name]++
+	AdminLogger.Printf("workerを増やします [%s](%d)", name, sc.WorkerCountMap[name])
+}
+
+func (sc Scenario) CountdownWorker(ctx context.Context, name string) {
+	// ctxが切られたら減算しない
+	if ctx.Err() != nil {
+		return
+	}
+	sc.WorkerCountMutex.Lock()
+	defer sc.WorkerCountMutex.Unlock()
+	sc.WorkerCountMap[name]--
+}
+
+func (sc *Scenario) PrintWorkerCount() {
+	AdminLogger.Printf("WorkerCount: %s", pp.Sprint(sc.WorkerCountMap))
 }

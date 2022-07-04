@@ -26,7 +26,7 @@ func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32,
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.PlayerScenario(ctx, step, scTag, tenantName, playerID); err != nil {
 			sc.ScenarioError(scTag, err)
-			time.Sleep(SleepOnError)
+			SleepWithCtx(ctx, SleepOnError)
 		}
 	},
 		// 無限回繰り返す
@@ -54,20 +54,18 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 
 	var competitions []isuports.CompetitionDetail
 	for {
-		{
-			res, err := GetPlayerCompetitionsAction(ctx, playerAg)
-			v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPICompetitions) error {
-					competitions = r.Data.Competitions
-					return nil
-				}),
-			)
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
-			} else {
-				sc.AddErrorCount()
-				return v
-			}
+		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
+		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitions) error {
+				competitions = r.Data.Competitions
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
 		}
 
 		// NOTE: worker発火直後はcompetitionsが無いので登録されるまで待つ
@@ -75,12 +73,11 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			break
 		}
 		sleepms := 500 + rand.Intn(500)
-		time.Sleep(time.Millisecond * time.Duration(sleepms))
+		SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 	}
 
-	// 大会を一つ選ぶ
-	loopCount := 10
-	for i := 0; i < loopCount; i++ {
+	for i := 0; i < ConstPlayerScenarioCompetitionLoopCount; i++ {
+		// 大会を一つ選ぶ
 		compIndex := rand.Intn(len(competitions))
 		comp := competitions[compIndex]
 		playerIDs := []string{}
@@ -107,9 +104,8 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			continue
 		}
 
-		// 大会参加者をn人くらい見る
-		maxPlayerCount := 10
-		playerCount := rand.Intn(maxPlayerCount)
+		// 大会参加者を何人か見る
+		playerCount := rand.Intn(ConstPlayerScenarioMaxPlayerCount)
 		for j := 0; j < playerCount; j++ {
 			playerIndex := rand.Intn(len(playerIDs))
 			res, err := GetPlayerAction(ctx, playerIDs[playerIndex], playerAg)
@@ -125,11 +121,10 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 				sc.AddErrorCount()
 				return v
 			}
+			sleepms := rand.Intn(5000)
+			SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 		}
 	}
-
-	sleepms := 1000 + rand.Intn(1000)
-	time.Sleep(time.Millisecond * time.Duration(sleepms))
 
 	return nil
 }

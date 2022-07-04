@@ -17,7 +17,7 @@ run-bench:
 	docker compose -f docker-compose-common.yml exec bench ./run_local.sh
 
 run-bench-noload:
-	docker compose -f docker-compose-common.yml exec bench ./run_local.sh -prepare-only
+	docker compose -f docker-compose-common.yml exec bench ./run_local.sh -prepare-only -strict-prepare=false
 
 run-bench-ci:
 	timeout 60 ./wait-for mysql
