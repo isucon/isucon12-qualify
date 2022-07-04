@@ -7,6 +7,7 @@ on:
       - 'webapp/go/isuports.go'
       - 'webapp/go/sqltrace.go'
       - 'webapp/go/cmd/isuports/main.go'
+  workflow_dispatch:
 
 jobs:
   sync:
@@ -21,4 +22,5 @@ jobs:
       run: |
         git checkout do-not-merge/diff-webapp6
         git checkout main webapp/go/isuports.go webapp/go/sqltrace.go webapp/go/cmd/isuports/main.go
+        git commit -m 'backport from main'
         git push origin do-not-merge/diff-webapp6
