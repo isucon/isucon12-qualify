@@ -4,7 +4,6 @@ import "github.com/isucon/isucandar/score"
 
 // シナリオで発生するスコアのタグ
 const (
-	ScorePOSTOrganizerCompetitionResult  score.ScoreTag = "POST /api//organizercompetition/:competition_id/result"
 	ScorePOSTAdminTenantsAdd             score.ScoreTag = "POST /api/admin/tenants/add"
 	ScoreGETAdminTenantsBilling          score.ScoreTag = "GET /api/admin/tenants/billing"
 	ScoreGETOrganizerPlayersList         score.ScoreTag = "GET /api/organizer/players/list"
@@ -12,7 +11,7 @@ const (
 	ScorePOSTOrganizerPlayerDisqualified score.ScoreTag = "POST /api/organizer/player/:player_name/disqualified"
 	ScorePOSTOrganizerCompetitionsAdd    score.ScoreTag = "POST /api/organizer/competitions/add"
 	ScorePOSTOrganizerCompetitionFinish  score.ScoreTag = "POST /api/organizer/competition/:competition_id/finish"
-	ScorePOSTOrganizerCompetitionScore   score.ScoreTag = "POST /api/organizer/competition/:competition_id/score"
+	ScorePOSTOrganizerCompetitionResult  score.ScoreTag = "POST /api/organizer/competition/:competition_id/result"
 	ScoreGETOrganizerBilling             score.ScoreTag = "GET /api/organizer/billing"
 	ScoreGETOrganizerCompetitions        score.ScoreTag = "GET /api/organizer/competitions"
 	ScoreGETPlayerDetails                score.ScoreTag = "GET /api/player/player/:player_name"

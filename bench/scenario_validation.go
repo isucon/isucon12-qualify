@@ -638,8 +638,8 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			}
 		}
 		// スコアを101人登録
+		var rankingCheckScore ScoreRows
 		{
-			var rankingCheckScore ScoreRows
 			for i, playerID := range pIDs {
 				rankingCheckScore = append(rankingCheckScore, &ScoreRow{
 					PlayerID: playerID,
@@ -669,6 +669,22 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 				return &v
 			}
 		}
+
+		csv := rankingCheckScore.CSV()
+		res, err := PostOrganizerCompetitionResultAction(ctx, rankingCheckCompetitionID, []byte(csv), orgAg)
+		v := ValidateResponse("大会結果CSV入稿", step, res, err,
+			WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+				if r.Data.Rows != int64(len(rankingCheckScore)) {
+					return fmt.Errorf("大会結果CSV入稿レスポンスのRowsが異なります (want: %d, got: %d)", len(rankingCheckScore), r.Data.Rows)
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return &v
+		}
+
 		// 結果を引く
 		{
 			res, err := GetPlayerCompetitionRankingAction(ctx, rankingCheckCompetitionID, "", playerAg)

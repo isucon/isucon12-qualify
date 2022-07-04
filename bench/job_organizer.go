@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -82,6 +83,9 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
 				_ = r
+				if r.Data.Rows != int64(len(score)) {
+					return fmt.Errorf("入稿したCSVの行数が正しくありません %d != %d", r.Data.Rows, len(score))
+				}
 				return nil
 			}))
 		if v.IsEmpty() {

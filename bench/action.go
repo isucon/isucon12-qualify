@@ -112,7 +112,9 @@ func PostOrganizerCompetitionResultAction(ctx context.Context, competitionId str
 
 	mw.Close()
 
-	req, err := ag.POST("/api/organizer/competition/"+competitionId+"/result", body)
+	// TODO isuports側と合わせて対応
+	// req, err := ag.POST("/api/organizer/competition/"+competitionId+"/result", body)
+	req, err := ag.POST("/api/organizer/competition/"+competitionId+"/score", body)
 	if err != nil {
 		return nil, err
 	}
