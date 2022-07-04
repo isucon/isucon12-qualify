@@ -239,7 +239,7 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 			go func(w Worker) {
 				defer wg.Done()
 				wkr := w
-				defer sc.CountdownWorker(wkr.String())
+				defer sc.CountdownWorker(ctx, wkr.String())
 				wkr.Process(ctx)
 			}(w)
 		case <-sc.ErrorCh:
@@ -280,7 +280,11 @@ func (sc Scenario) CountWorker(name string) {
 	AdminLogger.Printf("workerを増やします [%s](%d)", name, sc.WorkerCountMap[name])
 }
 
-func (sc Scenario) CountdownWorker(name string) {
+func (sc Scenario) CountdownWorker(ctx context.Context, name string) {
+	// ctxが切られたら減算しない
+	if ctx.Err() != nil {
+		return
+	}
 	sc.WorkerCountMutex.Lock()
 	defer sc.WorkerCountMutex.Unlock()
 	sc.WorkerCountMap[name]--
