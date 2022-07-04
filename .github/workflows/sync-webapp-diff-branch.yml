@@ -22,5 +22,7 @@ jobs:
       run: |
         git checkout do-not-merge/diff-webapp6
         git checkout main webapp/go/isuports.go webapp/go/sqltrace.go webapp/go/cmd/isuports/main.go
+        git config user.name github-actions
+        git config user.email github-actions@github.com
         git commit -m 'backport from main'
         git push origin do-not-merge/diff-webapp6
