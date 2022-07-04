@@ -103,10 +103,9 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 
 	// プレイヤーのworker
 	{
-		// TODO: 要調整 10人くらいで試してみる
 		i := 0
 		for _, player := range players {
-			if 10 < i {
+			if ConstNewTenantScenarioPlayerWorkerNum < i {
 				break
 			}
 			i++
@@ -122,8 +121,9 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		orgAg:         orgAg,
 		scTag:         scTag,
 		tenantName:    tenant.Name,
-		scoreRepeat:   2,
-		scoreInterval: 1000, // 結果の検証時には3s、負荷かける用は1s
+		scoreRepeat:   1,
+		addScoreNum:   10,   // 1度のスコア入稿で増える数
+		scoreInterval: 3000, // 結果の検証時には3s、負荷かける用は1s
 	}
 
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
@@ -148,7 +148,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 				return v
 			}
 		}
-		orgJobConf.scoreRepeat++
+		orgJobConf.scoreRepeat += 3
 	}
 
 	return nil

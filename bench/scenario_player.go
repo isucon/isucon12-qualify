@@ -78,9 +78,8 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 	}
 
-	// 大会を一つ選ぶ
-	loopCount := 10
-	for i := 0; i < loopCount; i++ {
+	for i := 0; i < ConstPlayerScenarioCompetitionLoopCount; i++ {
+		// 大会を一つ選ぶ
 		compIndex := rand.Intn(len(competitions))
 		comp := competitions[compIndex]
 		playerIDs := []string{}
@@ -107,9 +106,8 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			continue
 		}
 
-		// 大会参加者をn人くらい見る
-		maxPlayerCount := 10
-		playerCount := rand.Intn(maxPlayerCount)
+		// 大会参加者を何人か見る
+		playerCount := rand.Intn(ConstPlayerScenarioMaxPlayerCount)
 		for j := 0; j < playerCount; j++ {
 			playerIndex := rand.Intn(len(playerIDs))
 			res, err := GetPlayerAction(ctx, playerIDs[playerIndex], playerAg)

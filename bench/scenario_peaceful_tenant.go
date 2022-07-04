@@ -46,7 +46,8 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 	sc.ScenarioStart(scTag)
 
 	// TODO: 破壊的なシナリオ用IDを考える とりあえず後ろ20件
-	index := int64((len(sc.InitialDataTenant) - 20) + rand.Intn(20))
+	n := ConstPeacefulTenantScenarioIDRange
+	index := int64((len(sc.InitialDataTenant) - n) + rand.Intn(n))
 	tenant := sc.InitialDataTenant[index]
 
 	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")

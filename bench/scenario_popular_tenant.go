@@ -71,7 +71,8 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 		orgAg:         orgAg,
 		scTag:         scTag,
 		tenantName:    tenantName,
-		scoreRepeat:   2,
+		scoreRepeat:   ConstPopularTenantScenarioScoreRepeat,
+		addScoreNum:   ConstPopularTenantScenarioAddScoreNum,
 		scoreInterval: 1000, // 結果の検証時には3s、負荷かける用は1s
 	}
 

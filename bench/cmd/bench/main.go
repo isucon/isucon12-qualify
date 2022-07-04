@@ -105,6 +105,7 @@ func main() {
 	// スコア表示
 	scenario.PrintScenarioScoreMap()
 	scenario.PrintScenarioCount()
+	scenario.PrintWorkerCount()
 	score, addition, deduction := SumScore(result)
 	bench.ContestantLogger.Printf("SCORE: %d (+%d %d)", score, addition, -deduction)
 	br := AllTagBreakdown(result)
