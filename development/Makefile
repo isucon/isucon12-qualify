@@ -22,6 +22,7 @@ run-bench-noload:
 run-bench-ci:
 	timeout 60 ./wait-for http://localhost:3000/
 	docker compose -f docker-compose-common.yml exec bench make ci-with-comment
+	docker compose -f docker-compose-common.yml logs
 
 ../initial_data.tar.gz:
 	gh release list | awk '/Latest/{print $$3}' | xargs gh release download --dir ..
