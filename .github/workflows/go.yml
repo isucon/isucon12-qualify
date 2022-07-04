@@ -34,6 +34,7 @@ jobs:
       - name: "setup containers"
         run: |
           make initial_data
+          make down/go
           make up/go OPT=-d
           make install_initial_data
           make init-mysql
