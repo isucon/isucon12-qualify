@@ -1,3 +1,5 @@
+export SHELL=/bin/bash
+
 bench: *.go go.* cmd/bench/*.go
 	go build -o bench cmd/bench/main.go
 
@@ -11,14 +13,13 @@ prepare: bench
 	./bench -duration 5s
 
 ci: bench
-	rm -f ci.log
-	./bench -target-addr 127.0.0.1:443 -target-url https://t.isucon.dev | tee ci.log
+	./run_ci.sh
 
 ci-with-comment: ci
 	./pr-comment ci.log
 
 ci-loadtype-light: bench
-	./bench -target-addr 127.0.0.1:443 -target-url https://t.isucon.dev -load-type light
+	./bench -target-url https://t.isucon.dev -load-type light
 
 .PHONY: clean
 clean:
