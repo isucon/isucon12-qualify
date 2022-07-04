@@ -11,7 +11,7 @@ const (
 	ScorePOSTOrganizerPlayerDisqualified score.ScoreTag = "POST /api/organizer/player/:player_name/disqualified"
 	ScorePOSTOrganizerCompetitionsAdd    score.ScoreTag = "POST /api/organizer/competitions/add"
 	ScorePOSTOrganizerCompetitionFinish  score.ScoreTag = "POST /api/organizer/competition/:competition_id/finish"
-	ScorePOSTOrganizerCompetitionResult  score.ScoreTag = "POST /api/organizer/competition/:competition_id/result"
+	ScorePOSTOrganizerCompetitionScore   score.ScoreTag = "POST /api/organizer/competition/:competition_id/score"
 	ScoreGETOrganizerBilling             score.ScoreTag = "GET /api/organizer/billing"
 	ScoreGETOrganizerCompetitions        score.ScoreTag = "GET /api/organizer/competitions"
 	ScoreGETPlayerDetails                score.ScoreTag = "GET /api/player/player/:player_name"
@@ -43,7 +43,7 @@ var ResultScoreMap = map[score.ScoreTag]int64{
 	ScorePOSTOrganizerPlayerDisqualified: 1,
 	ScorePOSTOrganizerCompetitionsAdd:    1,
 	ScorePOSTOrganizerCompetitionFinish:  1,
-	ScorePOSTOrganizerCompetitionResult:  1,
+	ScorePOSTOrganizerCompetitionScore:   1,
 	ScoreGETOrganizerBilling:             1,
 	ScoreGETOrganizerCompetitions:        1,
 	ScoreGETPlayerDetails:                1,
@@ -67,7 +67,7 @@ var (
 		ScorePOSTOrganizerPlayerDisqualified,
 		ScorePOSTOrganizerCompetitionsAdd,
 		ScorePOSTOrganizerCompetitionFinish,
-		ScorePOSTOrganizerCompetitionResult,
+		ScorePOSTOrganizerCompetitionScore,
 		ScoreGETOrganizerBilling,
 		ScoreGETPlayerDetails,
 		ScoreGETPlayerRanking,
