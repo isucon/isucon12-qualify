@@ -7,7 +7,9 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/isucon/isucandar/agent"
 )
@@ -31,7 +33,9 @@ func PostAdminTenantsAddAction(ctx context.Context, name, displayName string, ag
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	return ag.Do(ctx, req)
+	return RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 }
 
 func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantID string, ag *agent.Agent) (*http.Response, error) {
@@ -44,7 +48,9 @@ func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantID string, ag
 		return nil, err
 	}
 
-	return ag.Do(ctx, req)
+	return RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 }
 
 func GetOrganizerPlayersListAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
@@ -52,7 +58,9 @@ func GetOrganizerPlayersListAction(ctx context.Context, ag *agent.Agent) (*http.
 	if err != nil {
 		return nil, err
 	}
-	return ag.Do(ctx, req)
+	return RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 }
 
 func PostOrganizerPlayersAddAction(ctx context.Context, playerDisplayNames []string, ag *agent.Agent) (*http.Response, error) {
@@ -66,7 +74,9 @@ func PostOrganizerPlayersAddAction(ctx context.Context, playerDisplayNames []str
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	return ag.Do(ctx, req)
+	return RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 }
 
 func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, playerID string, ag *agent.Agent) (*http.Response, error) {
@@ -76,7 +86,9 @@ func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, playerID stri
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	return ag.Do(ctx, req)
+	return RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 }
 
 func PostOrganizerCompetitionsAddAction(ctx context.Context, title string, ag *agent.Agent) (*http.Response, error) {
@@ -88,7 +100,9 @@ func PostOrganizerCompetitionsAddAction(ctx context.Context, title string, ag *a
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	return ag.Do(ctx, req)
+	return RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 }
 
 func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId string, ag *agent.Agent) (*http.Response, error) {
@@ -97,7 +111,9 @@ func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionId str
 		return nil, err
 	}
 
-	return ag.Do(ctx, req)
+	return RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 }
 
 func PostOrganizerCompetitionScoreAction(ctx context.Context, competitionId string, csv []byte, ag *agent.Agent) (*http.Response, error) {
@@ -117,7 +133,9 @@ func PostOrganizerCompetitionScoreAction(ctx context.Context, competitionId stri
 		return nil, err
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
-	return ag.Do(ctx, req)
+	return RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 }
 
 func GetOrganizerBillingAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
@@ -126,7 +144,9 @@ func GetOrganizerBillingAction(ctx context.Context, ag *agent.Agent) (*http.Resp
 		return nil, err
 	}
 
-	return ag.Do(ctx, req)
+	return RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 }
 
 func GetOrganizerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Response, error) {
@@ -135,7 +155,9 @@ func GetOrganizerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http
 		return nil, err
 	}
 
-	return ag.Do(ctx, req)
+	return RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 }
 
 func GetPlayerAction(ctx context.Context, playerID string, ag *agent.Agent) (*http.Response, error) {
@@ -167,4 +189,43 @@ func GetPlayerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Re
 	}
 
 	return ag.Do(ctx, req)
+}
+
+// 429 Too Many Requestsの場合にretry after分待ってretryする
+func RequestWithRetry(ctx context.Context, fn func() (*http.Response, error)) (*http.Response, error) {
+	var res *http.Response
+	var err error
+
+	for {
+		res, err = fn()
+		if err != nil {
+			break
+		}
+
+		if res.StatusCode != http.StatusTooManyRequests {
+			break
+		}
+
+		ra := res.Header.Get("retry-after")
+
+		if len(ra) != 1 {
+			err = fmt.Errorf("invalid retry-after header")
+			break
+		}
+
+		var sec int
+		sec, err = strconv.Atoi(string(ra[0]))
+		if err != nil {
+			break
+		}
+
+		if sec < 0 {
+			err = fmt.Errorf("invalid retry-after header")
+			break
+		}
+
+		AdminLogger.Printf("RequestWithRetry retry: %ds %v", sec, res.Request.URL.Path)
+		SleepWithCtx(ctx, time.Second*time.Duration(sec))
+	}
+	return res, err
 }

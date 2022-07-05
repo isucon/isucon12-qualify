@@ -3,7 +3,6 @@ package bench
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -11,19 +10,19 @@ import (
 	"github.com/isucon/isucon12-qualify/data"
 )
 
-type billingValidateWorker struct {
+type tenantBillingValidateWorker struct {
 	worker *worker.Worker
 }
 
-func (billingValidateWorker) String() string {
-	return "BillingValidateWorker"
+func (tenantBillingValidateWorker) String() string {
+	return "TenantBillingValidateWorker"
 }
-func (w *billingValidateWorker) Process(ctx context.Context) { w.worker.Process(ctx) }
+func (w *tenantBillingValidateWorker) Process(ctx context.Context) { w.worker.Process(ctx) }
 
-func (sc *Scenario) BillingValidateWorker(step *isucandar.BenchmarkStep, p int32) (*billingValidateWorker, error) {
-	scTag := ScenarioTagBillingValidate
+func (sc *Scenario) TenantBillingValidateWorker(step *isucandar.BenchmarkStep, p int32) (*tenantBillingValidateWorker, error) {
+	scTag := ScenarioTagTenantBillingValidate
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		if err := sc.BillingValidate(ctx, step); err != nil {
+		if err := sc.TenantBillingValidate(ctx, step); err != nil {
 			sc.ScenarioError(scTag, err)
 			SleepWithCtx(ctx, SleepOnError)
 		}
@@ -36,15 +35,16 @@ func (sc *Scenario) BillingValidateWorker(step *isucandar.BenchmarkStep, p int32
 	}
 	w.SetParallelism(p)
 
-	return &billingValidateWorker{
+	return &tenantBillingValidateWorker{
 		worker: w,
 	}, nil
 }
 
-func (sc *Scenario) BillingValidate(ctx context.Context, step *isucandar.BenchmarkStep) error {
+// TODO: 1テナントで複数大会作成する
+func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.BenchmarkStep) error {
 	report := timeReporter("テナント請求検証シナリオ")
 	defer report()
-	scTag := ScenarioTagBillingValidate
+	scTag := ScenarioTagTenantBillingValidate
 	sc.ScenarioStart(scTag)
 
 	_, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
@@ -74,7 +74,7 @@ func (sc *Scenario) BillingValidate(ctx context.Context, step *isucandar.Benchma
 	}
 
 	// player作成
-	playerNum := ConstBillingValidateScenarioPlayerNum
+	playerNum := ConstTenantBillingValidateScenarioPlayerNum
 	players := make(map[string]*PlayerData, playerNum)
 	playerIDs := []string{}
 	playerDisplayNames := make([]string, playerNum)
@@ -127,8 +127,8 @@ func (sc *Scenario) BillingValidate(ctx context.Context, step *isucandar.Benchma
 
 	// Billingの内訳を作成
 	// [0 < scored < visitor < noScored < playerNum]
-	scoredIndex := randomRange(0, playerNum-2)
-	visitorsIndex := randomRange(scoredIndex, playerNum-1)
+	scoredIndex := randomRange([]int{0, playerNum - 1})
+	visitorsIndex := randomRange([]int{scoredIndex, playerNum - 0})
 	// noScoredIndex := playerNum
 
 	scoredPlayers := playerIDs[:scoredIndex]         // スコア登録者
@@ -209,6 +209,7 @@ func (sc *Scenario) BillingValidate(ctx context.Context, step *isucandar.Benchma
 		}
 	}
 
+	// 3秒の猶予がある
 	SleepWithCtx(ctx, time.Second*3)
 
 	res, err := GetOrganizerBillingAction(ctx, orgAg)
@@ -251,9 +252,4 @@ func (sc *Scenario) BillingValidate(ctx context.Context, step *isucandar.Benchma
 	}
 
 	return nil
-}
-
-// [start:end)
-func randomRange(start, end int) int {
-	return start + rand.Intn(end-start)
 }

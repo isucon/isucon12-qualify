@@ -16,7 +16,7 @@ var (
 	notExistName = "null-null"  // 存在しない想定のName(tenant用)
 )
 
-// ベンチ実行後の整合性検証シナリオ
+// ベンチ実行前の整合性検証シナリオ
 // isucandar.ValidateScenarioを満たすメソッド
 // isucandar.Benchmark の validation ステップで実行される
 func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
@@ -58,7 +58,6 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		if !v.IsEmpty() {
 			return v
 		}
-
 		// テナント追加 不正リクエストチェック
 		invalidNames := map[string]int{
 			"valid-tenantid":   http.StatusBadRequest, // 重複するname
@@ -170,6 +169,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 		// NOTE: 不正リクエストチェックなし
 	}
+
 	{
 		idx := disqualifiedPlayerIndex
 		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerIDs[idx], orgAg)
@@ -661,10 +661,37 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 			return &v
 		}
 	}
-	// 終了する
+
+	// 結果を引く
 	{
-		res, err := PostOrganizerCompetitionFinishAction(ctx, rankingCheckCompetitionID, orgAg)
-		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200))
+		res, err := GetPlayerCompetitionRankingAction(ctx, rankingCheckCompetitionID, "", playerAg)
+		v := ValidateResponse("大会内のランキング取得: ページングなし,上限100件", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				if 100 != len(r.Data.Ranks) {
+					return fmt.Errorf("大会のランキングの結果の最大は100件である必要があります (want: %d, got: %d)", 100, len(r.Data.Ranks))
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return &v
+		}
+	}
+
+	// 最後に入稿されたCSVのみが有効なことを確認
+	lastCheckScore := ScoreRows{}
+	{
+		csv := lastCheckScore.CSV()
+		res, err := PostOrganizerCompetitionScoreAction(ctx, rankingCheckCompetitionID, []byte(csv), orgAg)
+		v := ValidateResponse("大会結果CSV入稿: 空", step, res, err,
+			WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+				if r.Data.Rows != int64(len(lastCheckScore)) {
+					return fmt.Errorf("大会結果CSV入稿レスポンスのRowsが異なります (want: %d, got: %d)", len(lastCheckScore), r.Data.Rows)
+				}
+				return nil
+			}),
+		)
 		if !v.IsEmpty() {
 			return &v
 		}
@@ -673,10 +700,10 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	// 結果を引く
 	{
 		res, err := GetPlayerCompetitionRankingAction(ctx, rankingCheckCompetitionID, "", playerAg)
-		v := ValidateResponse("大会内のランキング取得: ページングなし", step, res, err, WithStatusCode(200),
+		v := ValidateResponse("大会内のランキング取得: 結果が空", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
-				if 100 != len(r.Data.Ranks) {
-					return fmt.Errorf("大会のランキングの結果の最大は100件である必要があります (want: %d, got: %d)", 100, len(r.Data.Ranks))
+				if len(lastCheckScore) != len(r.Data.Ranks) {
+					return fmt.Errorf("大会のランキングの結果が違います (want: %d, got: %d)", len(lastCheckScore), len(r.Data.Ranks))
 				}
 				return nil
 			}),

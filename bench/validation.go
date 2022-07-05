@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/isucon/isucandar"
@@ -28,9 +27,6 @@ type ValidationError struct {
 	Errors   []error
 	Title    string
 	Canceled bool
-
-	isTooManyRequest bool
-	retryAfter       int
 }
 
 // error インターフェースを満たす Error メソッド
@@ -80,9 +76,7 @@ func ReadResponse(res *http.Response) *Response {
 // 複数のバリデータ関数を受け取ってすべてでレスポンスを検証し、 ValidationError を返す
 func ValidateResponse(title string, step *isucandar.BenchmarkStep, res *http.Response, err error, validators ...ResponseValidator) ValidationError {
 	ve := ValidationError{
-		Title:            title,
-		isTooManyRequest: false,
-		retryAfter:       0,
+		Title: title,
 	}
 	defer func() {
 		ve.Add(step)
@@ -112,33 +106,10 @@ func ValidateResponse(title string, step *isucandar.BenchmarkStep, res *http.Res
 		}
 	}
 
-	// 429 Too Many Requestsならretryするために保存しておく
-	if response.Response.StatusCode == http.StatusTooManyRequests {
-		ve.isTooManyRequest = true
-		ra := response.Response.Header.Get("retry-after")
-		if len(ra) == 1 {
-			sec, err := strconv.Atoi(string(ra[0]))
-			if err != nil {
-				ve.Errors = append(ve.Errors, failure.NewError(ErrValidation, err))
-			} else {
-				ve.retryAfter = sec
-			}
-		}
-	}
-
 	if !ve.IsEmpty() {
 		ContestantLogger.Print(ve.Error())
 	}
 	return ve
-}
-
-// 429 too many requestから返ってきたValidationErrorなら詳細を返す
-// 使用例:
-// if ok, ra := v.IsTooManyRequest; ok {
-// 	sc.SleepWithCtx(ctx, ra*time.Second)
-// }
-func (ve ValidationError) IsTooManyRequest(ctx context.Context) (bool, int) {
-	return ve.isTooManyRequest, ve.retryAfter
 }
 
 func WithCacheControlPrivate() ResponseValidator {

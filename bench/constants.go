@@ -10,7 +10,7 @@ const (
 	ConstNewTenantScenarioPlayerWorkerNum = 10 // 作成するplayer worker数
 
 	// PopularTenantScenario
-	ConstPopularTenantScenarioScoreRepeat = 2
+	ConstPopularTenantScenarioScoreRepeat = 2   // 一周のスコア入稿回数
 	ConstPopularTenantScenarioAddScoreNum = 100 // 1度のスコア入稿で増える数
 
 	// PlayerScenario
@@ -18,8 +18,23 @@ const (
 	ConstPlayerScenarioMaxPlayerCount       = 10 // 大会1つあたり何人のプレイヤー詳細を見るか(最大値)
 
 	// PeacefulTenantScenario
-	ConstPeacefulTenantScenarioIDRange = 20 // 破壊的シナリオを許容するtenantID幅 後ろn件
 
-	// BillingValidateScenario
-	ConstBillingValidateScenarioPlayerNum = 100
+	// TenantBillingValidateScenario
+	ConstTenantBillingValidateScenarioPlayerNum = 100 // TenantBilling検証用テナントのplayer数
+
+	// AdminBillingValidateScenario
+	ConstAdminBillingValidateScenarioPlayerNum = 100 // TenantBilling検証用テナントのplayer数
+)
+
+var (
+	// NOTE: 初期データ範囲について(0-based)
+	//       0: 巨大テナント
+	//  1 ~ 39: 人気テナント
+	// 40 ~ 69: AdminBilling検証用テナント
+	// 70 ~ 99: 破壊的操作テナント
+	// 100: prepare validate tenant
+
+	ConstPopularTenantScenarioIDRange        = []int{0, 39}  // 利用する初期データのテナントID幅
+	ConstAdminBillingValidateScenarioIDRange = []int{40, 69} // 利用する初期データのテナントID幅
+	ConstPeacefulTenantScenarioIDRange       = []int{70, 99} // 利用する初期データのテナントID幅
 )
