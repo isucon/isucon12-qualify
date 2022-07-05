@@ -955,6 +955,11 @@ type ScoreHandlerResult struct {
 	Rows int64 `json:"rows"`
 }
 
+type CSVRow struct {
+	PlayerID string
+	Score int64
+}
+
 // テナント管理者向けAPI
 // POST /api/organizer/competition/:competition_id/score
 // 大会のスコアをCSVでアップロードする
@@ -1015,6 +1020,7 @@ func competitionScoreHandler(c echo.Context) error {
 
 	var rowNum int64
 	playerScoreRows := []PlayerScoreRow{}
+	csvRows := make([]CSVRow, 0, 100)
 	for {
 		rowNum++
 		row, err := r.Read()
@@ -1028,6 +1034,18 @@ func competitionScoreHandler(c echo.Context) error {
 			return fmt.Errorf("row must have two columns: %#v", row)
 		}
 		playerID, scoreStr := row[0], row[1]
+		var score int64
+		if score, err = strconv.ParseInt(scoreStr, 10, 64); err != nil {
+			return echo.NewHTTPError(
+				http.StatusBadRequest,
+				fmt.Sprintf("error strconv.ParseUint: scoreStr=%s, %s", scoreStr, err),
+			)
+		}
+		csvRows = append(csvRows, CSVRow{PlayerID: playerID, Score: score})
+	}
+	exists := make(map[string]struct{})
+	for i := len(csvRows)-1; 0 <= i; i-- {
+		playerID, score := csvRows[i].PlayerID, csvRows[i].Score
 		if _, err := retrievePlayer(ctx, tenantDB, playerID); err != nil {
 			// 存在しない参加者が含まれている
 			if errors.Is(err, sql.ErrNoRows) {
@@ -1038,13 +1056,11 @@ func competitionScoreHandler(c echo.Context) error {
 			}
 			return fmt.Errorf("error retrievePlayer: %w", err)
 		}
-		var score int64
-		if score, err = strconv.ParseInt(scoreStr, 10, 64); err != nil {
-			return echo.NewHTTPError(
-				http.StatusBadRequest,
-				fmt.Sprintf("error strconv.ParseUint: scoreStr=%s, %s", scoreStr, err),
-			)
+		if _, ok := exists[playerID]; ok {
+			// 一度見たplayerはskipできる
+			continue
 		}
+		exists[playerID] = struct{}{}
 		id, err := dispenseID(ctx)
 		if err != nil {
 			return fmt.Errorf("error dispenseID: %w", err)
@@ -1056,7 +1072,7 @@ func competitionScoreHandler(c echo.Context) error {
 			PlayerID:      playerID,
 			CompetitionID: competitionID,
 			Score:         score,
-			RowNum:        rowNum,
+			RowNum:        int64(i+1),
 			CreatedAt:     now,
 			UpdatedAt:     now,
 		})
@@ -1100,7 +1116,7 @@ func competitionScoreHandler(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, SuccessResult{
 		Success: true,
-		Data:    ScoreHandlerResult{Rows: int64(len(playerScoreRows))},
+		Data:    ScoreHandlerResult{Rows: int64(len(csvRows))},
 	})
 }
 
