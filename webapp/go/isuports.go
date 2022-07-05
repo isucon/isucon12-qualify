@@ -27,6 +27,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/kayac/go-katsubushi"
 )
 
 const (
@@ -47,6 +48,8 @@ var (
 	adminDB *sqlx.DB
 
 	sqliteDriverName = "sqlite3"
+
+	idg katsubushi.Generator
 )
 
 // 環境変数を取得する、なければデフォルト値を返す
@@ -99,28 +102,11 @@ func createTenantDB(id int64) error {
 
 // システム全体で一意なIDを生成する
 func dispenseID(ctx context.Context) (string, error) {
-	var id int64
-	var lastErr error
-	for i := 0; i < 100; i++ {
-		var ret sql.Result
-		ret, err := adminDB.ExecContext(ctx, "REPLACE INTO id_generator (stub) VALUES (?);", "a")
-		if err != nil {
-			if merr, ok := err.(*mysql.MySQLError); ok && merr.Number == 1213 { // deadlock
-				lastErr = fmt.Errorf("error REPLACE INTO id_generator: %w", err)
-				continue
-			}
-			return "", fmt.Errorf("error REPLACE INTO id_generator: %w", err)
-		}
-		id, err = ret.LastInsertId()
-		if err != nil {
-			return "", fmt.Errorf("error ret.LastInsertId: %w", err)
-		}
-		break
+	id, err := idg.NextID()
+	if err != nil {
+		return "", err
 	}
-	if id != 0 {
-		return strconv.FormatInt(id, 10), nil
-	}
-	return "", lastErr
+	return strconv.FormatUint(id, 10), nil
 }
 
 // Run は cmd/isuports/main.go から呼ばれるエントリーポイントです
@@ -128,6 +114,8 @@ func Run() {
 	e := echo.New()
 	e.Debug = true
 	e.Logger.SetLevel(log.DEBUG)
+
+	idg, _ = katsubushi.NewGenerator(1)
 
 	var (
 		sqlLogger io.Closer
