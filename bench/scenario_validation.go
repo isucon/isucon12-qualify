@@ -58,7 +58,6 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		if !v.IsEmpty() {
 			return v
 		}
-
 		// テナント追加 不正リクエストチェック
 		invalidNames := map[string]int{
 			"valid-tenantid":   http.StatusBadRequest, // 重複するname
