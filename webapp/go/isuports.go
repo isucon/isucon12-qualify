@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -49,7 +50,13 @@ var (
 	sqliteDriverName = "sqlite3"
 
 	idg katsubushi.Generator
+
+	billingCache sync.Map
 )
+
+func init() {
+	billingCache = sync.Map{}
+}
 
 // 環境変数を取得する、なければデフォルト値を返す
 func getEnv(key string, defaultValue string) string {
@@ -515,6 +522,10 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 			CompetitionTitle:  comp.Title,
 		}, nil
 	}
+	// finish済ならcacheを返す
+	if r, ok := billingCache.Load(competitonID); ok {
+		return r.(*BillingReport), nil
+	}
 
 	// ランキングにアクセスした参加者のIDを取得する
 	vhs := []VisitHistorySummaryRow{}
@@ -563,7 +574,7 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 			}
 		}
 	}
-	return &BillingReport{
+	rep := &BillingReport{
 		CompetitionID:     comp.ID,
 		CompetitionTitle:  comp.Title,
 		PlayerCount:       playerCount,
@@ -571,7 +582,9 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 		BillingPlayerYen:  100 * playerCount, // スコアを登録した参加者は100円
 		BillingVisitorYen: 10 * visitorCount, // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
 		BillingYen:        100*playerCount + 10*visitorCount,
-	}, nil
+	}
+	billingCache.Store(comp.ID, rep)
+	return rep, nil
 }
 
 type TenantWithBilling struct {
