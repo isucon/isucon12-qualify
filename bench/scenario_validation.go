@@ -16,7 +16,7 @@ var (
 	notExistName = "null-null"  // 存在しない想定のName(tenant用)
 )
 
-// ベンチ実行後の整合性検証シナリオ
+// ベンチ実行前の整合性検証シナリオ
 // isucandar.ValidateScenarioを満たすメソッド
 // isucandar.Benchmark の validation ステップで実行される
 func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
@@ -169,6 +169,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 		// NOTE: 不正リクエストチェックなし
 	}
+
 	{
 		idx := disqualifiedPlayerIndex
 		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerIDs[idx], orgAg)

@@ -41,6 +41,7 @@ func (sc *Scenario) BillingValidateWorker(step *isucandar.BenchmarkStep, p int32
 	}, nil
 }
 
+// TODO: 1テナントで複数大会作成する
 func (sc *Scenario) BillingValidate(ctx context.Context, step *isucandar.BenchmarkStep) error {
 	report := timeReporter("テナント請求検証シナリオ")
 	defer report()

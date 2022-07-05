@@ -234,6 +234,10 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 		case <-ctx.Done():
 			end = true
 		case w := <-sc.WorkerCh: // workerを起動する
+			// debug: 一つのworkerのみを立ち上げる
+			// if w.String() != "PeacefulTenantScenarioWorker" {
+			// 	continue
+			// }
 			wg.Add(1)
 			sc.CountWorker(w.String())
 			go func(w Worker) {
