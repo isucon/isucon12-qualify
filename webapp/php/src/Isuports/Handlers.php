@@ -16,6 +16,9 @@ use PDO;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use RuntimeException;
+use Slim\Exception\HttpBadRequestException;
+use Slim\Exception\HttpForbiddenException;
+use Slim\Exception\HttpNotFoundException;
 use Slim\Exception\HttpUnauthorizedException;
 use UnexpectedValueException;
 
@@ -54,8 +57,38 @@ final class Handlers
      */
     private function createTenantDB(int $id): void
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $p = $this->tenantDBPath($id);
+
+        $process = proc_open(
+            ['sh', '-c', sprintf('sqlite3 %s < %s', $p, self::TENANT_DB_SCHEMA_FILE_PATH)],
+            [
+                0 => ['pipe', 'r'],
+                1 => ['pipe', 'w'],
+                2 => ['pipe', 'w'],
+            ],
+            $pipes,
+        );
+
+        if ($process === false) {
+            throw new RuntimeException(
+                vsprintf(
+                    'failed to exec sqlite3 %s < %s: cannot open process',
+                    [$p, self::TENANT_DB_SCHEMA_FILE_PATH],
+                ),
+            );
+        }
+
+        fclose($pipes[0]);
+        $out = stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        if (proc_close($process) !== 0) {
+            throw new RuntimeException(
+                vsprintf(
+                    'failed to exec sqlite3 %s < %s, out=%s',
+                    [$p, self::TENANT_DB_SCHEMA_FILE_PATH, $out],
+                ),
+            );
+        }
     }
 
     /**
@@ -302,8 +335,80 @@ final class Handlers
      */
     public function tenantsAddHandler(Request $request, Response $response): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        try {
+            $v = $this->parseViewer($request);
+        } catch (Exception $e) {
+            throw new RuntimeException(
+                sprintf('error parseViewer: %s', $e->getMessage()),
+                previous: $e,
+            );
+        }
+
+        if ($v->tenantName !== 'admin') {
+            throw new HttpNotFoundException(
+                $request,
+                sprintf('%s has not this API', $v->tenantName),
+            );
+        }
+
+        if ($v->role !== self::ROLE_ADMIN) {
+            throw new HttpForbiddenException($request, 'admin role required');
+        }
+
+        $formValue = $request->getParsedBody();
+        $displayName = $formValue['display_name'] ?? '';
+        $name = $formValue['name'] ?? '';
+        if (!$this->validateTenantName($name)) {
+            throw new HttpBadRequestException($request, sprintf('invalid tenant name: %s', $name));
+        }
+
+        $now = time();
+        try {
+            $this->adminDB->prepare(
+                'INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)'
+            )->executeStatement([$name, $displayName, $now, $now]);
+        } catch (DBException $e) {
+            if ($e->getCode() === 1062) { // duplicate entry
+                throw new HttpBadRequestException($request, 'duplicate tenant');
+            }
+
+            throw new RuntimeException(
+                vsprintf(
+                    'error Insert tenant: name=%s, displayName=%s, createdAt=%d, updatedAt=%d, %s',
+                    [$name, $displayName, $now, $now, $e->getMessage()],
+                ),
+                previous: $e,
+            );
+        }
+
+        try {
+            $id = (int)$this->adminDB->lastInsertId();
+        } catch (DBException $e) {
+            throw new RuntimeException(sprintf('error get LastInsertId: %s', $e->getMessage()));
+        }
+
+        try {
+            $this->createTenantDB($id);
+        } catch (Exception $e) {
+            throw new RuntimeException(
+                sprintf(
+                    'error createTenantDB: id=%d name=%s %s',
+                    $id,
+                    $name,
+                    $e->getMessage()
+                ),
+                previous: $e,
+            );
+        }
+
+        $res = new TenantsAddHandlerResult(
+            tenant: new TenantDetail(
+                name: $name,
+                displayName: $displayName,
+            ),
+        );
+
+        return $this->jsonResponse($response, new SuccessResult(success: true, data: $res));
     }
 
     /**
