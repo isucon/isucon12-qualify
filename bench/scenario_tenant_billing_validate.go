@@ -209,6 +209,7 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 		}
 	}
 
+	// 3秒の猶予がある
 	SleepWithCtx(ctx, time.Second*3)
 
 	res, err := GetOrganizerBillingAction(ctx, orgAg)

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
 	isuports "github.com/isucon/isucon12-qualify/webapp/go"
@@ -54,7 +53,7 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 
 	// 初期データからテナント選ぶ
 	index := randomRange(ConstAdminBillingValidateScenarioIDRange)
-	// tenant := sc.InitialDataTenant[int64(index)]
+	tenant := sc.InitialDataTenant[int64(index)]
 
 	// indexが含まれる区間がとれるAdminBillingのbefore
 	var billingBeforeTenantID string
@@ -86,21 +85,46 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	}
 
 	// 大会を開催、Billing確定まで進める
-	// _, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.Name, "organizer")
-	// if err != nil {
-	// 	return err
-	// }
+	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")
+	if err != nil {
+		return err
+	}
+
+	conf := &OrganizerJobConfig{
+		orgAg:         orgAg,
+		scTag:         scTag,
+		tenantName:    tenant.TenantName,
+		scoreRepeat:   1,
+		scoreInterval: 0,
+		addScoreNum:   0,
+	}
+	if err := sc.OrganizerJob(ctx, step, conf); err != nil {
+		return err
+	}
 
 	// 反映まで3秒まで猶予がある
 	SleepWithCtx(ctx, time.Second*3)
 
 	// 反映確認
+
+	// チェック項目
+	// 合計金額が増えていること
+	// TODO: 必要に応じて追加, ただしOrganizerJobによって増えた金額は現状取れない
+	sumYen := int64(0)
+	for _, t := range billingResultTenants {
+		sumYen += t.BillingYen
+	}
+
 	{
 		res, err := GetAdminTenantsBillingAction(ctx, billingBeforeTenantID, adminAg)
 		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
-				if diff := cmp.Diff(billingResultTenants, r.Data.Tenants); diff != "" {
-					return fmt.Errorf("AdminBillingの結果が違います (-want +got): %s", diff)
+				resultYen := int64(0)
+				for _, t := range r.Data.Tenants {
+					resultYen += t.BillingYen
+				}
+				if resultYen <= sumYen {
+					return fmt.Errorf("全テナントの合計金額が正しくありません 金額は増えている必要があります (want: >%d, got:%d)", sumYen, resultYen)
 				}
 				return nil
 			}),
