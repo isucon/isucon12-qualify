@@ -206,7 +206,6 @@ func RequestWithRetry(ctx context.Context, fn func() (*http.Response, error)) (*
 			break
 		}
 
-		AdminLogger.Printf("RequestWithRetry retry: %v", res.Request.URL.Path)
 		ra := res.Header.Get("retry-after")
 
 		if len(ra) != 1 {
@@ -220,6 +219,12 @@ func RequestWithRetry(ctx context.Context, fn func() (*http.Response, error)) (*
 			break
 		}
 
+		if sec < 0 {
+			err = fmt.Errorf("invalid retry-after header")
+			break
+		}
+
+		AdminLogger.Printf("RequestWithRetry retry: %ds %v", sec, res.Request.URL.Path)
 		SleepWithCtx(ctx, time.Second*time.Duration(sec))
 	}
 	return res, err
