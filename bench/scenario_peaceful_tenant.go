@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -24,7 +25,7 @@ func (sc *Scenario) PeacefulTenantScenarioWorker(step *isucandar.BenchmarkStep, 
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.PeacefulTenantScenario(ctx, step, scTag); err != nil {
 			sc.ScenarioError(scTag, err)
-			time.Sleep(SleepOnError)
+			SleepWithCtx(ctx, SleepOnError)
 		}
 	},
 		// // 無限回繰り返す
@@ -45,8 +46,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 	defer report()
 	sc.ScenarioStart(scTag)
 
-	// TODO: 破壊的なシナリオ用IDを考える とりあえず後ろ20件
-	index := int64((len(sc.InitialDataTenant) - 20) + rand.Intn(20))
+	index := int64(randomRange(ConstPeacefulTenantScenarioIDRange))
 	tenant := sc.InitialDataTenant[index]
 
 	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")
@@ -61,7 +61,10 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 		v := ValidateResponse("テナントのプレイヤー一覧取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayersList) error {
 				for _, player := range r.Data.Players {
-					playerIDs = append(playerIDs, player.ID)
+					// 失格じゃないプレイヤーを列挙する
+					if !player.IsDisqualified {
+						playerIDs = append(playerIDs, player.ID)
+					}
 				}
 				return nil
 			}),
@@ -73,11 +76,45 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 			return v
 		}
 	}
-	playerID := playerIDs[rand.Intn(len(playerIDs))]
+	n := rand.Intn(len(playerIDs) - 1)
+	disqualifyPlayerID := playerIDs[n]
+	checkerPlayerID := playerIDs[n+1]
+
+	_, disqualifiedPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenant.TenantName, disqualifyPlayerID)
+	if err != nil {
+		return err
+	}
+	_, checkerPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenant.TenantName, checkerPlayerID)
+	if err != nil {
+		return err
+	}
+
+	// 失格前に失格にするプレイヤーを見に行く
+	{
+		res, err := GetPlayerAction(ctx, disqualifyPlayerID, checkerPlayerAg)
+		v := ValidateResponse("プレイヤーと戦績情報取得: 失格前", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayer) error {
+				if disqualifyPlayerID != r.Data.Player.ID {
+					return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", disqualifyPlayerID, r.Data.Player.ID)
+				}
+				if false != r.Data.Player.IsDisqualified {
+					return fmt.Errorf("失格状態が違います (want: %v, got: %v)", false, r.Data.Player.IsDisqualified)
+				}
+
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
 
 	// プレイヤーを1人失格にする
 	{
-		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerID, orgAg)
+		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, disqualifyPlayerID, orgAg)
 		v := ValidateResponse("プレイヤーを失格にする", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
 				_ = r
@@ -92,14 +129,10 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 		}
 	}
 
-	_, playerAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, playerID)
-	if err != nil {
-		return err
-	}
-
+	// 失格プレイヤーで情報を見に行く 403
 	{
-		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
-		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(403))
+		res, err := GetPlayerCompetitionsAction(ctx, disqualifiedPlayerAg)
+		v := ValidateResponse("テナント内の大会情報取得:  失格済みプレイヤーは403で弾く", step, res, err, WithStatusCode(403))
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
 		} else {
@@ -108,9 +141,32 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 		}
 	}
 
+	// 失格プレイヤーを見に行く IsDisqualifiedが更新されていることをチェック
+	{
+		res, err := GetPlayerAction(ctx, disqualifyPlayerID, checkerPlayerAg)
+		v := ValidateResponse("プレイヤーと戦績情報取得: 失格済みプレイヤーを見に行く", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayer) error {
+				if disqualifyPlayerID != r.Data.Player.ID {
+					return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", disqualifyPlayerID, r.Data.Player.ID)
+				}
+				if true != r.Data.Player.IsDisqualified {
+					return fmt.Errorf("失格状態が違います (want: %v, got: %v)", true, r.Data.Player.IsDisqualified)
+				}
+
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			sc.AddCriticalCount() // 反映されていないのはCritical
+			return v
+		}
+	}
+
 	// sleep 1.0s ~ 2.0s
 	sleepms := 1000 + rand.Intn(1000)
-	time.Sleep(time.Millisecond * time.Duration(sleepms))
+	SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 
 	return nil
 }
