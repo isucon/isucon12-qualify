@@ -750,30 +750,35 @@ func playersAddHandler(c echo.Context) error {
 	displayNames := params["display_name"]
 
 	pds := make([]PlayerDetail, 0, len(displayNames))
+	playerRows := make([]PlayerRow, 0, len(displayNames))
 	tx := tenantDB.MustBegin()
 	defer tx.Rollback()
+	now := time.Now().Unix()
 	for _, displayName := range displayNames {
 		id, err := dispenseID(ctx)
 		if err != nil {
 			return fmt.Errorf("error dispenseID: %w", err)
 		}
-
-		now := time.Now().Unix()
-		if _, err := tx.ExecContext(
-			ctx,
-			"INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-			id, v.tenantID, displayName, false, now, now,
-		); err != nil {
-			return fmt.Errorf(
-				"error Insert player at tenantDB: id=%s, displayName=%s, isDisqualified=%t, createdAt=%d, updatedAt=%d, %w",
-				id, displayName, false, now, now, err,
-			)
-		}
+		playerRows = append(playerRows, PlayerRow{
+			ID: id,
+			TenantID: v.tenantID,
+			DisplayName: displayName,
+			IsDisqualified: false,
+			CreatedAt: now,
+			UpdatedAt: now,
+		})
 		pds = append(pds, PlayerDetail{
 			ID:             id,
 			DisplayName:    displayName,
 			IsDisqualified: false,
 		})
+	}
+	if _, err := tx.NamedExecContext(
+		ctx,
+		"INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (:id, :tenant_id, :display_name, :is_disqualified, :created_at, :updated_at)",
+		playerRows,
+	); err != nil {
+			return fmt.Errorf("error Insert players %w", err)
 	}
 	tx.Commit()
 
@@ -1069,7 +1074,6 @@ func competitionScoreHandler(c echo.Context) error {
 				"error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNum=%d, createdAt=%d, updatedAt=%d, %w",
 				ps.ID, ps.TenantID, ps.PlayerID, ps.CompetitionID, ps.Score, ps.RowNum, ps.CreatedAt, ps.UpdatedAt, err,
 			)
-
 		}
 	}
 	tx.Commit()
