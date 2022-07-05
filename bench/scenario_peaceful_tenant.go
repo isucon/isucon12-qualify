@@ -46,9 +46,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 	defer report()
 	sc.ScenarioStart(scTag)
 
-	// TODO: 破壊的なシナリオ用IDを考える とりあえず後ろ20件
-	n := ConstPeacefulTenantScenarioIDRange
-	index := int64((len(sc.InitialDataTenant) - n) + rand.Intn(n))
+	index := int64(randomRange(ConstPeacefulTenantScenarioIDRange))
 	tenant := sc.InitialDataTenant[index]
 
 	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")
@@ -78,7 +76,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 			return v
 		}
 	}
-	n = rand.Intn(len(playerIDs) - 1)
+	n := rand.Intn(len(playerIDs) - 1)
 	disqualifyPlayerID := playerIDs[n]
 	checkerPlayerID := playerIDs[n+1]
 

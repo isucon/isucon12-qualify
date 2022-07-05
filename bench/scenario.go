@@ -218,7 +218,16 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 
 	// Tenant Billingの整合性をチェックするシナリオ
 	{
-		wkr, err := sc.BillingValidateWorker(step, 1)
+		wkr, err := sc.TenantBillingValidateWorker(step, 1)
+		if err != nil {
+			return err
+		}
+		sc.WorkerCh <- wkr
+	}
+
+	// Admin Billingの整合性をチェックするシナリオ
+	{
+		wkr, err := sc.AdminBillingValidateWorker(step, 1)
 		if err != nil {
 			return err
 		}
@@ -235,7 +244,7 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 			end = true
 		case w := <-sc.WorkerCh: // workerを起動する
 			// debug: 一つのworkerのみを立ち上げる
-			// if w.String() != "PeacefulTenantScenarioWorker" {
+			// if w.String() != "AdminBillingValidateWorker" {
 			// 	continue
 			// }
 			wg.Add(1)

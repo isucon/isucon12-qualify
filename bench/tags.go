@@ -32,7 +32,8 @@ const (
 	ScenarioTagOrganizerPopularTenant  ScenarioTag = "OrganizerPopularTenant"
 	ScenarioTagOrganizerPeacefulTenant ScenarioTag = "OrganizerPeacefulTenant"
 	ScenarioTagPlayer                  ScenarioTag = "Player"
-	ScenarioTagBillingValidate         ScenarioTag = "BillingValidate"
+	ScenarioTagTenantBillingValidate   ScenarioTag = "TenantBillingValidate"
+	ScenarioTagAdminBillingValidate    ScenarioTag = "AdminBillingValidate"
 )
 
 // ScoreTag毎の倍率
@@ -60,7 +61,8 @@ var (
 		ScenarioTagOrganizerPopularTenant,
 		ScenarioTagOrganizerPeacefulTenant,
 		ScenarioTagPlayer,
-		ScenarioTagBillingValidate,
+		ScenarioTagTenantBillingValidate,
+		ScenarioTagAdminBillingValidate,
 	}
 	ScoreTagList = []score.ScoreTag{
 		ScorePOSTAdminTenantsAdd,

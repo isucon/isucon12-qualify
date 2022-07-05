@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"sync/atomic"
 	"time"
@@ -139,4 +140,10 @@ func SleepWithCtx(ctx context.Context, sleepTime time.Duration) {
 	case <-tick:
 	}
 	return
+}
+
+// arg: []int{start, end}
+// NOTE: start,endを範囲に含む (start <= n <= end)
+func randomRange(rg []int) int {
+	return rg[0] + rand.Intn(rg[1]-rg[0]+1)
 }
