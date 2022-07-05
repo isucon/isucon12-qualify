@@ -571,8 +571,35 @@ final class Handlers
      */
     public function initializeHandler(Request $request, Response $response): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $process = proc_open(
+            [self::INITIALIZE_SCRIPT],
+            [
+                0 => ['pipe', 'r'],
+                1 => ['pipe', 'w'],
+                2 => ['pipe', 'w'],
+            ],
+            $pipes,
+        );
+
+        if ($process === false) {
+            throw new RuntimeException('error exec: cannot open process');
+        }
+
+        fclose($pipes[0]);
+        $out = stream_get_contents($pipes[1]);
+        fclose($pipes[1]);
+        if (proc_close($process) !== 0) {
+            throw new RuntimeException(sprintf('error exec: %s', $out));
+        }
+
+        $res = new InitializeHandlerResult(
+            lang: 'php',
+            // 頑張ったポイントやこだわりポイントがあれば書いてください
+            // 競技中の最後に計測したものを参照して、講評記事などで使わせていただきます
+            appeal: '',
+        );
+
+        return $this->jsonResponse($response, new SuccessResult(success: true, data: $res));
     }
 
     /**
