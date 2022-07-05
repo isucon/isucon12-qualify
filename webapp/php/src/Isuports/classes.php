@@ -63,11 +63,11 @@ final class Viewer
 final class TenantRow
 {
     public function __construct(
-        public int $id,
         public string $name,
         public string $displayName,
-        public int $createdAt,
-        public int $updatedAt,
+        public int $id = 0,
+        public int $createdAt = 0,
+        public int $updatedAt = 0,
     ) {
     }
 

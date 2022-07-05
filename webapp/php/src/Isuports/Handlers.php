@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Isuports;
 
-use JsonSerializable;
 use Doctrine\DBAL\Configuration;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception as DBException;
+use Exception;
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
+use JsonSerializable;
 use PDO;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -20,6 +23,7 @@ final class Handlers
 {
     private const TENANT_DB_SCHEMA_FILE_PATH = __DIR__ . '/../../../sql/tenant/10_schema.sql';
     private const INITIALIZE_SCRIPT = __DIR__ . '/../../../sql/init.sh';
+    private const COOKIE_NAME = 'isuports_session';
 
     private const ROLE_ADMIN = 'admin';
     private const ROLE_ORGANIZER = 'organizer';
@@ -92,14 +96,130 @@ final class Handlers
      */
     private function parseViewer(Request $request): Viewer
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $tokenStr = $request->getCookieParams()[self::COOKIE_NAME] ?? '';
+        if ($tokenStr === '') {
+            throw new HttpUnauthorizedException($request, sprintf('cookie %s is not found', self::COOKIE_NAME));
+        }
+
+        $keyFilename = getenv('ISUCON_JWT_KEY_FILE') ?: __DIR__ . '/../../../go/public.pem';
+        $keysrc = file_get_contents($keyFilename);
+        if ($keysrc === false) {
+            throw new RuntimeException(sprintf('error file_get_contents: keyFilename=%s', $keyFilename));
+        }
+
+        $key = new Key($keysrc, 'RS256');
+
+        try {
+            $token = JWT::decode($tokenStr, $key);
+        } catch (UnexpectedValueException $e) {
+            throw new HttpUnauthorizedException($request, $e->getMessage());
+        } catch (Exception $e) {
+            throw new RuntimeException(sprintf('failed to parse token: %s', $e->getMessage()), previous: $e);
+        }
+
+        if ($token->sub == '') {
+            throw new HttpUnauthorizedException(
+                $request,
+                sprintf('invalid token: subject is not found in token: %s', $tokenStr),
+            );
+        }
+
+        if (!property_exists($token, 'role')) {
+            throw new HttpUnauthorizedException(
+                $request,
+                sprintf('invalid token: role is not found in token: %s', $tokenStr),
+            );
+        }
+
+        /** @var string $role */
+        $role = match ($token->role) {
+            self::ROLE_ADMIN, self::ROLE_ORGANIZER, self::ROLE_PLAYER => $token->role,
+            default => new HttpUnauthorizedException(
+                $request,
+                sprintf('invalid token: %s is invalid role: %s', $token->role, $tokenStr),
+            ),
+        };
+
+        /** @var list<string> $aud */
+        $aud = $token->aud;
+        if (count($aud) !== 1) {
+            throw new HttpUnauthorizedException(
+                $request,
+                sprintf('invalid token: aud field is few or too much: %s', $tokenStr),
+            );
+        }
+
+        try {
+            $tenant = $this->retrieveTenantRowFromHeader($request);
+        } catch (Exception $e) {
+            throw new RuntimeException(
+                sprintf('error retrieveTenantRowFromHeader at parseViewer: %s', $e->getMessage()),
+                previous: $e,
+            );
+        }
+
+        if (is_null($tenant)) {
+            throw new HttpUnauthorizedException($request, 'tenant not found');
+        }
+
+        if ($tenant->name === 'admin' && $role !== self::ROLE_ADMIN) {
+            throw new HttpUnauthorizedException($request, 'tenant not found');
+        }
+
+        if ($tenant->name !== $aud[0]) {
+            throw new HttpUnauthorizedException(
+                $request,
+                sprintf(
+                    'invalid token: tenant name is not match with %s: %s',
+                    $request->getHeader('Host')[0],
+                    $tokenStr
+                ),
+            );
+        }
+
+        return new Viewer(
+            role: $role,
+            playerID: $token->sub,
+            tenantName: $tenant->name,
+            tenantID: $tenant->id,
+        );
     }
 
-    private function retrieveTenantRowFromHeader(Request $request): TenantRow
+    private function retrieveTenantRowFromHeader(Request $request): ?TenantRow
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        // JWTに入っているテナント名とHostヘッダのテナント名が一致しているか確認
+        $baseHost = getenv('ISUCON_BASE_HOSTNAME') ?: '.t.isucon.dev';
+        $tenantName = preg_replace(
+            '/' . preg_quote($baseHost) . '$/',
+            '',
+            $request->getHeader('Host')[0]
+        );
+
+        // SaaS管理者用ドメイン
+        if ($tenantName === 'admin') {
+            return new TenantRow(
+                name:'admin',
+                displayName: 'admin'
+            );
+        }
+
+        // テナントの存在確認
+        try {
+            $row = $this->adminDB->prepare('SELECT * FROM tenant WHERE name = ?')
+                ->executeQuery([$tenantName])
+                ->fetchAssociative();
+        } catch (DBException $e) {
+            throw new RuntimeException(
+                sprintf('failed to Select tenant: name=%s, %s', $tenantName, $e->getMessage()),
+                previous: $e,
+            );
+        }
+
+        if ($row === false) {
+            return null;
+        }
+
+        return TenantRow::fromDB($row);
     }
 
     /**
@@ -109,8 +229,22 @@ final class Handlers
      */
     private function retrievePlayer(Connection $tenantDB, string $id): ?PlayerRow
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        try {
+            $row = $tenantDB->prepare('SELECT * FROM player WHERE id = ?')
+                ->executeQuery([$id])
+                ->fetchAssociative();
+        } catch (DBException $e) {
+            throw new RuntimeException(
+                sprintf('error Select player: id=%s, %s', $id, $e->getMessage()),
+                previous: $e,
+            );
+        }
+
+        if ($row === false) {
+            return null;
+        }
+
+        return PlayerRow::fromDB($row);
     }
 
     /**
@@ -399,6 +533,8 @@ final class Handlers
                 previous: $e,
             );
         }
+
+        $tenantDB->close();
 
         if (is_null($p)) {
             return $this->jsonResponse($response, new SuccessResult(
