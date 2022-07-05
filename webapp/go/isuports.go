@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
@@ -721,10 +720,6 @@ type PlayersListHandlerResult struct {
 // GET /api/organizer/players
 // 参加者一覧を返す
 func playersListHandler(c echo.Context) error {
-	if rand.Intn(2) == 0 { // DEBUG: 50%の確率で429を返す
-		c.Response().Header().Set("Retry-After", "1")
-		return echo.NewHTTPError(http.StatusTooManyRequests, "debug too many requests")
-	}
 	ctx := context.Background()
 	v, err := parseViewer(c)
 	if err != nil {
