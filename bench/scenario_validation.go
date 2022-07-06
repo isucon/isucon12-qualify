@@ -591,6 +591,58 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 
+	// テナント内の大会毎のBillingが正しいことを確認
+	{
+		checkTenantCursor := int64(50) // ID=50のテナントでチェック
+		initDataTenant := sc.InitialDataTenant[checkTenantCursor]
+		_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, initDataTenant.TenantName, "organizer")
+		if err != nil {
+			return err
+		}
+		res, err := GetOrganizerBillingAction(ctx, orgAg)
+		v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIBilling) error {
+				if len(initDataTenant.Competitions) != len(r.Data.Reports) {
+					return fmt.Errorf("請求レポートの数が違います (want: %d, got: %d)", len(initDataTenant.Competitions), len(r.Data.Reports))
+				}
+				reportCompMap := map[string]isuports.BillingReport{}
+				for _, r := range r.Data.Reports {
+					reportCompMap[r.CompetitionID] = r
+				}
+				for _, comp := range initDataTenant.Competitions {
+					reportComp, ok := reportCompMap[comp.ID]
+					if !ok {
+						return fmt.Errorf("対象の大会がありません (want: %v)", comp.ID)
+					}
+					// score登録者 rankingアクセスあり: 100 yen x 1 player
+					// score未登録者 rankingアクセスあり:  10 yen x 1 player
+					// if r.Data.Reports[0].PlayerCount != int64(len(score)) {
+					// 	return fmt.Errorf("大会の参加者数が違います competitionID: %s (want: %d, got: %d)", competitionID, len(score), r.Data.Reports[0].PlayerCount)
+					// }
+					// if r.Data.Reports[0].VisitorCount != 1 {
+					// 	return fmt.Errorf("大会の閲覧者数が違います competitionID: %s (want: %d, got: %d)", competitionID, 1, r.Data.Reports[0].VisitorCount)
+					// }
+					// if r.Data.Reports[0].BillingPlayerYen != int64(len(score)*100) {
+					// 	return fmt.Errorf("大会の請求金額内訳(参加者分)が違います competitionID: %s (want: %d, got: %d)", competitionID, 100, r.Data.Reports[0].BillingPlayerYen)
+					// }
+					// if r.Data.Reports[0].BillingVisitorYen != 10 {
+					// 	return fmt.Errorf("大会の請求金額内訳(閲覧者)が違います competitionID: %s (want: %d, got: %d)", competitionID, 10, r.Data.Reports[0].BillingVisitorYen)
+					// }
+					if comp.Billing != reportComp.BillingYen {
+						return fmt.Errorf("大会の請求金額合計が違います competitionID: %v (want: %v, got: %v)", comp.ID, comp.Billing, reportComp.BillingYen)
+					}
+					AdminLogger.Printf("success: %v", comp)
+				}
+
+				return nil
+			}),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
+		}
+		// NOTE: 不正リクエストチェックなし
+	}
+
 	// 不正リクエスト 無効なJWT
 	// exp切れ
 	{
