@@ -53,10 +53,22 @@ var (
 
 	billingCache sync.Map
 	tenantDBCache sync.Map
+	jwtKey interface{}
 )
 
 func init() {
 	billingCache = sync.Map{}
+
+	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./public.pem")
+	keysrc, err := os.ReadFile(keyFilename)
+	if err != nil {
+		panic(err)
+	}
+	key, _, err := jwk.DecodePEM(keysrc)
+	if err != nil {
+		panic(err)
+	}
+	jwtKey = key
 }
 
 // 環境変数を取得する、なければデフォルト値を返す
@@ -243,19 +255,9 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 	}
 	tokenStr := cookie.Value
 
-	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./public.pem")
-	keysrc, err := os.ReadFile(keyFilename)
-	if err != nil {
-		return nil, fmt.Errorf("error os.ReadFile: keyFilename=%s: %w", keyFilename, err)
-	}
-	key, _, err := jwk.DecodePEM(keysrc)
-	if err != nil {
-		return nil, fmt.Errorf("error jwk.DecodePEM: %w", err)
-	}
-
 	token, err := jwt.Parse(
 		[]byte(tokenStr),
-		jwt.WithKey(jwa.RS256, key),
+		jwt.WithKey(jwa.RS256, jwtKey),
 	)
 	if err != nil {
 		if jwt.IsValidationError(err) {
