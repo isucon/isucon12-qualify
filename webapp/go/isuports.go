@@ -1320,9 +1320,10 @@ func playerHandler(c echo.Context) error {
 	); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("error Select competition: %w", err)
 	}
-
+	comps := make(map[string]CompetitionRow, len(cs))
 	pss := make([]PlayerScoreRow, 0, len(cs))
 	for _, c := range cs {
+		comps[c.ID] = c
 		ps := PlayerScoreRow{}
 		if err := tenantDB.GetContext(
 			ctx,
@@ -1344,12 +1345,8 @@ func playerHandler(c echo.Context) error {
 
 	psds := make([]PlayerScoreDetail, 0, len(pss))
 	for _, ps := range pss {
-		comp, err := retrieveCompetition(ctx, tenantDB, ps.CompetitionID)
-		if err != nil {
-			return fmt.Errorf("error retrieveCompetition: %w", err)
-		}
 		psds = append(psds, PlayerScoreDetail{
-			CompetitionTitle: comp.Title,
+			CompetitionTitle: comps[ps.CompetitionID].Title,
 			Score:            ps.Score,
 		})
 	}
