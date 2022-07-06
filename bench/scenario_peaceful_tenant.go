@@ -93,7 +93,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 		}
 	}
 
-	_, playerAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, playerID)
+	_, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenant.TenantName, playerID)
 	if err != nil {
 		return err
 	}
