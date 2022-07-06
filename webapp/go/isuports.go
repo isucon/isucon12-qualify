@@ -768,7 +768,7 @@ func playersAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error c.FormParams: %w", err)
 	}
-	displayNames := params["display_name"]
+	displayNames := params["display_name[]"]
 
 	pds := make([]PlayerDetail, 0, len(displayNames))
 	playerRows := make([]PlayerRow, 0, len(displayNames))
