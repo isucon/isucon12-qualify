@@ -552,7 +552,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	{
 		// ページングで初期データ範囲のBillingが正しいか確認
-		checkTenantCursor := 50 // ID=40~49でチェック
+		checkTenantCursor := int64(randomRange([]int{20, 99})) // ID=2~99のどれかのテナントでチェック
 		res, err := GetAdminTenantsBillingAction(ctx, fmt.Sprintf("%d", checkTenantCursor), adminAg)
 		v := ValidateResponse("テナント別の請求ダッシュボード: 初期データチェック", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
@@ -593,7 +593,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	// テナント内の大会毎のBillingが正しいことを確認
 	{
-		checkTenantCursor := int64(50) // ID=50のテナントでチェック
+		checkTenantCursor := int64(randomRange([]int{2, 99})) // ID=2~99のどれかのテナントでチェック
 		initDataTenant := sc.InitialDataTenant[checkTenantCursor]
 		_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, initDataTenant.TenantName, "organizer")
 		if err != nil {
