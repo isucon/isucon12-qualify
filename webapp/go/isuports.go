@@ -57,6 +57,7 @@ var (
 	playerCache sync.Map
 	playerHandlerCache sync.Map
 	tenantCache sync.Map
+	viewerCache sync.Map
 	jwtKey interface{}
 )
 
@@ -83,6 +84,7 @@ func init() {
 	playerCache = sync.Map{}
 	playerHandlerCache = sync.Map{}
 	tenantCache = sync.Map{}
+	viewerCache = sync.Map{}
 
 	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./public.pem")
 	keysrc, err := os.ReadFile(keyFilename)
@@ -281,6 +283,9 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		)
 	}
 	tokenStr := cookie.Value
+	if _v, ok := viewerCache.Load(tokenStr); ok {
+		return _v.(*Viewer), nil
+	}
 
 	token, err := jwt.Parse(
 		[]byte(tokenStr),
@@ -348,6 +353,7 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		tenantName: tenant.Name,
 		tenantID:   tenant.ID,
 	}
+	viewerCache.Store(tokenStr, v)
 	return v, nil
 }
 
