@@ -53,11 +53,14 @@ var (
 
 	billingCache sync.Map
 	tenantDBCache sync.Map
+	playerCache sync.Map
 	jwtKey interface{}
 )
 
 func init() {
 	billingCache = sync.Map{}
+	tenantDBCache = sync.Map{}
+	playerCache = sync.Map{}
 
 	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./public.pem")
 	keysrc, err := os.ReadFile(keyFilename)
@@ -375,24 +378,44 @@ type PlayerRow struct {
 
 // 参加者を取得する
 func retrievePlayer(ctx context.Context, tenantDB dbOrTx, id string) (*PlayerRow, error) {
+	if _p, ok := playerCache.Load(id); ok {
+		return _p.(*PlayerRow), nil
+	}
 	var p PlayerRow
 	if err := tenantDB.GetContext(ctx, &p, "SELECT * FROM player WHERE id = ?", id); err != nil {
 		return nil, fmt.Errorf("error Select player: id=%s, %w", id, err)
 	}
+	playerCache.Store(id, &p)
 	return &p, nil
 }
 
 func retrievePlayers(ctx context.Context, tenantDB dbOrTx, ids []string) ([]*PlayerRow, error) {
-	var ps []*PlayerRow
+	var ps, newPs []*PlayerRow
 	if len(ids) == 0 {
 		return ps, nil
 	}
-	sql, params, err := sqlx.In("SELECT * FROM player WHERE id IN(?)", ids)
+	newIDs := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _p, ok := playerCache.Load(id); ok {
+			ps = append(ps, _p.(*PlayerRow))
+		} else {
+			newIDs = append(newIDs, id)
+		}
+	}
+	if len(newIDs) == 0 {
+		return ps, nil
+	}
+	sql, params, err := sqlx.In("SELECT * FROM player WHERE id IN(?)", newIDs)
 	if err != nil {
 		return nil, err
 	}
-	if err := tenantDB.SelectContext(ctx, &ps, sql, params...); err != nil {
+	if err := tenantDB.SelectContext(ctx, &newPs, sql, params...); err != nil {
 		return nil, fmt.Errorf("error Select players: id=%v %w", params, err)
+	}
+	for _, p := range newPs {
+		p := p
+		playerCache.Store(p.ID, p)
+		ps = append(ps, p)
 	}
 	return ps, nil
 }
@@ -885,6 +908,7 @@ func playerDisqualifiedHandler(c echo.Context) error {
 			true, now, playerID, err,
 		)
 	}
+	playerCache.Delete(playerID) // cache破棄
 	p, err := retrievePlayer(ctx, tenantDB, playerID)
 	if err != nil {
 		// 存在しないプレイヤー
