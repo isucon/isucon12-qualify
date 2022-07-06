@@ -564,15 +564,15 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 					// 初期データと照らし合わせてbillingが合っているか確認
 					index, err := strconv.ParseInt(tenant.ID, 10, 64)
 					if err != nil {
-						return fmt.Errorf("TenantIDの形が違います (got: %v)", tenant.ID)
+						return fmt.Errorf("TenantIDの形が違います tenantName:%v (got: %v)", tenant.Name, tenant.ID)
 					}
 					tenantIDs = append(tenantIDs, index)
 					initialTenant, ok := sc.InitialDataTenant[index]
 					if !ok {
-						return fmt.Errorf("初期データに存在しないTenantIDです (got: %v)", tenant.ID)
+						return fmt.Errorf("初期データに存在しないTenantIDです tenantName:%v (got: %v)", tenant.Name, tenant.ID)
 					}
 					if tenant.BillingYen != initialTenant.Billing {
-						return fmt.Errorf("Billingの結果が違います (want: %v got: %v)", initialTenant.Billing, tenant.BillingYen)
+						return fmt.Errorf("Billingの結果が違います tenantName:%v (want: %v got: %v)", tenant.Name, initialTenant.Billing, tenant.BillingYen)
 					}
 					AdminLogger.Printf("success, %v", tenant)
 				}
@@ -612,8 +612,9 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 				for _, comp := range initDataTenant.Competitions {
 					reportComp, ok := reportCompMap[comp.ID]
 					if !ok {
-						return fmt.Errorf("対象の大会がありません (want: %v)", comp.ID)
+						return fmt.Errorf("対象の大会がありません tenantName:%v (want: %v)", initDataTenant.TenantName, comp.ID)
 					}
+					// TODO: 対応するか悩み中 InitialDataの参加者数がわからない
 					// score登録者 rankingアクセスあり: 100 yen x 1 player
 					// score未登録者 rankingアクセスあり:  10 yen x 1 player
 					// if r.Data.Reports[0].PlayerCount != int64(len(score)) {
@@ -629,7 +630,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 					// 	return fmt.Errorf("大会の請求金額内訳(閲覧者)が違います competitionID: %s (want: %d, got: %d)", competitionID, 10, r.Data.Reports[0].BillingVisitorYen)
 					// }
 					if comp.Billing != reportComp.BillingYen {
-						return fmt.Errorf("大会の請求金額合計が違います competitionID: %v (want: %v, got: %v)", comp.ID, comp.Billing, reportComp.BillingYen)
+						return fmt.Errorf("大会の請求金額合計が違います tenantName:%v competitionID: %v (want: %v, got: %v)", initDataTenant.TenantName, comp.ID, comp.Billing, reportComp.BillingYen)
 					}
 					AdminLogger.Printf("success: %v", comp)
 				}
