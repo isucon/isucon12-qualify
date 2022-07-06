@@ -61,6 +61,12 @@ type BenchmarkerSource struct {
 type BenchmarkerTenantSource struct {
 	TenantID   int64  `json:"tenant_id"`
 	TenantName string `json:"tenant_name"`
+	BillingYen int64  `json:"billing_yen"`
+}
+
+type BenchmarkerTenantCompeittionSource struct {
+	ID         int64 `json:"id"`
+	BillingYen int64 `json:"billing_yen"`
 }
 
 func init() {
@@ -75,7 +81,7 @@ func Run(tenantsNum int) error {
 		var err error
 		hugeTenantScale, err = strconv.Atoi(v)
 		if err != nil {
-			return fmt.Errorf("error failed strconv.Atoi", err)
+			return fmt.Errorf("error failed strconv.Atoi: %s", err)
 		}
 	}
 
@@ -99,7 +105,7 @@ func Run(tenantsNum int) error {
 		tenant := CreateTenant(i == 0)
 		players := CreatePlayers(tenant)
 		competitions := CreateCompetitions(tenant)
-		playerScores, visitHistroies, b := CreatePlayerData(tenant, players, competitions)
+		playerScores, visitHistroies, billingYen, b := CreatePlayerData(tenant, players, competitions)
 		if err := storeTenant(tenant, players, competitions, playerScores); err != nil {
 			return err
 		}
@@ -111,6 +117,7 @@ func Run(tenantsNum int) error {
 		benchTenantSrcs = append(benchTenantSrcs, &BenchmarkerTenantSource{
 			TenantID:   tenant.ID,
 			TenantName: tenant.Name,
+			BillingYen: billingYen,
 		})
 	}
 	if err := storeMaxID(db); err != nil {
@@ -397,14 +404,24 @@ func CreateCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 	return &competition
 }
 
+func IsCompetitionFinished(row *isuports.CompetitionRow) bool {
+	return !row.FinishedAt.Valid
+}
+
 func CreatePlayerData(
 	tenant *isuports.TenantRow,
 	players []*isuports.PlayerRow,
 	competitions []*isuports.CompetitionRow,
-) ([]*isuports.PlayerScoreRow, []*isuports.VisitHistoryRow, []*BenchmarkerSource) {
+) (
+	[]*isuports.PlayerScoreRow,
+	[]*isuports.VisitHistoryRow,
+	int64, // 対象テナントにいるplayerに関連するBillingYen
+	[]*BenchmarkerSource,
+) {
 	scores := make([]*isuports.PlayerScoreRow, 0, len(players)*len(competitions))
 	visits := make([]*isuports.VisitHistoryRow, 0, len(players)*len(competitions)*visitsByCompetition)
 	bench := make([]*BenchmarkerSource, 0, len(players)*len(competitions))
+	billingYen := 0
 	for _, c := range competitions {
 		competitionScores := make([]*isuports.PlayerScoreRow, 0, len(players)*100)
 		for _, p := range players {
@@ -420,6 +437,7 @@ func CreatePlayerData(
 			}
 			created := fake.Int64Between(c.CreatedAt, end)
 			lastVisitedAt := fake.Int64Between(created, end)
+			yen := 0
 			for i := 0; i < fake.IntBetween(visitsByCompetition/10, visitsByCompetition); i++ {
 				visitedAt := fake.Int64Between(created, lastVisitedAt)
 				visits = append(visits, &isuports.VisitHistoryRow{
@@ -429,6 +447,7 @@ func CreatePlayerData(
 					CreatedAt:     visitedAt,
 					UpdatedAt:     visitedAt,
 				})
+				yen = 10 // visit_historyが存在するplayerなら10円
 			}
 			for i := 0; i < fake.IntBetween(scoresByCompetition/10, scoresByCompetition); i++ {
 				created := fake.Int64Between(c.CreatedAt, end)
@@ -441,6 +460,7 @@ func CreatePlayerData(
 					CreatedAt:     created,
 					UpdatedAt:     created,
 				})
+				yen = 100 // scoreが存在するplayerなら100円
 			}
 			bench = append(bench, &BenchmarkerSource{
 				TenantName:     tenant.Name,
@@ -449,6 +469,11 @@ func CreatePlayerData(
 				IsFinished:     c.FinishedAt.Valid,
 				IsDisqualified: p.IsDisqualified,
 			})
+
+			// 課金が発生するのは終了済みの大会のみ
+			if IsCompetitionFinished(c) {
+				billingYen += yen
+			}
 		}
 		sort.Slice(competitionScores, func(i, j int) bool {
 			return competitionScores[i].CreatedAt < competitionScores[j].CreatedAt
@@ -458,7 +483,8 @@ func CreatePlayerData(
 		}
 		scores = append(scores, competitionScores...)
 	}
-	return scores, visits, bench
+	log.Printf("tenant:%d billingYen:%d", tenant.ID, billingYen)
+	return scores, visits, int64(billingYen), bench
 }
 
 func CreateScore() int64 {
