@@ -13,6 +13,7 @@ import (
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/failure"
+	"github.com/k0kubun/pp/v3"
 )
 
 var (
@@ -49,13 +50,18 @@ type Scenario struct {
 
 	ScenarioScoreMap   sync.Map // map[string]*int64
 	ScenarioCountMap   map[ScenarioTag][]int
+	WorkerCountMap     map[string]int
 	ScenarioCountMutex sync.Mutex
+	WorkerCountMutex   sync.Mutex
 
 	InitialData        InitialDataRows
+	InitialDataTenant  InitialDataTenantMap
 	DisqualifiedPlayer map[string]struct{}
 	RawKey             *rsa.PrivateKey
 
-	WorkerCh chan Worker
+	WorkerCh        chan Worker
+	ErrorCh         chan struct{}
+	CriticalErrorCh chan struct{}
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -68,6 +74,9 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	sc.DisqualifiedPlayer = map[string]struct{}{}
 	sc.ScenarioCountMutex = sync.Mutex{}
 
+	sc.WorkerCountMap = make(map[string]int)
+	sc.WorkerCountMutex = sync.Mutex{}
+
 	sc.ScenarioScoreMap = sync.Map{}
 	sc.ScenarioCountMap = make(map[ScenarioTag][]int)
 	for _, key := range ScenarioTagList {
@@ -75,6 +84,10 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 		sc.ScenarioScoreMap.Store(string(key), &n)
 		sc.ScenarioCountMap[key] = []int{0, 0}
 	}
+
+	sc.WorkerCh = make(chan Worker, 10)
+	sc.CriticalErrorCh = make(chan struct{}, 10)
+	sc.ErrorCh = make(chan struct{}, 10)
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(sc.Option.TargetURL)
@@ -106,6 +119,10 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 		sc.InitialData, err = GetInitialData()
 		if err != nil {
 			return fmt.Errorf("初期データのロードに失敗しました %s", err)
+		}
+		sc.InitialDataTenant, err = GetInitialDataTenant()
+		if err != nil {
+			return fmt.Errorf("初期データ(テナント)のロードに失敗しました %s", err)
 		}
 
 		block, _ := pem.Decode([]byte(keysrc))
@@ -141,15 +158,15 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 // ベンチ本編
 // isucandar.LoadScenario を満たすメソッド
 // isucandar.Benchmark の Load ステップで実行される
-func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) error {
+func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error {
+	ctx, cancel := context.WithCancel(c)
+
 	if sc.Option.PrepareOnly {
 		return nil
 	}
 	ContestantLogger.Println("負荷テストを開始します")
 	defer ContestantLogger.Println("負荷テストを終了します")
 	wg := &sync.WaitGroup{}
-
-	sc.WorkerCh = make(chan Worker, 10)
 
 	// 最初に起動するシナリオ
 	// AdminBillingを見続けて新規テナントを追加する
@@ -170,52 +187,122 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		sc.WorkerCh <- wkr
 	}
 
-	// 軽いテナント
-	// TODO: deprecated
+	// 重いテナント(id=1)を見るworker
 	{
-		wkr, err := sc.ExistingTenantScenarioWorker(step, 1, false)
-		if err != nil {
-			return err
-		}
-		sc.WorkerCh <- wkr
-	}
-	// 重いテナント
-	// TODO: deprecated
-	{
-		wkr, err := sc.ExistingTenantScenarioWorker(step, 1, true)
+		wkr, err := sc.PopularTenantScenarioWorker(step, 1, true)
 		if err != nil {
 			return err
 		}
 		sc.WorkerCh <- wkr
 	}
 
-	// プレイヤー
-	// TODO: deprecated
+	// 軽いテナント(id!=1)を見るworker
+	// TODO: 現状増やすきっかけが無いので初期から並列数多くてもよいかも
 	{
-		wkr, err := sc.PlayerScenarioWorker(step, 1)
+		wkr, err := sc.PopularTenantScenarioWorker(step, 1, false)
 		if err != nil {
 			return err
 		}
 		sc.WorkerCh <- wkr
 	}
 
-	// workerを起動する
+	// 破壊的な変更を許容するシナリオ
+	// TODO: 未完成
+	{
+		wkr, err := sc.PeacefulTenantScenarioWorker(step, 1)
+		if err != nil {
+			return err
+		}
+		sc.WorkerCh <- wkr
+	}
+
+	// Tenant Billingの整合性をチェックするシナリオ
+	{
+		wkr, err := sc.TenantBillingValidateWorker(step, 1)
+		if err != nil {
+			return err
+		}
+		sc.WorkerCh <- wkr
+	}
+
+	// Admin Billingの整合性をチェックするシナリオ
+	{
+		wkr, err := sc.AdminBillingValidateWorker(step, 1)
+		if err != nil {
+			return err
+		}
+		sc.WorkerCh <- wkr
+	}
+
+	errorCount := 0
+	criticalCount := 0
+	end := false
+
 	for {
 		select {
 		case <-ctx.Done():
-			break
-		case w := <-sc.WorkerCh:
+			end = true
+		case w := <-sc.WorkerCh: // workerを起動する
+			// debug: 一つのworkerのみを立ち上げる
+			// if w.String() != "AdminBillingValidateWorker" {
+			// 	continue
+			// }
 			wg.Add(1)
+			sc.CountWorker(w.String())
 			go func(w Worker) {
 				defer wg.Done()
 				wkr := w
-				AdminLogger.Printf("workerを増やします (%s)", wkr)
+				defer sc.CountdownWorker(ctx, wkr.String())
 				wkr.Process(ctx)
 			}(w)
-			// TODO: エラー総数で打ち切りにする？専用のchannelで待ち受ける？5秒ごとにstep.Errorsを確認してもいいかも
+		case <-sc.ErrorCh:
+			errorCount++
+		case <-sc.CriticalErrorCh:
+			errorCount++
+			criticalCount++
+		}
+
+		if ConstMaxError <= errorCount {
+			AdminLogger.Printf("エラーが%d件を越えたので負荷テストを打ち切ります", ConstMaxError)
+			cancel()
+			end = true
+		}
+
+		if ConstMaxCriticalError <= criticalCount {
+			AdminLogger.Printf("Criticalなエラーが%d件を越えたので負荷テストを打ち切ります", ConstMaxCriticalError)
+			cancel()
+			end = true
+		}
+
+		if end {
+			break
 		}
 	}
 	wg.Wait()
 
 	return nil
+}
+
+func (sc Scenario) CountWorker(name string) {
+	sc.WorkerCountMutex.Lock()
+	defer sc.WorkerCountMutex.Unlock()
+	if _, ok := sc.WorkerCountMap[name]; !ok {
+		sc.WorkerCountMap[name] = 0
+	}
+	sc.WorkerCountMap[name]++
+	AdminLogger.Printf("workerを増やします [%s](%d)", name, sc.WorkerCountMap[name])
+}
+
+func (sc Scenario) CountdownWorker(ctx context.Context, name string) {
+	// ctxが切られたら減算しない
+	if ctx.Err() != nil {
+		return
+	}
+	sc.WorkerCountMutex.Lock()
+	defer sc.WorkerCountMutex.Unlock()
+	sc.WorkerCountMap[name]--
+}
+
+func (sc *Scenario) PrintWorkerCount() {
+	AdminLogger.Printf("WorkerCount: %s", pp.Sprint(sc.WorkerCountMap))
 }

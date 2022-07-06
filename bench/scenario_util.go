@@ -1,8 +1,10 @@
 package bench
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"sync/atomic"
 	"time"
@@ -121,4 +123,27 @@ func (sc *Scenario) GetAccountAndAgent(role, tenantName, playerID string) (*Acco
 		return ac, nil, err
 	}
 	return ac, agent, nil
+}
+
+func (sc *Scenario) AddCriticalCount() {
+	sc.CriticalErrorCh <- struct{}{}
+}
+
+func (sc *Scenario) AddErrorCount() {
+	sc.ErrorCh <- struct{}{}
+}
+
+func SleepWithCtx(ctx context.Context, sleepTime time.Duration) {
+	tick := time.After(sleepTime)
+	select {
+	case <-ctx.Done():
+	case <-tick:
+	}
+	return
+}
+
+// arg: []int{start, end}
+// NOTE: start,endを範囲に含む (start <= n <= end)
+func randomRange(rg []int) int {
+	return rg[0] + rand.Intn(rg[1]-rg[0]+1)
 }

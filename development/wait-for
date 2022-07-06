@@ -1,0 +1,26 @@
+#!/bin/bash
+
+set -u
+
+ping_command=""
+case $1 in
+	app)
+		ping_command="curl -s http://localhost:3000/"
+		;;
+	mysql)
+		ping_command="mysqladmin --host 127.0.0.1 --port 13306 -uroot -proot ping"
+		;;
+	*)
+		echo "Usage: $0 {app|mysql}"
+		exit 1
+		;;
+esac
+
+while sleep 1
+do
+	$ping_command
+	if [[ $? -eq 0 ]]; then
+		break
+	fi
+	echo -n .
+done

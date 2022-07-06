@@ -25,7 +25,7 @@ func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p 
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.AdminBillingScenario(ctx, step, scTag); err != nil {
 			sc.ScenarioError(scTag, err)
-			time.Sleep(SleepOnError)
+			SleepWithCtx(ctx, SleepOnError)
 		}
 	},
 		worker.WithInfinityLoop(),
@@ -73,9 +73,6 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 					completed = true
 					return nil
 				}
-				// for _, tenant := range r.Data.Tenants {
-				// 	AdminLogger.Printf("%s: %d yen", tenant.Name, tenant.BillingYen)
-				// }
 				beforeTenantID = r.Data.Tenants[len(r.Data.Tenants)-1].ID
 				return nil
 			}),
@@ -83,6 +80,7 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
 		} else {
+			sc.AddErrorCount()
 			return v
 		}
 		// id=1が重いので、light modeなら一回で終わる

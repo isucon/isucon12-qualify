@@ -75,8 +75,9 @@ func ReadResponse(res *http.Response) *Response {
 // レスポンスを検証する関数
 // 複数のバリデータ関数を受け取ってすべてでレスポンスを検証し、 ValidationError を返す
 func ValidateResponse(title string, step *isucandar.BenchmarkStep, res *http.Response, err error, validators ...ResponseValidator) ValidationError {
-	ve := ValidationError{}
-	ve.Title = title
+	ve := ValidationError{
+		Title: title,
+	}
 	defer func() {
 		ve.Add(step)
 	}()
@@ -104,6 +105,7 @@ func ValidateResponse(title string, step *isucandar.BenchmarkStep, res *http.Res
 			break // 前から順に検証、失敗したらそれ以上の検証はしない
 		}
 	}
+
 	if !ve.IsEmpty() {
 		ContestantLogger.Print(ve.Error())
 	}
@@ -196,7 +198,7 @@ func WithSuccessResponse[T ResponseAPI](validates ...func(res T) error) Response
 		if !v.IsSuccess() {
 			return failure.NewError(
 				ErrFailed,
-				fmt.Errorf("成功したAPIレスポンスの.resultはtrueである必要があります %s %s status %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode),
+				fmt.Errorf("成功したAPIレスポンスの.statusはtrueである必要があります %s %s status %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode),
 			)
 		}
 		for _, validate := range validates {
@@ -228,7 +230,7 @@ func WithErrorResponse[T ResponseAPI]() ResponseValidator {
 		if v.IsSuccess() {
 			return failure.NewError(
 				ErrFailed,
-				fmt.Errorf("失敗したAPIレスポンスの.resultはfalseである必要があります %s %s %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode),
+				fmt.Errorf("失敗したAPIレスポンスの.statusはfalseである必要があります %s %s %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode),
 			)
 		}
 		if v.ErrorMessage() == "" {
@@ -253,12 +255,10 @@ type ResponseAPIPlayersAdd struct {
 	ResponseAPIBase
 	Data isuports.PlayersAddHandlerResult `json:"data"`
 }
-
 type ResponseAPIPlayersList struct {
 	ResponseAPIBase
 	Data isuports.PlayersListHandlerResult `json:"data"`
 }
-
 type ResponseAPIPlayerDisqualified struct {
 	ResponseAPIBase
 	Data isuports.PlayerDisqualifiedHandlerResult `json:"data"`
@@ -292,4 +292,5 @@ type ResponseAPICompetitionRankingFinish struct {
 }
 type ResponseAPICompetitionResult struct {
 	ResponseAPIBase
+	Data isuports.ScoreHandlerResult `json:"data"`
 }
