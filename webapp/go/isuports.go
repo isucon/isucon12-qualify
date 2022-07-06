@@ -194,7 +194,7 @@ func Run() {
 	}
 	defer sqlLogger.Close()
 
-	e.Use(middleware.Logger())
+	// e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
 	// SaaS管理者向けAPI
@@ -943,6 +943,7 @@ func playerDisqualifiedHandler(c echo.Context) error {
 		)
 	}
 	playerCache.Delete(playerID) // cache破棄
+	playerHandlerCache.Delete(playerID)
 	p, err := retrievePlayer(ctx, tenantDB, playerID)
 	if err != nil {
 		// 存在しないプレイヤー
