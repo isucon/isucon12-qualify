@@ -54,6 +54,7 @@ var (
 	billingCache sync.Map
 	tenantDBCache sync.Map
 	playerCache sync.Map
+	playerHandlerCache sync.Map
 	jwtKey interface{}
 )
 
@@ -61,6 +62,7 @@ func init() {
 	billingCache = sync.Map{}
 	tenantDBCache = sync.Map{}
 	playerCache = sync.Map{}
+	playerHandlerCache = sync.Map{}
 
 	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./public.pem")
 	keysrc, err := os.ReadFile(keyFilename)
@@ -1280,6 +1282,10 @@ func playerHandler(c echo.Context) error {
 	if playerID == "" {
 		return echo.NewHTTPError(http.StatusBadRequest, "player_id is required")
 	}
+	if cached, ok := playerHandlerCache.Load(playerID); ok {
+		return c.JSON(http.StatusOK, cached.(SuccessResult))
+	}
+
 	p, err := retrievePlayer(ctx, tenantDB, playerID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -1340,6 +1346,7 @@ func playerHandler(c echo.Context) error {
 			Scores: psds,
 		},
 	}
+	playerHandlerCache.Store(playerID, res)
 	return c.JSON(http.StatusOK, res)
 }
 
