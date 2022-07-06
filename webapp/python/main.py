@@ -1,14 +1,28 @@
 import os
+import re
 import sqlite3
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Optional
 
+import jwt
 import mysql.connector
-from flask import Flask, jsonify
+from flask import Flask, abort, jsonify, make_response, request
 from sqlalchemy.pool import QueuePool
+from werkzeug.exceptions import HTTPException
 
 INITIALIZE_SCRIPT = "../sql/init.sh"
+COOKIE_NAME = "isuports_session"
+TENANT_DB_SCHEMA_FILE_PATH = "../sql/tenant/10_schema.sql"
+
+ROLE_ADMIN = "admin"
+ROLE_ORGANIZER = "organizer"
+ROLE_PLAYER = "player"
+ROLE_NONE = "none"
+
+# 正しいテナント名の正規表現
+TENANT_NAME_REGEXP = re.compile(r"^[a-z][a-z0-9-]{0,61}[a-z0-9]$")
 
 app = Flask(__name__)
 
@@ -21,6 +35,21 @@ mysql_connection_env = {
 }
 
 cnxpool = QueuePool(lambda: mysql.connector.connect(**mysql_connection_env), pool_size=10)
+
+
+def select_all(cnx, query, *args, dictionary=True):
+    # 管理用DBに接続する
+    try:
+        cur = cnx.cursor(dictionary=dictionary)
+        cur.execute(query, *args)
+        return cur.fetchall()
+    finally:
+        cnx.close()
+
+
+def select_row(cnx, *args, **kwargs):
+    rows = select_all(cnx, *args, **kwargs)
+    return rows[0] if len(rows) > 0 else None
 
 
 def connect_admin_db():
@@ -40,15 +69,28 @@ def connect_to_tenant_db(id: int):
     return sqlite3.connect(path)
 
 
+def create_tenant_db(id: int):
+    """テナントDBを新規に作成する"""
+    path = tenant_db_path(id)
+
+    command = f"sqlite3 {path} < {TENANT_DB_SCHEMA_FILE_PATH}"
+    subprocess.run(["bash", "-c", command])
+
+
+@app.errorhandler(HTTPException)
+def error_handler(e):
+    return make_response(e.description, e.code, {"Content-Type": "text/plain"})
+
+
 @dataclass
 class SuccessResult:
-    success: bool
+    status: bool
     data: Any
 
 
 @dataclass
 class FailureResult:
-    success: bool
+    status: bool
     message: str
 
 
@@ -62,13 +104,79 @@ class Viewer:
     tenant_id: int
 
 
+def parse_viewer() -> Viewer:
+    """リクエストヘッダをパースしてViewerを返す"""
+    token_str = request.cookies.get(COOKIE_NAME)
+    if not token_str:
+        abort(401, f"cookie {COOKIE_NAME} is not found")
+
+    key_filename = os.getenv("ISUCON_JWT_KEY_FILE", "../go/public.pem")
+    key = open(key_filename, "r").read()
+
+    tenant = retrieve_tenant_row_from_header()
+    token = jwt.decode(token_str, key, audience=tenant.name, algorithms=["RS256"])
+    if not token.get("sub"):
+        abort(401, f"invalid token: subject is not found in token: {token_str}")
+
+    role = token.get("role")
+    if not role:
+        abort(401, f"invalid token: role is not found: {token_str}")
+
+    if role not in [ROLE_ADMIN, ROLE_ORGANIZER, ROLE_PLAYER]:
+        abort(401, f"invalid token: role is not found: {token_str}")
+
+    aud = token.get("aud")
+    if len(aud) != 1:
+        abort(401, f"invalid token: aud field is few or too much: {token_str}")
+
+    if tenant.name == "admin" and role != ROLE_ADMIN:
+        abort(401, "tenant not found")
+
+    if tenant.name != aud[0]:
+        abort(401, f"invalid token: tenant name is not match with {request.host}: {token_str}")
+
+    return Viewer(
+        role=role,
+        player_id=token.get("sub"),
+        tenant_name=tenant.name,
+        tenant_id=tenant.id,
+    )
+
+
+def retrieve_tenant_row_from_header():
+    """JWTに入っているテナント名とHostヘッダのテナント名が一致しているか確認"""
+    base_host = os.getenv("ISUCON_BASE_HOSTNAME", ".t.isucon.dev")
+    tenant_name = request.host.removesuffix(base_host)
+
+    # SaaS管理者用ドメイン
+    if tenant_name == "admin":
+        return TenantRow(
+            name="admin",
+            display_name="admin",
+        )
+
+    # テナントの存在確認
+    cnx = connect_admin_db()
+    row = None
+    try:
+        query = "SELECT * FROM `tenant` WHERE `name` = (%s)"
+        row = select_row(cnx, query, (tenant_name,))
+    finally:
+        cnx.close()
+
+    if row is None:
+        abort(401, "tenant not found")
+
+    return TenantRow(**row)
+
+
 @dataclass
 class TenantRow:
-    id: int
     name: str
     display_name: str
-    created_at: int
-    updated_at: int
+    id: Optional[int] = None
+    created_at: Optional[int] = None
+    updated_at: Optional[int] = None
 
 
 @dataclass
@@ -110,6 +218,58 @@ class TenantDetail:
 
 
 @dataclass
+class TenantsAddHandlerResult:
+    tenant: TenantDetail
+
+
+@app.route("/api/admin/tenants/add", methods=["POST"])
+def admin_add_tenants():
+    """
+    SasS管理者用API
+    テナントを追加する
+    """
+    viewer = parse_viewer()
+    if viewer.tenant_name != "admin":
+        # admin: SaaS管理者用の特別なテナント名
+        abort(404, f"{viewer.tenant_name} has not this API")
+
+    if viewer.role != "admin":
+        abort(403, "admin role required")
+
+    display_name = request.values.get("display_name")
+    name = request.values.get("name")
+
+    validate_tenant_name(name)
+
+    now = int(datetime.now().timestamp())
+    cnx = connect_admin_db()
+    try:
+        cnx.start_transaction()
+        cur = cnx.cursor()
+        query = "INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (%s, %s, %s, %s)"
+        cur.execute(query, (name, display_name, now, now))
+        cnx.commit()
+    except Exception as e:
+        cnx.rollback()
+        abort(400, "duplicate tenant")
+    finally:
+        id = cur.lastrowid
+        cnx.close()
+
+    create_tenant_db(id)
+
+    res = TenantsAddHandlerResult(TenantDetail(name, display_name))
+
+    return jsonify(SuccessResult(status=True, data=res))
+
+
+def validate_tenant_name(name):
+    """テナント名が規則に沿っているかチェックする"""
+    if TENANT_NAME_REGEXP.match(name) is None:
+        abort(400, f"invalid tenant name: {name}")
+
+
+@dataclass
 class BillingReport:
     competition_id: str
     competition_title: str
@@ -141,15 +301,6 @@ class TenantWithBilling:
     name: str
     display_name: str
     billing: int
-
-
-@app.route("/api/admin/tenants/add", methods=["POST"])
-def admin_add_tenants():
-    """
-    SasS管理者用API
-    テナントを追加する
-    """
-    raise NotImplementedError()  # TODO
 
 
 @dataclass
@@ -296,7 +447,11 @@ def get_me():
     共通API
     JWTで認証した結果、テナントやユーザ情報を返す
     """
-    raise NotImplementedError()  # TODO
+    tenant = retrieve_tenant_row_from_header()
+    tenant_detail = TenantDetail(name=tenant.name, display_name=tenant.display_name)
+    view = parse_viewer()
+
+    return jsonify(tenant)
 
 
 @dataclass
@@ -323,8 +478,8 @@ def bench_initialize():
         # 競技中の最後に計測したものを参照して、講評記事などで使わせていただきます
         appeal="",
     )
-    return jsonify(SuccessResult(success=True, data=res))
+    return jsonify({"success": True, "data": res})
 
 
 if __name__ == "__main__":
-    app.run(port=3000, debug=True, threaded=True)
+    app.run(host="0.0.0.0", port=3000, debug=True, threaded=True)

@@ -10,6 +10,8 @@ RUN apt-get update && \
   apt-get -y update && \
   apt-get -y install mysql-client
 
+RUN apt-get -y install build-essential libssl-dev libffi-dev python3-dev cargo
+
 RUN curl -sLO https://github.com/cli/cli/releases/download/v2.13.0/gh_2.13.0_linux_amd64.tar.gz && \
   tar xf gh_2.13.0_linux_amd64.tar.gz && \
   install gh_2.13.0_linux_amd64/bin/gh /usr/local/bin
