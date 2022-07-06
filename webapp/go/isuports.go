@@ -56,6 +56,7 @@ var (
 	tenantDBCache sync.Map
 	playerCache sync.Map
 	playerHandlerCache sync.Map
+	tenantCache sync.Map
 	jwtKey interface{}
 )
 
@@ -81,6 +82,7 @@ func init() {
 	tenantDBCache = sync.Map{}
 	playerCache = sync.Map{}
 	playerHandlerCache = sync.Map{}
+	tenantCache = sync.Map{}
 
 	keyFilename := getEnv("ISUCON_JWT_KEY_FILE", "./public.pem")
 	keysrc, err := os.ReadFile(keyFilename)
@@ -364,6 +366,9 @@ func retrieveTenantRowFromHeader(c echo.Context) (*TenantRow, error) {
 
 	// テナントの存在確認
 	var tenant TenantRow
+	if _t, ok := tenantCache.Load(tenantName); ok {
+		return _t.(*TenantRow), nil
+	}
 	if err := adminDB.GetContext(
 		context.Background(),
 		&tenant,
@@ -372,6 +377,7 @@ func retrieveTenantRowFromHeader(c echo.Context) (*TenantRow, error) {
 	); err != nil {
 		return nil, fmt.Errorf("failed to Select tenant: name=%s, %w", tenantName, err)
 	}
+	tenantCache.Store(tenantName, &tenant)
 	return &tenant, nil
 }
 
@@ -1418,9 +1424,14 @@ func competitionRankingHandler(c echo.Context) error {
 
 	now := time.Now().Unix()
 	var tenant TenantRow
+	if _t, ok := tenantCache.Load(v.tenantID); ok {
+		tenant = _t.(TenantRow)
+	}
 	if err := adminDB.GetContext(ctx, &tenant, "SELECT * FROM tenant WHERE id = ?", v.tenantID); err != nil {
 		return fmt.Errorf("error Select tenant: id=%d, %w", v.tenantID, err)
 	}
+	tenantCache.Store(v.tenantID, tenant)
+
 	vc := struct {
 		VisitCount int64 `db:"visit_count"`
 	}{}
