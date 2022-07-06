@@ -66,7 +66,7 @@ func GetOrganizerPlayersListAction(ctx context.Context, ag *agent.Agent) (*http.
 func PostOrganizerPlayersAddAction(ctx context.Context, playerDisplayNames []string, ag *agent.Agent) (*http.Response, error) {
 	form := url.Values{}
 	for _, displayName := range playerDisplayNames {
-		form.Add("display_name", displayName)
+		form.Add("display_name[]", displayName)
 	}
 	req, err := ag.POST("/api/organizer/players/add", strings.NewReader(form.Encode()))
 	if err != nil {
