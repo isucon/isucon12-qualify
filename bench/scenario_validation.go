@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -541,6 +542,47 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 				if _, ok := tenantNameMap[tenantDisplayName]; !ok {
 					return fmt.Errorf("請求ダッシュボードの結果に作成したテナントがありません")
 				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
+		}
+	}
+
+	{
+		// ページングで初期データ範囲のBillingが正しいか確認
+		checkTenantCursor := 50 // ID=40~49でチェック
+		res, err := GetAdminTenantsBillingAction(ctx, fmt.Sprintf("%d", checkTenantCursor), adminAg)
+		v := ValidateResponse("テナント別の請求ダッシュボード: 初期データチェック", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
+				if 10 != len(r.Data.Tenants) {
+					return fmt.Errorf("請求ダッシュボードの結果の数が違います (want: %d, got: %d)", len(r.Data.Tenants), 10)
+				}
+				tenantIDs := []int64{}
+				for _, tenant := range r.Data.Tenants {
+					// 初期データと照らし合わせてbillingが合っているか確認
+					index, err := strconv.ParseInt(tenant.ID, 10, 64)
+					if err != nil {
+						return fmt.Errorf("TenantIDの形が違います (got: %v)", tenant.ID)
+					}
+					tenantIDs = append(tenantIDs, index)
+					initialTenant, ok := sc.InitialDataTenant[index]
+					if !ok {
+						return fmt.Errorf("初期データに存在しないTenantIDです (got: %v)", tenant.ID)
+					}
+					if tenant.BillingYen != initialTenant.Billing {
+						return fmt.Errorf("Billingの結果が違います (want: %v got: %v)", initialTenant.Billing, tenant.BillingYen)
+					}
+					AdminLogger.Printf("success, %v", tenant)
+				}
+				sort.Slice(tenantIDs, func(i, j int) bool { return tenantIDs[i] < tenantIDs[j] })
+				if tenantIDs[0] != int64(checkTenantCursor-10) || tenantIDs[len(tenantIDs)-1] != int64(checkTenantCursor-1) {
+					return fmt.Errorf("取得したテナントIDの範囲が違います (want: %v~%v got: %v~%v)",
+						checkTenantCursor-10, checkTenantCursor-1, tenantIDs[0], tenantIDs[len(tenantIDs)-1],
+					)
+				}
+
 				return nil
 			}),
 		)
