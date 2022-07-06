@@ -99,9 +99,19 @@ func connectToTenantDB(id int64) (*sqlx.DB, error) {
 func createTenantDB(id int64) error {
 	p := tenantDBPath(id)
 
-	cmd := exec.Command("sh", "-c", fmt.Sprintf("sqlite3 %s < %s", p, tenantDBSchemaFilePath))
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to exec sqlite3 %s < %s, out=%s: %w", p, tenantDBSchemaFilePath, string(out), err)
+	db, err := sqlx.Open(sqliteDriverName, fmt.Sprintf("file:%s?mode=rwc", p))
+	if err != nil {
+		return fmt.Errorf("failed to open tenant DB: %w", err)
+	}
+
+	b, err := os.ReadFile(tenantDBSchemaFilePath)
+	if err != nil {
+		return err
+	}
+	for _, q := range strings.Split(string(b), ";") {
+		if _, err := db.ExecContext(context.Background(), q); err != nil {
+			return err
+		}
 	}
 	return nil
 }
