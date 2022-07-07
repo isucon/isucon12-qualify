@@ -51,7 +51,8 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 
 	tenant := data.CreateTenant(false)
 	{
-		res, err := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
+		res, err, txt := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
+		_ = txt
 		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
 				return nil
@@ -65,7 +66,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		}
 	}
 
-	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.Name, "organizer")
+	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.Name, "organizer")
 	if err != nil {
 		return err
 	}
@@ -81,7 +82,8 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 
 	{
 		AdminLogger.Printf("[%s] [tenant:%s] Playerを追加します players: %d", scTag, tenant.Name, addPlayerNum)
-		res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
+		res, err, txt := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
+		_ = txt
 		v := ValidateResponse("大会参加者追加", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
 				for _, pl := range r.Data.Players {
@@ -118,7 +120,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	orgJobConf := &OrganizerJobConfig{
-		orgAg:         orgAg,
+		orgAc:         orgAc,
 		scTag:         scTag,
 		tenantName:    tenant.Name,
 		scoreRepeat:   1,
@@ -134,7 +136,8 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 
 		// テナント請求ダッシュボードの閲覧
 		{
-			res, err := GetOrganizerBillingAction(ctx, orgAg)
+			res, err, txt := GetOrganizerBillingAction(ctx, orgAg)
+			_ = txt
 			v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPIBilling) error {
 					_ = r

@@ -54,7 +54,8 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 
 	var competitions []isuports.CompetitionDetail
 	for {
-		res, err := GetPlayerCompetitionsAction(ctx, playerAg)
+		res, err, txt := GetPlayerCompetitionsAction(ctx, playerAg)
+		_ = txt
 		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitions) error {
 				competitions = r.Data.Competitions
@@ -83,7 +84,8 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		playerIDs := []string{}
 
 		{
-			res, err := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", playerAg)
+			res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", playerAg)
+			_ = txt
 			v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 					for _, rank := range r.Data.Ranks {
@@ -108,7 +110,8 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		playerCount := rand.Intn(ConstPlayerScenarioMaxPlayerCount)
 		for j := 0; j < playerCount; j++ {
 			playerIndex := rand.Intn(len(playerIDs))
-			res, err := GetPlayerAction(ctx, playerIDs[playerIndex], playerAg)
+			res, err, txt := GetPlayerAction(ctx, playerIDs[playerIndex], playerAg)
+			_ = txt
 			v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPIPlayer) error {
 					_ = r

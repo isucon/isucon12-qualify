@@ -66,7 +66,8 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 	beforeTenantID := "" // 最初はbeforeが空
 	completed := false
 	for !completed {
-		res, err := GetAdminTenantsBillingAction(ctx, beforeTenantID, adminAg)
+		res, err, txt := GetAdminTenantsBillingAction(ctx, beforeTenantID, adminAg)
+		_ = txt
 		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 				if len(r.Data.Tenants) == 0 {

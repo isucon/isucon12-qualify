@@ -61,14 +61,14 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 		tenantName = data.TenantName
 	}
 
-	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
+	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
 	if err != nil {
 		return err
 	}
 
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
 	orgJobConf := &OrganizerJobConfig{
-		orgAg:         orgAg,
+		orgAc:         orgAc,
 		scTag:         scTag,
 		tenantName:    tenantName,
 		scoreRepeat:   ConstPopularTenantScenarioScoreRepeat,
@@ -83,7 +83,8 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 
 		// テナント請求ダッシュボードの閲覧
 		{
-			res, err := GetOrganizerBillingAction(ctx, orgAg)
+			res, err, txt := GetOrganizerBillingAction(ctx, orgAg)
+			_ = txt
 			v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPIBilling) error {
 					_ = r

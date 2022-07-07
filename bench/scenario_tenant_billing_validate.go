@@ -54,7 +54,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 
 	tenant := data.CreateTenant(false)
 	{
-		res, err := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
+		res, err, txt := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
+		_ = txt
 		v := ValidateResponse("新規テナント作成", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
 				return nil
@@ -84,7 +85,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 
 	{
 		AdminLogger.Printf("[%s] [tenant:%s] Playerを追加します players: %d", scTag, tenant.Name, playerNum)
-		res, err := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
+		res, err, txt := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
+		_ = txt
 		v := ValidateResponse("参加者追加", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
 				for _, pl := range r.Data.Players {
@@ -110,7 +112,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 		Title: data.RandomString(24),
 	}
 	{
-		res, err := PostOrganizerCompetitionsAddAction(ctx, comp.Title, orgAg)
+		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, comp.Title, orgAg)
+		_ = txt
 		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
 				comp.ID = r.Data.Competition.ID
@@ -149,7 +152,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 		}
 		csv := scores.CSV()
 		AdminLogger.Printf("[%s] [tenant:%s] CSV入稿 (rows:%d, len:%d)", scTag, tenant.Name, len(scores), len(csv))
-		res, err := PostOrganizerCompetitionScoreAction(ctx, comp.ID, []byte(csv), orgAg)
+		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, comp.ID, []byte(csv), orgAg)
+		_ = txt
 		v := ValidateResponse("大会結果CSV入稿", step, res, err,
 			WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
@@ -175,7 +179,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 			return err
 		}
 
-		res, err := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", playerAg)
+		res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", playerAg)
+		_ = txt
 		v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				for _, rank := range r.Data.Ranks {
@@ -194,7 +199,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 
 	// 大会終了
 	{
-		res, err := PostOrganizerCompetitionFinishAction(ctx, comp.ID, orgAg)
+		res, err, txt := PostOrganizerCompetitionFinishAction(ctx, comp.ID, orgAg)
+		_ = txt
 		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
 				_ = r
@@ -212,7 +218,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 	// 3秒の猶予がある
 	SleepWithCtx(ctx, time.Second*3)
 
-	res, err := GetOrganizerBillingAction(ctx, orgAg)
+	res, err, txt := GetOrganizerBillingAction(ctx, orgAg)
+	_ = txt
 	v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
 		WithSuccessResponse(func(r ResponseAPIBilling) error {
 			if 1 != len(r.Data.Reports) {

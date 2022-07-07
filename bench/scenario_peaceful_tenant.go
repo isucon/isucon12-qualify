@@ -57,7 +57,8 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 	// player一覧を取る
 	var playerIDs []string
 	{
-		res, err := GetOrganizerPlayersListAction(ctx, orgAg)
+		res, err, txt := GetOrganizerPlayersListAction(ctx, orgAg)
+		_ = txt
 		v := ValidateResponse("テナントのプレイヤー一覧取得", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayersList) error {
 				for _, player := range r.Data.Players {
@@ -91,7 +92,8 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 
 	// 失格前に失格にするプレイヤーを見に行く
 	{
-		res, err := GetPlayerAction(ctx, disqualifyPlayerID, checkerPlayerAg)
+		res, err, txt := GetPlayerAction(ctx, disqualifyPlayerID, checkerPlayerAg)
+		_ = txt
 		v := ValidateResponse("プレイヤーと戦績情報取得: 失格前", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				if disqualifyPlayerID != r.Data.Player.ID {
@@ -114,7 +116,8 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 
 	// プレイヤーを1人失格にする
 	{
-		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, disqualifyPlayerID, orgAg)
+		res, err, txt := PostOrganizerApiPlayerDisqualifiedAction(ctx, disqualifyPlayerID, orgAg)
+		_ = txt
 		v := ValidateResponse("プレイヤーを失格にする", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
 				_ = r
@@ -131,7 +134,8 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 
 	// 失格プレイヤーで情報を見に行く 403
 	{
-		res, err := GetPlayerCompetitionsAction(ctx, disqualifiedPlayerAg)
+		res, err, txt := GetPlayerCompetitionsAction(ctx, disqualifiedPlayerAg)
+		_ = txt
 		v := ValidateResponse("テナント内の大会情報取得:  失格済みプレイヤーは403で弾く", step, res, err, WithStatusCode(403))
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
@@ -143,7 +147,8 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 
 	// 失格プレイヤーを見に行く IsDisqualifiedが更新されていることをチェック
 	{
-		res, err := GetPlayerAction(ctx, disqualifyPlayerID, checkerPlayerAg)
+		res, err, txt := GetPlayerAction(ctx, disqualifyPlayerID, checkerPlayerAg)
+		_ = txt
 		v := ValidateResponse("プレイヤーと戦績情報取得: 失格済みプレイヤーを見に行く", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				if disqualifyPlayerID != r.Data.Player.ID {

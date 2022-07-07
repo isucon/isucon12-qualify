@@ -75,6 +75,9 @@ func ReadResponse(res *http.Response) *Response {
 // レスポンスを検証する関数
 // 複数のバリデータ関数を受け取ってすべてでレスポンスを検証し、 ValidationError を返す
 func ValidateResponse(title string, step *isucandar.BenchmarkStep, res *http.Response, err error, validators ...ResponseValidator) ValidationError {
+	return ValidateResponseWithMsg(title, step, res, err, "", validators...)
+}
+func ValidateResponseWithMsg(title string, step *isucandar.BenchmarkStep, res *http.Response, err error, msg string, validators ...ResponseValidator) ValidationError {
 	ve := ValidationError{
 		Title: title,
 	}
@@ -88,7 +91,7 @@ func ValidateResponse(title string, step *isucandar.BenchmarkStep, res *http.Res
 			return ve
 		}
 		// リクエストがエラーだったらそれ以上の検証はしない(できない)
-		ve.Errors = append(ve.Errors, failure.NewError(ErrInvalidRequest, err))
+		ve.Errors = append(ve.Errors, failure.NewError(ErrInvalidRequest, fmt.Errorf("%s %s", err, msg)))
 		ContestantLogger.Print(ve.Error())
 
 		return ve
@@ -101,7 +104,7 @@ func ValidateResponse(title string, step *isucandar.BenchmarkStep, res *http.Res
 	response := ReadResponse(res)
 	for _, v := range validators {
 		if err := v(response); err != nil {
-			ve.Errors = append(ve.Errors, failure.NewError(ErrValidation, err))
+			ve.Errors = append(ve.Errors, failure.NewError(ErrValidation, fmt.Errorf("%s %s", err, msg)))
 			break // 前から順に検証、失敗したらそれ以上の検証はしない
 		}
 	}
@@ -192,7 +195,7 @@ func WithSuccessResponse[T ResponseAPI](validates ...func(res T) error) Response
 			}
 			return failure.NewError(
 				ErrInvalidJSON,
-				fmt.Errorf("JSONのdecodeに失敗しました %s %s status %d body %s", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode, r.Body),
+				fmt.Errorf("JSONのdecodeに失敗しました %s %s status %d body: %s ", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode, r.Body),
 			)
 		}
 		if !v.IsSuccess() {
@@ -224,7 +227,7 @@ func WithErrorResponse[T ResponseAPI]() ResponseValidator {
 			}
 			return failure.NewError(
 				ErrInvalidJSON,
-				fmt.Errorf("JSONのdecodeに失敗しました %s %s status %d body %s", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode, r.Body),
+				fmt.Errorf("JSONのdecodeに失敗しました %s %s status:%d body:%s", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode, r.Body),
 			)
 		}
 		if v.IsSuccess() {

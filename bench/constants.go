@@ -29,10 +29,10 @@ const (
 var (
 	// NOTE: 初期データ範囲について(0-based)
 	//       0: 巨大テナント
-	//  1 ~ 39: 人気テナント
-	// 40 ~ 69: AdminBilling検証用テナント
-	// 70 ~ 99: 破壊的操作テナント
-	// 100: prepare validate tenant
+	//   1 ~ 39: 人気テナント
+	//  40 ~ 69: AdminBilling検証用テナント
+	//  70 ~ 99: 破壊的操作テナント
+	// 100 ~ : prepare validate tenant
 
 	ConstPopularTenantScenarioIDRange        = []int{0, 39}  // 利用する初期データのテナントID幅
 	ConstAdminBillingValidateScenarioIDRange = []int{40, 69} // 利用する初期データのテナントID幅

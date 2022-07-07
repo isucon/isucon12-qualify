@@ -36,6 +36,10 @@ type Account struct {
 	// GetRequestURLは http://admin.t.isucon.dev
 }
 
+func (ac *Account) String() string {
+	return fmt.Sprintf("tenant:%s, role:%s, playerID:%s", ac.TenantName, ac.Role, ac.PlayerID)
+}
+
 // {admin,[tenantName]}.t.isucon.dev 的なURLを組み立てる
 func (ac *Account) GetRequestURL() string {
 	base, _ := url.Parse(ac.Option.TargetURL) // url.Parseに失敗するTargetURLが渡されたときはprepareで落ちるので大丈夫
