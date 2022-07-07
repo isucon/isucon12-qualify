@@ -364,8 +364,8 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 
 	ctx := context.Background()
 	sCookie, _ := c.Request().Cookie("sessionid")
-	if sCookie == nil {
-		sid := uuid.NewString()
+	if sCookie == nil && role == RolePlayer {
+		sid := strings.ReplaceAll(uuid.NewString(), "-", "")
 		if err := redisClient.Set(ctx, sid, v.playerID, 60*time.Second).Err(); err != nil {
 			return nil, err
 		}
@@ -982,16 +982,13 @@ func playerDisqualifiedHandler(c echo.Context) error {
 
 	playerCache.Delete(playerID) // cache破棄
 	playerHandlerCache.Delete(playerID)
-
 	cmd := redisClient.SMembers(ctx, playerID)
 	if cmd.Err() != nil {
 		return err
 	}
-	if len(cmd.Val()) > 0 {
-		if err := redisClient.Del(ctx, cmd.Val()...).Err(); err != nil {
-			return err
-		}
-	}
+	keys := cmd.Val()
+	keys = append(keys, "/api/player/player/"+playerID)
+	redisClient.Del(ctx, keys...)
 
 	res := PlayerDisqualifiedHandlerResult{
 		Player: PlayerDetail{
@@ -1423,7 +1420,10 @@ func playerHandler(c echo.Context) error {
 		},
 	}
 	playerHandlerCache.Store(playerID, res)
-	return c.JSON(http.StatusOK, res)
+	b, _ := json.Marshal(res)
+	bs := string(b)
+	redisClient.Set(ctx, fmt.Sprintf("/api/player/player/%s", playerID), bs, 60 * time.Second)
+	return c.String(http.StatusOK, bs)
 }
 
 type CompetitionRank struct {
