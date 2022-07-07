@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -48,16 +49,16 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 
 	opt := sc.Option
 	opt.RequestTimeout = time.Second * 60 // AdminBillingのみタイムアウトを60秒まで許容
-	admin := &Account{
+	adminAc := &Account{
 		Role:       AccountRoleAdmin,
 		TenantName: "admin",
 		PlayerID:   "admin",
 		Option:     opt,
 	}
-	if err := admin.SetJWT(sc.RawKey, true); err != nil {
+	if err := adminAc.SetJWT(sc.RawKey, true); err != nil {
 		return err
 	}
-	adminAg, err := admin.GetAgent()
+	adminAg, err := adminAc.GetAgent()
 	if err != nil {
 		return err
 	}
@@ -67,8 +68,8 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 	completed := false
 	for !completed {
 		res, err, txt := GetAdminTenantsBillingAction(ctx, beforeTenantID, adminAg)
-		_ = txt
-		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
+		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 				if len(r.Data.Tenants) == 0 {
 					completed = true

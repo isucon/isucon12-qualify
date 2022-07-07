@@ -31,21 +31,19 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	ContestantLogger.Println("[ValidationScenario] 整合性チェックを開始します")
 	defer ContestantLogger.Printf("[ValidationScenario] 整合性チェックを終了します")
 
-	msg := "ValidationScenario"
 	tenantName := "valid-tenantid"
 	tenantDisplayName := "valid-Tenantname"
 
 	// SaaS管理者のagent作成
-	_, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
+	adminAc, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
 	if err != nil {
 		return err
 	}
 	// SaaS管理API
 	{
 		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, adminAg)
-		_ = txt
-		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, fmt.Sprintf("[%s] name:%s, displayName:%s", msg, tenantName, tenantDisplayName),
-			WithStatusCode(200),
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
+		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
 				if tenantDisplayName != r.Data.Tenant.DisplayName {
 					return fmt.Errorf("作成したテナントのDisplayNameが違います (want: %s, got: %s)", tenantDisplayName, r.Data.Tenant.DisplayName)
@@ -54,8 +52,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 					return fmt.Errorf("作成したテナントのNameが違います (want: %s, got: %s)", tenantName, r.Data.Tenant.Name)
 				}
 				return nil
-			},
-			),
+			}),
 		)
 		if !v.IsEmpty() {
 			return v

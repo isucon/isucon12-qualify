@@ -147,7 +147,7 @@ func PostOrganizerCompetitionScoreAction(ctx context.Context, competitionID stri
 		return nil, err, ""
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
-	msg := fmt.Sprintf("competitionID:%s  CSV length:%d", competitionID, len(csv))
+	msg := fmt.Sprintf("competitionID:%s  CSV length:%dbytes", competitionID, len(csv))
 	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
 		return ag.Do(ctx, req)
 	})

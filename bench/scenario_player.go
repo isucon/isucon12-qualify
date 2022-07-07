@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -47,7 +48,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	defer report()
 	sc.ScenarioStart(scTag)
 
-	_, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerID)
+	playerAc, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerID)
 	if err != nil {
 		return err
 	}
@@ -55,8 +56,8 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	var competitions []isuports.CompetitionDetail
 	for {
 		res, err, txt := GetPlayerCompetitionsAction(ctx, playerAg)
-		_ = txt
-		v := ValidateResponse("テナント内の大会情報取得", step, res, err, WithStatusCode(200),
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
+		v := ValidateResponseWithMsg("テナント内の大会情報取得", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitions) error {
 				competitions = r.Data.Competitions
 				return nil
@@ -85,8 +86,8 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 
 		{
 			res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", playerAg)
-			_ = txt
-			v := ValidateResponse("大会内のランキング取得", step, res, err, WithStatusCode(200),
+			msg := fmt.Sprintf("%s %s", playerAc, txt)
+			v := ValidateResponseWithMsg("大会内のランキング取得", step, res, err, msg, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 					for _, rank := range r.Data.Ranks {
 						playerIDs = append(playerIDs, rank.PlayerID)
@@ -111,8 +112,8 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		for j := 0; j < playerCount; j++ {
 			playerIndex := rand.Intn(len(playerIDs))
 			res, err, txt := GetPlayerAction(ctx, playerIDs[playerIndex], playerAg)
-			_ = txt
-			v := ValidateResponse("参加者と戦績情報取得", step, res, err, WithStatusCode(200),
+			msg := fmt.Sprintf("%s %s", playerAc, txt)
+			v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPIPlayer) error {
 					_ = r
 					return nil

@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
@@ -84,8 +85,8 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 		// テナント請求ダッシュボードの閲覧
 		{
 			res, err, txt := GetOrganizerBillingAction(ctx, orgAg)
-			_ = txt
-			v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
+			msg := fmt.Sprintf("%s %s", orgAc, txt)
+			v := ValidateResponseWithMsg("テナント内の請求情報", step, res, err, msg, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPIBilling) error {
 					_ = r
 					return nil

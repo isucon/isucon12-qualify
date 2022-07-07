@@ -46,7 +46,7 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	scTag := ScenarioTagAdminBillingValidate
 	sc.ScenarioStart(scTag)
 
-	_, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
+	adminAc, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
 	if err != nil {
 		return err
 	}
@@ -70,8 +70,8 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	var billingResultTenants []isuports.TenantWithBilling
 	{
 		res, err, txt := GetAdminTenantsBillingAction(ctx, billingBeforeTenantID, adminAg)
-		_ = txt
-		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
+		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 				billingResultTenants = r.Data.Tenants
 				return nil
@@ -118,8 +118,8 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 
 	{
 		res, err, txt := GetAdminTenantsBillingAction(ctx, billingBeforeTenantID, adminAg)
-		_ = txt
-		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
+		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 				resultYen := int64(0)
 				for _, t := range r.Data.Tenants {

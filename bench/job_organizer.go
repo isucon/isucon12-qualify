@@ -37,8 +37,8 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 	playerIDs := []string{}
 	{
 		res, err, txt := GetOrganizerPlayersListAction(ctx, orgAg)
-		_ = txt
-		v := ValidateResponse("テナントのプレイヤー一覧取得", step, res, err, WithStatusCode(200),
+		msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
+		v := ValidateResponseWithMsg("テナントのプレイヤー一覧取得", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayersList) error {
 				for _, player := range r.Data.Players {
 					playerIDs = append(playerIDs, player.ID)
@@ -60,8 +60,8 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 
 	{
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, comp.Title, orgAg)
-		_ = txt
-		v := ValidateResponse("新規大会追加", step, res, err, WithStatusCode(200),
+		msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
+		v := ValidateResponseWithMsg("新規大会追加", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
 				comp.ID = r.Data.Competition.ID
 				return nil
@@ -98,8 +98,8 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		AdminLogger.Printf("[%s] [tenant:%s] CSV入稿 %d回目 (rows:%d, len:%d)", conf.scTag, conf.tenantName, count+1, len(score)-1, len(csv))
 
 		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, comp.ID, []byte(csv), orgAg)
-		_ = txt
-		v := ValidateResponse("大会結果CSV入稿", step, res, err, WithStatusCode(200),
+		msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
+		v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
 				_ = r
 				if r.Data.Rows != int64(len(score)) {
@@ -124,8 +124,8 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 	// 大会結果確定 x 1
 	{
 		res, err, txt := PostOrganizerCompetitionFinishAction(ctx, comp.ID, orgAg)
-		_ = txt
-		v := ValidateResponse("大会終了", step, res, err, WithStatusCode(200),
+		msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
+		v := ValidateResponseWithMsg("大会終了", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
 				_ = r
 				return nil
