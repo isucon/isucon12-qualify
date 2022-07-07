@@ -59,8 +59,15 @@ type BenchmarkerSource struct {
 }
 
 type BenchmarkerTenantSource struct {
-	TenantID   int64  `json:"tenant_id"`
-	TenantName string `json:"tenant_name"`
+	TenantID     int64                     `json:"tenant_id"`
+	TenantName   string                    `json:"tenant_name"`
+	Billing      int64                     `json:"billing"`
+	Competitions []*BenchmarkerCompeittion `json:"competitions"`
+}
+
+type BenchmarkerCompeittion struct {
+	ID      string `json:"id"`
+	Billing int64  `json:"billing`
 }
 
 func init() {
@@ -75,7 +82,7 @@ func Run(tenantsNum int) error {
 		var err error
 		hugeTenantScale, err = strconv.Atoi(v)
 		if err != nil {
-			return fmt.Errorf("error failed strconv.Atoi", err)
+			return fmt.Errorf("error failed strconv.Atoi: %s", err)
 		}
 	}
 
@@ -99,7 +106,7 @@ func Run(tenantsNum int) error {
 		tenant := CreateTenant(i == 0)
 		players := CreatePlayers(tenant)
 		competitions := CreateCompetitions(tenant)
-		playerScores, visitHistroies, b := CreatePlayerData(tenant, players, competitions)
+		playerScores, visitHistroies, billing, benchComps, b := CreatePlayerData(tenant, players, competitions)
 		if err := storeTenant(tenant, players, competitions, playerScores); err != nil {
 			return err
 		}
@@ -109,8 +116,10 @@ func Run(tenantsNum int) error {
 		samples := len(players)
 		benchSrcs = append(benchSrcs, lo.Samples(b, samples)...)
 		benchTenantSrcs = append(benchTenantSrcs, &BenchmarkerTenantSource{
-			TenantID:   tenant.ID,
-			TenantName: tenant.Name,
+			TenantID:     tenant.ID,
+			TenantName:   tenant.Name,
+			Billing:      billing,
+			Competitions: benchComps,
 		})
 	}
 	if err := storeMaxID(db); err != nil {
@@ -401,12 +410,23 @@ func CreatePlayerData(
 	tenant *isuports.TenantRow,
 	players []*isuports.PlayerRow,
 	competitions []*isuports.CompetitionRow,
-) ([]*isuports.PlayerScoreRow, []*isuports.VisitHistoryRow, []*BenchmarkerSource) {
+) (
+	[]*isuports.PlayerScoreRow,
+	[]*isuports.VisitHistoryRow,
+	int64, // 対象テナントにいるplayerに関連するBillingYen
+	[]*BenchmarkerCompeittion,
+	[]*BenchmarkerSource,
+) {
 	scores := make([]*isuports.PlayerScoreRow, 0, len(players)*len(competitions))
 	visits := make([]*isuports.VisitHistoryRow, 0, len(players)*len(competitions)*visitsByCompetition)
 	bench := make([]*BenchmarkerSource, 0, len(players)*len(competitions))
+
+	bcs := []*BenchmarkerCompeittion{}
+	tenantBilling := 0
+
 	for _, c := range competitions {
 		competitionScores := make([]*isuports.PlayerScoreRow, 0, len(players)*100)
+		competitionBilling := 0
 		for _, p := range players {
 			if c.FinishedAt.Valid && c.FinishedAt.Int64 < p.CreatedAt {
 				// 大会が終わったあとに登録したplayerはデータがない
@@ -418,6 +438,7 @@ func CreatePlayerData(
 			} else {
 				end = NowUnix()
 			}
+			yen := 0
 			created := fake.Int64Between(c.CreatedAt, end)
 			lastVisitedAt := fake.Int64Between(created, end)
 			for i := 0; i < fake.IntBetween(visitsByCompetition/10, visitsByCompetition); i++ {
@@ -429,18 +450,22 @@ func CreatePlayerData(
 					CreatedAt:     visitedAt,
 					UpdatedAt:     visitedAt,
 				})
+				yen = 10
 			}
-			for i := 0; i < fake.IntBetween(scoresByCompetition/10, scoresByCompetition); i++ {
-				created := fake.Int64Between(c.CreatedAt, end)
-				competitionScores = append(competitionScores, &isuports.PlayerScoreRow{
-					TenantID:      tenant.ID,
-					ID:            strconv.FormatInt(GenID(created), 10),
-					PlayerID:      p.ID,
-					CompetitionID: c.ID,
-					Score:         CreateScore(),
-					CreatedAt:     created,
-					UpdatedAt:     created,
-				})
+			if rand.Intn(100) < 90 { // 大会参加率90%
+				for i := 0; i < fake.IntBetween(scoresByCompetition/10, scoresByCompetition); i++ {
+					created := fake.Int64Between(c.CreatedAt, end)
+					competitionScores = append(competitionScores, &isuports.PlayerScoreRow{
+						TenantID:      tenant.ID,
+						ID:            strconv.FormatInt(GenID(created), 10),
+						PlayerID:      p.ID,
+						CompetitionID: c.ID,
+						Score:         CreateScore(),
+						CreatedAt:     created,
+						UpdatedAt:     created,
+					})
+					yen = 100
+				}
 			}
 			bench = append(bench, &BenchmarkerSource{
 				TenantName:     tenant.Name,
@@ -449,6 +474,10 @@ func CreatePlayerData(
 				IsFinished:     c.FinishedAt.Valid,
 				IsDisqualified: p.IsDisqualified,
 			})
+			// 大会が終了済みの場合のみ加算
+			if c.FinishedAt.Valid {
+				competitionBilling += yen
+			}
 		}
 		sort.Slice(competitionScores, func(i, j int) bool {
 			return competitionScores[i].CreatedAt < competitionScores[j].CreatedAt
@@ -457,8 +486,16 @@ func CreatePlayerData(
 			competitionScores[i].RowNum = int64(i + 1)
 		}
 		scores = append(scores, competitionScores...)
+
+		bcs = append(bcs, &BenchmarkerCompeittion{
+			ID:      c.ID,
+			Billing: int64(competitionBilling),
+		})
+		tenantBilling += competitionBilling
 	}
-	return scores, visits, bench
+
+	log.Printf("tenant:%v billing:%v", tenant.Name, tenantBilling)
+	return scores, visits, int64(tenantBilling), bcs, bench
 }
 
 func CreateScore() int64 {

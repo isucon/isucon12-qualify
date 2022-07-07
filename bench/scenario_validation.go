@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"time"
 
@@ -547,6 +548,100 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
+	}
+
+	{
+		// ページングで初期データ範囲のBillingが正しいか確認
+		checkTenantCursor := int64(randomRange([]int{20, 99})) // ID=2~99のどれかのテナントでチェック
+		res, err := GetAdminTenantsBillingAction(ctx, fmt.Sprintf("%d", checkTenantCursor), adminAg)
+		v := ValidateResponse("テナント別の請求ダッシュボード: 初期データチェック", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
+				if 10 != len(r.Data.Tenants) {
+					return fmt.Errorf("請求ダッシュボードの結果の数が違います (want: %d, got: %d)", len(r.Data.Tenants), 10)
+				}
+				tenantIDs := []int64{}
+				for _, tenant := range r.Data.Tenants {
+					// 初期データと照らし合わせてbillingが合っているか確認
+					index, err := strconv.ParseInt(tenant.ID, 10, 64)
+					if err != nil {
+						return fmt.Errorf("TenantIDの形が違います tenantName:%v (got: %v)", tenant.Name, tenant.ID)
+					}
+					tenantIDs = append(tenantIDs, index)
+					initialTenant, ok := sc.InitialDataTenant[index]
+					if !ok {
+						return fmt.Errorf("初期データに存在しないTenantIDです tenantName:%v (got: %v)", tenant.Name, tenant.ID)
+					}
+					if tenant.BillingYen != initialTenant.Billing {
+						return fmt.Errorf("Billingの結果が違います tenantName:%v (want: %v got: %v)", tenant.Name, initialTenant.Billing, tenant.BillingYen)
+					}
+					AdminLogger.Printf("success, %v", tenant)
+				}
+				sort.Slice(tenantIDs, func(i, j int) bool { return tenantIDs[i] < tenantIDs[j] })
+				if tenantIDs[0] != int64(checkTenantCursor-10) || tenantIDs[len(tenantIDs)-1] != int64(checkTenantCursor-1) {
+					return fmt.Errorf("取得したテナントIDの範囲が違います (want: %v~%v got: %v~%v)",
+						checkTenantCursor-10, checkTenantCursor-1, tenantIDs[0], tenantIDs[len(tenantIDs)-1],
+					)
+				}
+
+				return nil
+			}),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
+		}
+	}
+
+	// テナント内の大会毎のBillingが正しいことを確認
+	{
+		checkTenantCursor := int64(randomRange([]int{2, 99})) // ID=2~99のどれかのテナントでチェック
+		initDataTenant := sc.InitialDataTenant[checkTenantCursor]
+		_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, initDataTenant.TenantName, "organizer")
+		if err != nil {
+			return err
+		}
+		res, err := GetOrganizerBillingAction(ctx, orgAg)
+		v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIBilling) error {
+				if len(initDataTenant.Competitions) != len(r.Data.Reports) {
+					return fmt.Errorf("請求レポートの数が違います (want: %d, got: %d)", len(initDataTenant.Competitions), len(r.Data.Reports))
+				}
+				reportCompMap := map[string]isuports.BillingReport{}
+				for _, r := range r.Data.Reports {
+					reportCompMap[r.CompetitionID] = r
+				}
+				for _, comp := range initDataTenant.Competitions {
+					reportComp, ok := reportCompMap[comp.ID]
+					if !ok {
+						return fmt.Errorf("対象の大会がありません tenantName:%v (want: %v)", initDataTenant.TenantName, comp.ID)
+					}
+					// TODO: 対応するか悩み中 InitialDataの参加者数がわからない
+					// score登録者 rankingアクセスあり: 100 yen x 1 player
+					// score未登録者 rankingアクセスあり:  10 yen x 1 player
+					// if r.Data.Reports[0].PlayerCount != int64(len(score)) {
+					// 	return fmt.Errorf("大会の参加者数が違います competitionID: %s (want: %d, got: %d)", competitionID, len(score), r.Data.Reports[0].PlayerCount)
+					// }
+					// if r.Data.Reports[0].VisitorCount != 1 {
+					// 	return fmt.Errorf("大会の閲覧者数が違います competitionID: %s (want: %d, got: %d)", competitionID, 1, r.Data.Reports[0].VisitorCount)
+					// }
+					// if r.Data.Reports[0].BillingPlayerYen != int64(len(score)*100) {
+					// 	return fmt.Errorf("大会の請求金額内訳(参加者分)が違います competitionID: %s (want: %d, got: %d)", competitionID, 100, r.Data.Reports[0].BillingPlayerYen)
+					// }
+					// if r.Data.Reports[0].BillingVisitorYen != 10 {
+					// 	return fmt.Errorf("大会の請求金額内訳(閲覧者)が違います competitionID: %s (want: %d, got: %d)", competitionID, 10, r.Data.Reports[0].BillingVisitorYen)
+					// }
+					if comp.Billing != reportComp.BillingYen {
+						return fmt.Errorf("大会の請求金額合計が違います tenantName:%v competitionID: %v (want: %v, got: %v)", initDataTenant.TenantName, comp.ID, comp.Billing, reportComp.BillingYen)
+					}
+					AdminLogger.Printf("success: %v", comp)
+				}
+
+				return nil
+			}),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
+		}
+		// NOTE: 不正リクエストチェックなし
 	}
 
 	// 不正リクエスト 無効なJWT
