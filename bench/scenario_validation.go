@@ -87,14 +87,13 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 // すべてのAPIを一通り正常系チェック
 // 失敗したらエラーで終了する
 func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep, tenantName, tenantDisplayName string) error {
-	msg := "allAPISuccessCheck"
 	// SaaS管理者のagent作成
-	_, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
+	adminAc, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
 	if err != nil {
 		return err
 	}
 	// 大会主催者API
-	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
+	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
 	if err != nil {
 		return err
 	}
@@ -107,7 +106,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	}
 	{
 		res, err, txt := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("テナントへプレイヤー追加", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
 				if playerNum != len(r.Data.Players) {
@@ -141,7 +140,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	// プレイヤー一覧取得
 	{
 		res, err, txt := GetOrganizerPlayersListAction(ctx, orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("テナントのプレイヤー一覧取得", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayersList) error {
 				if len(playerIDs) != len(r.Data.Players) {
@@ -175,7 +174,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	competitionTitle := "validate_competition"
 	{
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, competitionTitle, orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("新規大会追加", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
 				if competitionTitle != r.Data.Competition.Title {
@@ -197,7 +196,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	{
 		idx := disqualifiedPlayerIndex
 		res, err, txt := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerIDs[idx], orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("プレイヤーを失格にする", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
 				if !r.Data.Player.IsDisqualified {
@@ -230,7 +229,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 
 		csv := score.CSV()
 		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
 				_ = r // responseは空
@@ -243,7 +242,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 
 	}
 	// 大会参加者API
-	_, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[0])
+	playerAc, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[0])
 	if err != nil {
 		return err
 	}
@@ -251,7 +250,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	{
 		checkPlayerIndex := 10 // < disqualifiedPlayerIndex
 		res, err, txt := GetPlayerAction(ctx, playerIDs[checkPlayerIndex], playerAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				if playerIDs[checkPlayerIndex] != r.Data.Player.ID {
@@ -280,7 +279,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	{
 		//rank_after未指定
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("大会内のランキング取得: ページングなし", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if len(score) != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
@@ -296,7 +295,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	{
 		// rank_afterで最後の1件だけを取るように指定する
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, strconv.Itoa(len(score)-1), playerAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("大会内のランキング取得: ページングあり", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if 1 != len(r.Data.Ranks) {
@@ -312,13 +311,13 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	// スコア未登録プレイヤーがランキングを参照する
 	{
 		idx := noScorePlayerIndex
-		_, noScorePlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[idx])
+		noScorePlayerAc, noScorePlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[idx])
 		if err != nil {
 			return err
 		}
 
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", noScorePlayerAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", noScorePlayerAc, txt)
 		v := ValidateResponseWithMsg("大会内のランキング取得: スコア未登録プレイヤー", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if len(score) != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
@@ -338,7 +337,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	// 主催者API 大会の終了
 	{
 		res, err, txt := PostOrganizerCompetitionFinishAction(ctx, competitionID, orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("大会終了", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
 				_ = r // responseは空
@@ -354,7 +353,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		// NOTE: 失格者はランキングから除外しない
 		rankingNum := len(score)
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("大会内のランキング取得: ランキングが正しいことを確認", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if rankingNum != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
@@ -389,7 +388,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	// 主催者API テナント内請求情報確認
 	{
 		res, err, txt := GetOrganizerBillingAction(ctx, orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("テナント内の請求情報", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIBilling) error {
 				if 1 != len(r.Data.Reports) {
@@ -429,7 +428,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	// 大会一覧取得(player API)
 	{
 		res, err, txt := GetPlayerCompetitionsAction(ctx, playerAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("テナント内の大会情報取得", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitions) error {
 				if 1 != len(r.Data.Competitions) {
@@ -447,7 +446,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	// 大会一覧取得(organizer API)
 	{
 		res, err, txt := GetOrganizerCompetitionsAction(ctx, orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("主催者API テナント内の大会一覧取得", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitions) error {
 				if 1 != len(r.Data.Competitions) {
@@ -464,7 +463,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	{
 		// ページング無しで今回操作したテナントが含まれていることを確認
 		res, err, txt := GetAdminTenantsBillingAction(ctx, "", adminAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード(最大10件)", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 				// 初期データがあるので上限ま取ってこれる
@@ -490,7 +489,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		// ページングで初期データ範囲のBillingが正しいか確認
 		checkTenantCursor := int64(randomRange([]int{20, 99})) // ID=2~99のどれかのテナントでチェック
 		res, err, txt := GetAdminTenantsBillingAction(ctx, fmt.Sprintf("%d", checkTenantCursor), adminAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード: 初期データチェック", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 				if 10 != len(r.Data.Tenants) {
@@ -537,7 +536,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 			return err
 		}
 		res, err, txt := GetOrganizerBillingAction(ctx, orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("テナント内の請求情報", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIBilling) error {
 				if len(initDataTenant.Competitions) != len(r.Data.Reports) {
