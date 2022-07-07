@@ -740,12 +740,11 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 
 // 不正リクエストチェック
 func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
-	msg := "badRequestCheck"
 	tenantName := "badrequest-tenantid"
 	tenantDisplayName := "badRequestCheck-Tenantname"
 
 	// SaaS管理者のagent作成
-	_, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
+	adminAc, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
 	if err != nil {
 		return err
 	}
@@ -753,7 +752,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	// SaaS管理API
 	{
 		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, adminAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
 				if tenantDisplayName != r.Data.Tenant.DisplayName {
@@ -770,7 +769,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		}
 	}
 
-	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
+	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
 	if err != nil {
 		return err
 	}
@@ -784,7 +783,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	}
 	{
 		res, err, txt := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("テナントへプレイヤー追加", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
 				if playerNum != len(r.Data.Players) {
@@ -809,7 +808,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		}
 		for name, code := range invalidNames {
 			res, err, txt := PostAdminTenantsAddAction(ctx, name, fmt.Sprintf("name_%s", name), adminAg)
-			_ = txt
+			msg := fmt.Sprintf("%s %s", adminAc, txt)
 			v := ValidateResponseWithMsg("新規テナント作成 不正リクエスト", step, res, err, msg, WithStatusCode(code))
 			if !v.IsEmpty() {
 				return v
@@ -820,7 +819,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	// 不正リクエスト: 存在しないプレイヤーを失格にする
 	{
 		res, err, txt := PostOrganizerApiPlayerDisqualifiedAction(ctx, notExistID, orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("プレイヤーを失格にする: 不正リクエスト(存在しないプレイヤー)", step, res, err, msg, WithStatusCode(404))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
@@ -832,7 +831,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	var competitionID string
 	{
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, competitionTitle, orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("新規大会追加", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
 				if competitionTitle != r.Data.Competition.Title {
@@ -855,7 +854,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		// 存在しない大会
 		csv := ScoreRows{}.CSV()
 		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, notExistID, []byte(csv), orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(存在しない大会)", step, res, err, msg, WithStatusCode(404))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
@@ -869,7 +868,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 
 		invalidCSV := invalidScore.CSV()
 		res, err, txt = PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(invalidCSV), orgAg)
-		_ = txt
+		msg = fmt.Sprintf("%s %s", orgAc, txt)
 		v = ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(存在しないプレイヤー)", step, res, err, msg, WithStatusCode(400))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
@@ -878,7 +877,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		// カラムの並び順が逆のCSVを入稿
 		invalidCSV = "score,player_id\n1,invalid_csv"
 		res, err, txt = PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(invalidCSV), orgAg)
-		_ = txt
+		msg = fmt.Sprintf("%s %s", orgAc, txt)
 		v = ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(カラムの並び順が違う)", step, res, err, msg, WithStatusCode(400))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
@@ -887,14 +886,14 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		// 余計なカラムがあるCSVを入稿
 		invalidCSV = "score,player_id,superfluity\n1,invalid_csv,dasoku"
 		res, err, txt = PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(invalidCSV), orgAg)
-		_ = txt
+		msg = fmt.Sprintf("%s %s", orgAc, txt)
 		v = ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(余計なカラムがあるCSV)", step, res, err, msg, WithStatusCode(400))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
 	}
 
-	_, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[0])
+	playerAc, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[0])
 	if err != nil {
 		return err
 	}
@@ -903,7 +902,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	// 存在しないプレイヤー
 	{
 		res, err, txt := GetPlayerAction(ctx, notExistID, playerAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得", step, res, err, msg, WithStatusCode(404))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
@@ -914,7 +913,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	// 存在しない大会
 	{
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, notExistID, "", playerAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("大会内のランキング取得", step, res, err, msg, WithStatusCode(404))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
@@ -925,7 +924,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	{
 		idx := disqualifiedPlayerIndex
 		res, err, txt := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerIDs[idx], orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("プレイヤーを失格にする", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
 				if !r.Data.Player.IsDisqualified {
@@ -945,13 +944,13 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	// 失格者がランキングを参照しようとする
 	{
 		idx := disqualifiedPlayerIndex
-		_, disqualifiedPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[idx])
+		disqualifiedPlayerAc, disqualifiedPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[idx])
 		if err != nil {
 			return err
 		}
 
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", disqualifiedPlayerAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", disqualifiedPlayerAc, txt)
 		v := ValidateResponseWithMsg("大会内のランキング取得: 失格済みプレイヤー", step, res, err, msg, WithStatusCode(403))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
@@ -961,7 +960,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	// 存在しない大会
 	{
 		res, err, txt := PostOrganizerCompetitionFinishAction(ctx, notExistID, orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("大会終了: 不正リクエスト(存在しない大会)", step, res, err, msg, WithStatusCode(404))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
@@ -971,7 +970,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	// 大会を終了する (正常リクエスト)
 	{
 		res, err, txt := PostOrganizerCompetitionFinishAction(ctx, competitionID, orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("大会終了", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
 				_ = r // responseは空
@@ -987,7 +986,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	{
 		csv := ScoreRows{}.CSV()
 		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(終了済みの大会)", step, res, err, msg, WithStatusCode(400))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
@@ -999,7 +998,6 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 
 // 不正リクエスト 無効なJWT
 func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
-	msg := "invalidJWTCheck"
 	tenantName := "invalid-jwt-tenant"
 	tenantDisplayName := "valid-Tenantname"
 
@@ -1011,7 +1009,7 @@ func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	// SaaS管理API
 	{
 		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, adminAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, fmt.Sprintf("%s %s", msg, adminAc), WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
 				if tenantDisplayName != r.Data.Tenant.DisplayName {
@@ -1045,7 +1043,7 @@ func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		}
 
 		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, "invalid_JWT_tenant_add", invalidAdminAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", ac, txt)
 		v := ValidateResponseWithMsg("新規テナント作成: 不正リクエスト(exp切れのJWT)", step, res, err, msg, WithStatusCode(401))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
@@ -1054,12 +1052,12 @@ func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 
 	// 存在しないテナント
 	{
-		_, invalidOrgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, notExistName, "organizer")
+		invalidOrgAc, invalidOrgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, notExistName, "organizer")
 		if err != nil {
 			return err
 		}
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, notExistName, invalidOrgAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", invalidOrgAc, txt)
 		v := ValidateResponseWithMsg("新規大会追加: 不正リクエスト(存在しないテナント)", step, res, err, msg, WithStatusCode(401))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
@@ -1068,12 +1066,12 @@ func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 
 	// 存在しないプレイヤー
 	{
-		_, invalidPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, notExistID)
+		invalidPlayerAc, invalidPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, notExistID)
 		if err != nil {
 			return err
 		}
 		res, err, txt := GetPlayerCompetitionsAction(ctx, invalidPlayerAg)
-		_ = txt
+		msg := fmt.Sprintf("%s %s", invalidPlayerAc, txt)
 		v := ValidateResponseWithMsg("テナント内の大会情報取得: 不正なリクエスト(存在しないプレイヤー)", step, res, err, msg, WithStatusCode(401))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
