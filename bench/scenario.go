@@ -207,7 +207,6 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 	}
 
 	// 破壊的な変更を許容するシナリオ
-	// TODO: 未完成
 	{
 		wkr, err := sc.PeacefulTenantScenarioWorker(step, 1)
 		if err != nil {
@@ -234,6 +233,15 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 		sc.WorkerCh <- wkr
 	}
 
+	// PlayerHandlerの整合性をチェックするシナリオ
+	{
+		wkr, err := sc.PlayerValidateScenarioWorker(step, 1)
+		if err != nil {
+			return err
+		}
+		sc.WorkerCh <- wkr
+	}
+
 	errorCount := 0
 	criticalCount := 0
 	end := false
@@ -244,9 +252,9 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 			end = true
 		case w := <-sc.WorkerCh: // workerを起動する
 			// debug: 一つのworkerのみを立ち上げる
-			// if w.String() != "AdminBillingValidateWorker" {
-			// 	continue
-			// }
+			if w.String() != "PlayerValidateScenarioWorker" {
+				continue
+			}
 			wg.Add(1)
 			sc.CountWorker(w.String())
 			go func(w Worker) {

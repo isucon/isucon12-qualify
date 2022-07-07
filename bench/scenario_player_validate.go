@@ -3,12 +3,10 @@ package bench
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
-	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 )
 
 type playerValidateScenarioWorker struct {
@@ -48,93 +46,107 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 	defer report()
 	sc.ScenarioStart(scTag)
 
-	// TODO: score入稿するので破壊シナリオから選ばないとダメ、直す
-	initialData := sc.InitialData.Choise()
-	playerAc, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, initialData.TenantName, initialData.PlayerID)
+	// 初期データからテナントを選ぶ
+	index := randomRange(ConstPlayerValidateScenarioIDRange)
+	tenant := sc.InitialDataTenant[int64(index)]
+
+	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")
 	if err != nil {
 		return err
 	}
 
-	// player handlerを舐める（cacheさせる）
-	// score入稿
-	// なめ直して更新されていることを確認
-
-	var competitions []isuports.CompetitionDetail
-	for {
-		res, err, txt := GetPlayerCompetitionsAction(ctx, playerAg)
-		msg := fmt.Sprintf("%s %s", playerAc, txt)
-		v := ValidateResponseWithMsg("テナント内の大会情報取得", step, res, err, msg, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPICompetitions) error {
-				competitions = r.Data.Competitions
+	playerIDs := []string{}
+	disqualifiedPlayerIDs := []string{}
+	{
+		res, err, txt := GetOrganizerPlayersListAction(ctx, orgAg)
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
+		v := ValidateResponseWithMsg("テナントのプレイヤー一覧取得", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPIPlayersList) error {
+				for _, pl := range r.Data.Players {
+					if pl.IsDisqualified {
+						disqualifiedPlayerIDs = append(disqualifiedPlayerIDs, pl.ID)
+					} else {
+						playerIDs = append(playerIDs, pl.ID)
+					}
+				}
 				return nil
 			}),
 		)
 		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+			sc.AddScoreByScenario(step, ScoreGETOrganizerPlayersList, scTag)
 		} else {
-			sc.AddErrorCount()
 			return v
 		}
-
-		// NOTE: worker発火直後はcompetitionsが無いので登録されるまで待つ
-		if len(competitions) != 0 {
-			break
-		}
-		sleepms := 500 + rand.Intn(500)
-		SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 	}
 
-	for i := 0; i < ConstPlayerScenarioCompetitionLoopCount; i++ {
-		// 大会を一つ選ぶ
-		compIndex := rand.Intn(len(competitions))
-		comp := competitions[compIndex]
-		playerIDs := []string{}
+	checkerPlayerID := playerIDs[0]
+	checkerPlayerAc, checkerPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenant.TenantName, checkerPlayerID)
+	if err != nil {
+		return err
+	}
 
-		{
-			res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", playerAg)
-			msg := fmt.Sprintf("%s %s", playerAc, txt)
-			v := ValidateResponseWithMsg("大会内のランキング取得", step, res, err, msg, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
-					for _, rank := range r.Data.Ranks {
-						playerIDs = append(playerIDs, rank.PlayerID)
-					}
-					return nil
-				}),
-			)
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
-			} else {
-				sc.AddErrorCount()
-				return v
-			}
-		}
+	// ScoreGETPlayer
+	//		IsDisqualifyが更新されていること
+	//		Scores更新
+	// ScoreGETPlayerRanking
+	//		ranks
+	//		score
+	// ScoreGETPlayerCompetitions
+	//		competitions
+	//			IsFinished
 
-		if len(playerIDs) == 0 {
-			continue
-		}
-
-		// 大会参加者を何人か見る
-		playerCount := rand.Intn(ConstPlayerScenarioMaxPlayerCount)
-		for j := 0; j < playerCount; j++ {
-			playerIndex := rand.Intn(len(playerIDs))
-			res, err, txt := GetPlayerAction(ctx, playerIDs[playerIndex], playerAg)
-			msg := fmt.Sprintf("%s %s", playerAc, txt)
-			v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(200),
-				WithSuccessResponse(func(r ResponseAPIPlayer) error {
-					_ = r
-					return nil
-				}),
-			)
-			if v.IsEmpty() {
-				sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
-			} else {
-				sc.AddErrorCount()
-				return v
-			}
-			sleepms := rand.Intn(5000)
-			SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
+	// cacheさせる
+	{
+		pid := playerIDs[1]
+		res, err, txt := GetPlayerAction(ctx, pid, checkerPlayerAg)
+		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
+		v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPIPlayer) error {
+				if r.Data.Player.ID != pid {
+					return fmt.Errorf("PlayerIDが違います (want:%s got:%s)", pid, r.Data.Player.ID)
+				}
+				if r.Data.Player.IsDisqualified {
+					return fmt.Errorf("失格状態が違います playerID: %s (want %v got:%v)", pid, false, r.Data.Player.IsDisqualified)
+				}
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			return v
 		}
 	}
+
+	{
+		pid := disqualifiedPlayerIDs[0]
+		res, err, txt := GetPlayerAction(ctx, pid, checkerPlayerAg)
+		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
+		v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPIPlayer) error {
+				if r.Data.Player.ID != pid {
+					return fmt.Errorf("PlayerIDが違います (want:%s got:%s)", pid, r.Data.Player.ID)
+				}
+				if !r.Data.Player.IsDisqualified {
+					return fmt.Errorf("失格状態が違います playerID: %s (want %v got:%v)", pid, true, r.Data.Player.IsDisqualified)
+				}
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			return v
+		}
+	}
+
+	// 状態を更新する
+	// check
+
+	SleepWithCtx(ctx, time.Second*3)
 
 	return nil
 }
