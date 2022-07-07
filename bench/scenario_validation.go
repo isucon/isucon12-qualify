@@ -44,6 +44,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, adminAg)
 		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
 				if tenantDisplayName != r.Data.Tenant.DisplayName {
 					return fmt.Errorf("作成したテナントのDisplayNameが違います (want: %s, got: %s)", tenantDisplayName, r.Data.Tenant.DisplayName)
@@ -108,6 +109,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("テナントへプレイヤー追加", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
 				if playerNum != len(r.Data.Players) {
 					return fmt.Errorf("追加されたプレイヤー数が違います (want: %d, got: %d)", playerNum, len(r.Data.Players))
@@ -142,6 +144,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := GetOrganizerPlayersListAction(ctx, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("テナントのプレイヤー一覧取得", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPIPlayersList) error {
 				if len(playerIDs) != len(r.Data.Players) {
 					return fmt.Errorf("プレイヤー数が違います (want: %d, got: %d)", playerNum, len(r.Data.Players))
@@ -176,6 +179,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, competitionTitle, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("新規大会追加", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
 				if competitionTitle != r.Data.Competition.Title {
 					return fmt.Errorf("追加された大会の名前が違います (want: %s, got: %s)", competitionTitle, r.Data.Competition.Title)
@@ -198,6 +202,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerIDs[idx], orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("プレイヤーを失格にする", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
 				if !r.Data.Player.IsDisqualified {
 					return fmt.Errorf("プレイヤーが失格になっていません player.id: %s", r.Data.Player.ID)
@@ -231,6 +236,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
 				_ = r // responseは空
 				return nil
@@ -252,6 +258,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := GetPlayerAction(ctx, playerIDs[checkPlayerIndex], playerAg)
 		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				if playerIDs[checkPlayerIndex] != r.Data.Player.ID {
 					return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", playerIDs[checkPlayerIndex], r.Data.Player.ID)
@@ -281,6 +288,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
 		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("大会内のランキング取得: ページングなし", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if len(score) != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
 					return fmt.Errorf("大会のランキングの結果の数が違います(最大100件) (want: %d, got: %d)", len(score), len(r.Data.Ranks))
@@ -297,6 +305,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, strconv.Itoa(len(score)-1), playerAg)
 		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("大会内のランキング取得: ページングあり", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if 1 != len(r.Data.Ranks) {
 					return fmt.Errorf("rank_after指定時の大会のランキングの結果の数が違います (want: %d, got: %d)", 1, len(r.Data.Ranks))
@@ -319,6 +328,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", noScorePlayerAg)
 		msg := fmt.Sprintf("%s %s", noScorePlayerAc, txt)
 		v := ValidateResponseWithMsg("大会内のランキング取得: スコア未登録プレイヤー", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if len(score) != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
 					return fmt.Errorf("大会のランキングの結果の数が違います(最大100件) (want: %d, got: %d)", len(score), len(r.Data.Ranks))
@@ -339,6 +349,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := PostOrganizerCompetitionFinishAction(ctx, competitionID, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("大会終了", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
 				_ = r // responseは空
 				return nil
@@ -355,6 +366,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
 		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("大会内のランキング取得: ランキングが正しいことを確認", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if rankingNum != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
 					return fmt.Errorf("大会のランキングの結果の数が違います(最大100件) (want: %d, got: %d)", rankingNum, len(r.Data.Ranks))
@@ -390,6 +402,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := GetOrganizerBillingAction(ctx, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("テナント内の請求情報", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPIBilling) error {
 				if 1 != len(r.Data.Reports) {
 					return fmt.Errorf("請求レポートの数が違います (want: %d, got: %d)", 1, len(r.Data.Reports))
@@ -430,6 +443,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := GetPlayerCompetitionsAction(ctx, playerAg)
 		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("テナント内の大会情報取得", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitions) error {
 				if 1 != len(r.Data.Competitions) {
 					return fmt.Errorf("テナントに含まれる大会の数が違います (want: %d, got: %d)", 1, len(r.Data.Competitions))
@@ -448,6 +462,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := GetOrganizerCompetitionsAction(ctx, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("主催者API テナント内の大会一覧取得", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitions) error {
 				if 1 != len(r.Data.Competitions) {
 					return fmt.Errorf("テナントに含まれる大会の数が違います (want: %d, got: %d)", 1, len(r.Data.Competitions))
@@ -465,6 +480,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := GetAdminTenantsBillingAction(ctx, "", adminAg)
 		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード(最大10件)", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 				// 初期データがあるので上限ま取ってこれる
 				if 10 != len(r.Data.Tenants) {
@@ -491,6 +507,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := GetAdminTenantsBillingAction(ctx, fmt.Sprintf("%d", checkTenantCursor), adminAg)
 		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード: 初期データチェック", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 				if 10 != len(r.Data.Tenants) {
 					return fmt.Errorf("請求ダッシュボードの結果の数が違います (want: %d, got: %d)", len(r.Data.Tenants), 10)
@@ -538,6 +555,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		res, err, txt := GetOrganizerBillingAction(ctx, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("テナント内の請求情報", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPIBilling) error {
 				if len(initDataTenant.Competitions) != len(r.Data.Reports) {
 					return fmt.Errorf("請求レポートの数が違います (want: %d, got: %d)", len(initDataTenant.Competitions), len(r.Data.Reports))
@@ -601,6 +619,7 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, adminAg)
 		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
 				if tenantDisplayName != r.Data.Tenant.DisplayName {
 					return fmt.Errorf("作成したテナントのDisplayNameが違います (want: %s, got: %s)", tenantDisplayName, r.Data.Tenant.DisplayName)
@@ -626,6 +645,7 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, competitionName, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("新規大会追加)", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
 				competitionID = r.Data.Competition.ID
 				return nil
@@ -647,6 +667,7 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 		res, err, txt := PostOrganizerPlayersAddAction(ctx, names, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("テナントへプレイヤー101人追加", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
 				for _, pl := range r.Data.Players {
 					pIDs = append(pIDs, pl.ID)
@@ -677,6 +698,7 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg,
 			WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
 				if r.Data.Rows != int64(len(rankingCheckScore)) {
 					return fmt.Errorf("大会結果CSV入稿レスポンスのRowsが異なります (want: %d, got: %d)", len(rankingCheckScore), r.Data.Rows)
@@ -694,6 +716,7 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
 		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("大会内のランキング取得: ページングなし,上限100件", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if 100 != len(r.Data.Ranks) {
 					return fmt.Errorf("大会のランキングの結果の最大は100件である必要があります (want: %d, got: %d)", 100, len(r.Data.Ranks))
@@ -754,6 +777,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, adminAg)
 		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
 				if tenantDisplayName != r.Data.Tenant.DisplayName {
 					return fmt.Errorf("作成したテナントのDisplayNameが違います (want: %s, got: %s)", tenantDisplayName, r.Data.Tenant.DisplayName)
@@ -785,6 +809,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		res, err, txt := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("テナントへプレイヤー追加", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPIPlayersAdd) error {
 				if playerNum != len(r.Data.Players) {
 					return fmt.Errorf("追加されたプレイヤー数が違います (want: %d, got: %d)", playerNum, len(r.Data.Players))
@@ -809,7 +834,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		for name, code := range invalidNames {
 			res, err, txt := PostAdminTenantsAddAction(ctx, name, fmt.Sprintf("name_%s", name), adminAg)
 			msg := fmt.Sprintf("%s %s", adminAc, txt)
-			v := ValidateResponseWithMsg("新規テナント作成 不正リクエスト", step, res, err, msg, WithStatusCode(code))
+			v := ValidateResponseWithMsg("新規テナント作成 不正リクエスト", step, res, err, msg, WithStatusCode(code), WithContentType("application/json"))
 			if !v.IsEmpty() {
 				return v
 			}
@@ -820,7 +845,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	{
 		res, err, txt := PostOrganizerApiPlayerDisqualifiedAction(ctx, notExistID, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
-		v := ValidateResponseWithMsg("プレイヤーを失格にする: 不正リクエスト(存在しないプレイヤー)", step, res, err, msg, WithStatusCode(404))
+		v := ValidateResponseWithMsg("プレイヤーを失格にする: 不正リクエスト(存在しないプレイヤー)", step, res, err, msg, WithStatusCode(404), WithContentType("application/json"))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
@@ -833,6 +858,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, competitionTitle, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("新規大会追加", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionsAdd) error {
 				if competitionTitle != r.Data.Competition.Title {
 					return fmt.Errorf("追加された大会の名前が違います (want: %s, got: %s)", competitionTitle, r.Data.Competition.Title)
@@ -855,7 +881,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		csv := ScoreRows{}.CSV()
 		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, notExistID, []byte(csv), orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
-		v := ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(存在しない大会)", step, res, err, msg, WithStatusCode(404))
+		v := ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(存在しない大会)", step, res, err, msg, WithStatusCode(404), WithContentType("application/json"))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
@@ -869,7 +895,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		invalidCSV := invalidScore.CSV()
 		res, err, txt = PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(invalidCSV), orgAg)
 		msg = fmt.Sprintf("%s %s", orgAc, txt)
-		v = ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(存在しないプレイヤー)", step, res, err, msg, WithStatusCode(400))
+		v = ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(存在しないプレイヤー)", step, res, err, msg, WithStatusCode(400), WithContentType("application/json"))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
@@ -878,7 +904,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		invalidCSV = "score,player_id\n1,invalid_csv"
 		res, err, txt = PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(invalidCSV), orgAg)
 		msg = fmt.Sprintf("%s %s", orgAc, txt)
-		v = ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(カラムの並び順が違う)", step, res, err, msg, WithStatusCode(400))
+		v = ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(カラムの並び順が違う)", step, res, err, msg, WithStatusCode(400), WithContentType("application/json"))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
@@ -887,7 +913,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		invalidCSV = "score,player_id,superfluity\n1,invalid_csv,dasoku"
 		res, err, txt = PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(invalidCSV), orgAg)
 		msg = fmt.Sprintf("%s %s", orgAc, txt)
-		v = ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(余計なカラムがあるCSV)", step, res, err, msg, WithStatusCode(400))
+		v = ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(余計なカラムがあるCSV)", step, res, err, msg, WithStatusCode(400), WithContentType("application/json"))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
@@ -903,7 +929,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	{
 		res, err, txt := GetPlayerAction(ctx, notExistID, playerAg)
 		msg := fmt.Sprintf("%s %s", playerAc, txt)
-		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得", step, res, err, msg, WithStatusCode(404))
+		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得", step, res, err, msg, WithStatusCode(404), WithContentType("application/json"))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
@@ -914,7 +940,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	{
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, notExistID, "", playerAg)
 		msg := fmt.Sprintf("%s %s", playerAc, txt)
-		v := ValidateResponseWithMsg("大会内のランキング取得", step, res, err, msg, WithStatusCode(404))
+		v := ValidateResponseWithMsg("大会内のランキング取得", step, res, err, msg, WithStatusCode(404), WithContentType("application/json"))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
@@ -926,6 +952,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		res, err, txt := PostOrganizerApiPlayerDisqualifiedAction(ctx, playerIDs[idx], orgAg)
 		msg := fmt.Sprintf("%s %s", playerAc, txt)
 		v := ValidateResponseWithMsg("プレイヤーを失格にする", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
 				if !r.Data.Player.IsDisqualified {
 					return fmt.Errorf("プレイヤーが失格になっていません player.id: %s", r.Data.Player.ID)
@@ -951,7 +978,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", disqualifiedPlayerAg)
 		msg := fmt.Sprintf("%s %s", disqualifiedPlayerAc, txt)
-		v := ValidateResponseWithMsg("大会内のランキング取得: 失格済みプレイヤー", step, res, err, msg, WithStatusCode(403))
+		v := ValidateResponseWithMsg("大会内のランキング取得: 失格済みプレイヤー", step, res, err, msg, WithStatusCode(403), WithContentType("application/json"))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
@@ -961,7 +988,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	{
 		res, err, txt := PostOrganizerCompetitionFinishAction(ctx, notExistID, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
-		v := ValidateResponseWithMsg("大会終了: 不正リクエスト(存在しない大会)", step, res, err, msg, WithStatusCode(404))
+		v := ValidateResponseWithMsg("大会終了: 不正リクエスト(存在しない大会)", step, res, err, msg, WithStatusCode(404), WithContentType("application/json"))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
@@ -972,6 +999,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		res, err, txt := PostOrganizerCompetitionFinishAction(ctx, competitionID, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("大会終了", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionRankingFinish) error {
 				_ = r // responseは空
 				return nil
@@ -987,7 +1015,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		csv := ScoreRows{}.CSV()
 		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
-		v := ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(終了済みの大会)", step, res, err, msg, WithStatusCode(400))
+		v := ValidateResponseWithMsg("大会結果CSV入稿: 不正リクエスト(終了済みの大会)", step, res, err, msg, WithStatusCode(400), WithContentType("application/json"))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
@@ -1011,6 +1039,7 @@ func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, adminAg)
 		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, fmt.Sprintf("%s %s", msg, adminAc), WithStatusCode(200),
+			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
 				if tenantDisplayName != r.Data.Tenant.DisplayName {
 					return fmt.Errorf("作成したテナントのDisplayNameが違います (want: %s, got: %s)", tenantDisplayName, r.Data.Tenant.DisplayName)
@@ -1044,7 +1073,7 @@ func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 
 		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, "invalid_JWT_tenant_add", invalidAdminAg)
 		msg := fmt.Sprintf("%s %s", ac, txt)
-		v := ValidateResponseWithMsg("新規テナント作成: 不正リクエスト(exp切れのJWT)", step, res, err, msg, WithStatusCode(401))
+		v := ValidateResponseWithMsg("新規テナント作成: 不正リクエスト(exp切れのJWT)", step, res, err, msg, WithStatusCode(401), WithContentType("application/json"))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
@@ -1058,7 +1087,7 @@ func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		}
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, notExistName, invalidOrgAg)
 		msg := fmt.Sprintf("%s %s", invalidOrgAc, txt)
-		v := ValidateResponseWithMsg("新規大会追加: 不正リクエスト(存在しないテナント)", step, res, err, msg, WithStatusCode(401))
+		v := ValidateResponseWithMsg("新規大会追加: 不正リクエスト(存在しないテナント)", step, res, err, msg, WithStatusCode(401), WithContentType("application/json"))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
@@ -1072,7 +1101,7 @@ func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		}
 		res, err, txt := GetPlayerCompetitionsAction(ctx, invalidPlayerAg)
 		msg := fmt.Sprintf("%s %s", invalidPlayerAc, txt)
-		v := ValidateResponseWithMsg("テナント内の大会情報取得: 不正なリクエスト(存在しないプレイヤー)", step, res, err, msg, WithStatusCode(401))
+		v := ValidateResponseWithMsg("テナント内の大会情報取得: 不正なリクエスト(存在しないプレイヤー)", step, res, err, msg, WithStatusCode(401), WithContentType("application/json"))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
