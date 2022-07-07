@@ -49,7 +49,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 	index := int64(randomRange(ConstPeacefulTenantScenarioIDRange))
 	tenant := sc.InitialDataTenant[index]
 
-	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")
+	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")
 	if err != nil {
 		return err
 	}
@@ -57,8 +57,9 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 	// player一覧を取る
 	var playerIDs []string
 	{
-		res, err := GetOrganizerPlayersListAction(ctx, orgAg)
-		v := ValidateResponse("テナントのプレイヤー一覧取得", step, res, err, WithStatusCode(200),
+		res, err, txt := GetOrganizerPlayersListAction(ctx, orgAg)
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
+		v := ValidateResponseWithMsg("テナントのプレイヤー一覧取得", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayersList) error {
 				for _, player := range r.Data.Players {
 					// 失格じゃないプレイヤーを列挙する
@@ -80,19 +81,20 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 	disqualifyPlayerID := playerIDs[n]
 	checkerPlayerID := playerIDs[n+1]
 
-	_, disqualifiedPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenant.TenantName, disqualifyPlayerID)
+	disqualifiedPlayerAc, disqualifiedPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenant.TenantName, disqualifyPlayerID)
 	if err != nil {
 		return err
 	}
-	_, checkerPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenant.TenantName, checkerPlayerID)
+	checkerPlayerAc, checkerPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenant.TenantName, checkerPlayerID)
 	if err != nil {
 		return err
 	}
 
 	// 失格前に失格にするプレイヤーを見に行く
 	{
-		res, err := GetPlayerAction(ctx, disqualifyPlayerID, checkerPlayerAg)
-		v := ValidateResponse("プレイヤーと戦績情報取得: 失格前", step, res, err, WithStatusCode(200),
+		res, err, txt := GetPlayerAction(ctx, disqualifyPlayerID, checkerPlayerAg)
+		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
+		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得: 失格前", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				if disqualifyPlayerID != r.Data.Player.ID {
 					return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", disqualifyPlayerID, r.Data.Player.ID)
@@ -114,8 +116,9 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 
 	// プレイヤーを1人失格にする
 	{
-		res, err := PostOrganizerApiPlayerDisqualifiedAction(ctx, disqualifyPlayerID, orgAg)
-		v := ValidateResponse("プレイヤーを失格にする", step, res, err, WithStatusCode(200),
+		res, err, txt := PostOrganizerApiPlayerDisqualifiedAction(ctx, disqualifyPlayerID, orgAg)
+		msg := fmt.Sprintf("%s %s", disqualifiedPlayerAc, txt)
+		v := ValidateResponseWithMsg("プレイヤーを失格にする", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
 				_ = r
 				return nil
@@ -131,8 +134,9 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 
 	// 失格プレイヤーで情報を見に行く 403
 	{
-		res, err := GetPlayerCompetitionsAction(ctx, disqualifiedPlayerAg)
-		v := ValidateResponse("テナント内の大会情報取得:  失格済みプレイヤーは403で弾く", step, res, err, WithStatusCode(403))
+		res, err, txt := GetPlayerCompetitionsAction(ctx, disqualifiedPlayerAg)
+		msg := fmt.Sprintf("%s %s", disqualifiedPlayerAc, txt)
+		v := ValidateResponseWithMsg("テナント内の大会情報取得:  失格済みプレイヤーは403で弾く", step, res, err, msg, WithStatusCode(403))
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
 		} else {
@@ -143,8 +147,9 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 
 	// 失格プレイヤーを見に行く IsDisqualifiedが更新されていることをチェック
 	{
-		res, err := GetPlayerAction(ctx, disqualifyPlayerID, checkerPlayerAg)
-		v := ValidateResponse("プレイヤーと戦績情報取得: 失格済みプレイヤーを見に行く", step, res, err, WithStatusCode(200),
+		res, err, txt := GetPlayerAction(ctx, disqualifyPlayerID, checkerPlayerAg)
+		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
+		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得: 失格済みプレイヤーを見に行く", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				if disqualifyPlayerID != r.Data.Player.ID {
 					return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", disqualifyPlayerID, r.Data.Player.ID)

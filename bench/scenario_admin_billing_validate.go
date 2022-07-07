@@ -46,7 +46,7 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	scTag := ScenarioTagAdminBillingValidate
 	sc.ScenarioStart(scTag)
 
-	_, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
+	adminAc, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
 	if err != nil {
 		return err
 	}
@@ -69,8 +69,9 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	// 最初の状態のBilling
 	var billingResultTenants []isuports.TenantWithBilling
 	{
-		res, err := GetAdminTenantsBillingAction(ctx, billingBeforeTenantID, adminAg)
-		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
+		res, err, txt := GetAdminTenantsBillingAction(ctx, billingBeforeTenantID, adminAg)
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
+		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 				billingResultTenants = r.Data.Tenants
 				return nil
@@ -85,13 +86,13 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	}
 
 	// 大会を開催、Billing確定まで進める
-	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")
+	orgAc, _, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")
 	if err != nil {
 		return err
 	}
 
 	conf := &OrganizerJobConfig{
-		orgAg:         orgAg,
+		orgAc:         orgAc,
 		scTag:         scTag,
 		tenantName:    tenant.TenantName,
 		scoreRepeat:   1,
@@ -116,8 +117,9 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	}
 
 	{
-		res, err := GetAdminTenantsBillingAction(ctx, billingBeforeTenantID, adminAg)
-		v := ValidateResponse("テナント別の請求ダッシュボード", step, res, err, WithStatusCode(200),
+		res, err, txt := GetAdminTenantsBillingAction(ctx, billingBeforeTenantID, adminAg)
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
+		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 				resultYen := int64(0)
 				for _, t := range r.Data.Tenants {
