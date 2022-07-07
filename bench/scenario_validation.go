@@ -1062,16 +1062,36 @@ func invalidCacheCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchm
 	}
 
 	// === PlayerHandlerのscoreがキャッシュされていないことを確認
-	lastCheckScore := ScoreRows{}
-	// TODO: 一度入れる
+	scores := ScoreRows{
+		&ScoreRow{
+			PlayerID: playerID,
+			Score:    100,
+		},
+	}
+	// 一度スコアを入れる
+	{
+		csv := scores.CSV()
+		res, err := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
+		v := ValidateResponse("大会結果CSV入稿: スコアあり", step, res, err,
+			WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+				if r.Data.Rows != int64(len(scores)) {
+					return fmt.Errorf("大会結果CSV入稿レスポンスのRowsが異なります (want: %d, got: %d)", len(scores), r.Data.Rows)
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return &v
+		}
+	}
 	{
 		res, err := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
-		v := ValidateResponse("大会内のランキング取得: 結果が空", step, res, err, WithStatusCode(200),
+		v := ValidateResponse("大会内のランキング取得: 結果がある", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
-				// if len(lastCheckScore) != len(r.Data.Ranks) {
-				// 	return fmt.Errorf("大会のランキングの結果が違います (want: %d, got: %d)", len(lastCheckScore), len(r.Data.Ranks))
-				// }
-				_ = r
+				if len(scores) != len(r.Data.Ranks) {
+					return fmt.Errorf("大会のランキングの結果が違います (want: %d, got: %d)", len(scores), len(r.Data.Ranks))
+				}
 				return nil
 			}),
 		)
@@ -1081,14 +1101,20 @@ func invalidCacheCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchm
 	}
 
 	// 最後に入稿されたCSVのみが有効なことを確認
+	scores = ScoreRows{
+		&ScoreRow{
+			PlayerID: playerID,
+			Score:    999,
+		},
+	}
 	{
-		csv := lastCheckScore.CSV()
+		csv := scores.CSV()
 		res, err := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
-		v := ValidateResponse("大会結果CSV入稿: 空", step, res, err,
+		v := ValidateResponse("大会結果CSV入稿: 更新", step, res, err,
 			WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
-				if r.Data.Rows != int64(len(lastCheckScore)) {
-					return fmt.Errorf("大会結果CSV入稿レスポンスのRowsが異なります (want: %d, got: %d)", len(lastCheckScore), r.Data.Rows)
+				if r.Data.Rows != int64(len(scores)) {
+					return fmt.Errorf("大会結果CSV入稿レスポンスのRowsが異なります (want: %d, got: %d)", len(scores), r.Data.Rows)
 				}
 				return nil
 			}),
@@ -1101,10 +1127,16 @@ func invalidCacheCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchm
 	// 結果を引く
 	{
 		res, err := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
-		v := ValidateResponse("大会内のランキング取得: 結果が空", step, res, err, WithStatusCode(200),
+		v := ValidateResponse("大会内のランキング取得: 結果されている", step, res, err, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
-				if len(lastCheckScore) != len(r.Data.Ranks) {
-					return fmt.Errorf("大会のランキングの結果が違います (want: %d, got: %d)", len(lastCheckScore), len(r.Data.Ranks))
+				if len(r.Data.Ranks) != 0 && len(scores) != len(r.Data.Ranks) {
+					return fmt.Errorf("大会のランキングの結果が違います (want: %d, got: %d)", len(scores), len(r.Data.Ranks))
+				}
+				if r.Data.Ranks[0].PlayerID != scores[0].PlayerID {
+					return fmt.Errorf("大会のランキングのPlayerIDが違います (want: %v, got: %v)", r.Data.Ranks[0].PlayerID, scores[0].PlayerID)
+				}
+				if r.Data.Ranks[0].Score != int64(scores[0].Score) {
+					return fmt.Errorf("大会のランキングのスコアが違います (want: %v, got: %v)", r.Data.Ranks[0].Score, scores[0].Score)
 				}
 				return nil
 			}),
