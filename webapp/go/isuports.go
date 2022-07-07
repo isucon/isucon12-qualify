@@ -29,6 +29,8 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/kayac/go-katsubushi"
+	"github.com/go-redis/redis/v8"
+	"github.com/google/uuid"
 )
 
 const (
@@ -59,6 +61,8 @@ var (
 	tenantCache sync.Map
 	viewerCache sync.Map
 	jwtKey interface{}
+
+	redisClient *redis.Client
 )
 
 type JSONSerializer struct{}
@@ -177,6 +181,10 @@ func Run() {
 	e.Debug = false
 	e.Logger.SetLevel(log.ERROR)
 	e.JSONSerializer = &JSONSerializer{} // goccy/go-json
+
+	redisClient = redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
 
 	idg, _ = katsubushi.NewGenerator(1)
 
@@ -352,6 +360,26 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		playerID:   token.Subject(),
 		tenantName: tenant.Name,
 		tenantID:   tenant.ID,
+	}
+
+	ctx := context.Background()
+	sCookie, _ := c.Request().Cookie("sessionid")
+	if sCookie == nil {
+		sid := uuid.NewString()
+		if err := redisClient.Set(ctx, sid, v.playerID, 60*time.Second).Err(); err != nil {
+			return nil, err
+		}
+		if err := redisClient.SAdd(ctx, v.playerID, sid).Err(); err != nil {
+			return nil, err
+		}
+		sc := &http.Cookie{
+			Name: "sessionid",
+			Value: sid,
+			Expires: time.Now().Add(24 * time.Hour),
+			Path: "/",
+			Domain: c.Request().Host,
+		}
+		c.SetCookie(sc)
 	}
 	viewerCache.Store(tokenStr, v)
 	return v, nil
@@ -942,8 +970,7 @@ func playerDisqualifiedHandler(c echo.Context) error {
 			true, now, playerID, err,
 		)
 	}
-	playerCache.Delete(playerID) // cache破棄
-	playerHandlerCache.Delete(playerID)
+
 	p, err := retrievePlayer(ctx, tenantDB, playerID)
 	if err != nil {
 		// 存在しないプレイヤー
@@ -951,6 +978,19 @@ func playerDisqualifiedHandler(c echo.Context) error {
 			return echo.NewHTTPError(http.StatusNotFound, "player not found")
 		}
 		return fmt.Errorf("error retrievePlayer: %w", err)
+	}
+
+	playerCache.Delete(playerID) // cache破棄
+	playerHandlerCache.Delete(playerID)
+
+	cmd := redisClient.SMembers(ctx, playerID)
+	if cmd.Err() != nil {
+		return err
+	}
+	if len(cmd.Val()) > 0 {
+		if err := redisClient.Del(ctx, cmd.Val()...).Err(); err != nil {
+			return err
+		}
 	}
 
 	res := PlayerDisqualifiedHandlerResult{
@@ -1308,6 +1348,12 @@ func playerHandler(c echo.Context) error {
 	}
 
 	if err := authorizePlayer(ctx, tenantDB, v.playerID); err != nil {
+		c.SetCookie(&http.Cookie{
+			Name: "sessionid",
+			Expires: time.Now().Add(- 24*time.Hour),
+			Path: "/",
+			Domain: c.Request().Host,
+		})
 		return err
 	}
 
@@ -1412,6 +1458,12 @@ func competitionRankingHandler(c echo.Context) error {
 	}
 
 	if err := authorizePlayer(ctx, tenantDB, v.playerID); err != nil {
+		c.SetCookie(&http.Cookie{
+			Name: "sessionid",
+			Expires: time.Now().Add(- 24*time.Hour),
+			Path: "/",
+			Domain: c.Request().Host,
+		})
 		return err
 	}
 
@@ -1562,6 +1614,12 @@ func playerCompetitionsHandler(c echo.Context) error {
 	}
 
 	if err := authorizePlayer(ctx, tenantDB, v.playerID); err != nil {
+		c.SetCookie(&http.Cookie{
+			Name: "sessionid",
+			Expires: time.Now().Add(- 24*time.Hour),
+			Path: "/",
+			Domain: c.Request().Host,
+		})
 		return err
 	}
 	return competitionsHandler(c, v, tenantDB)
@@ -1710,6 +1768,13 @@ type InitializeHandlerResult struct {
 // ベンチマーカーが起動したときに最初に呼ぶ
 // データベースの初期化などが実行されるため、スキーマを変更した場合などは適宜改変すること
 func initializeHandler(c echo.Context) error {
+	billingCache = sync.Map{}
+	tenantDBCache = sync.Map{}
+	playerCache = sync.Map{}
+	playerHandlerCache = sync.Map{}
+	tenantCache = sync.Map{}
+	viewerCache = sync.Map{}
+
 	out, err := exec.Command(initializeScript).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("error exec.Command: %s %e", string(out), err)
