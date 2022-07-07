@@ -1145,7 +1145,7 @@ func competitionScoreHandler(c echo.Context) error {
 		}
 		return c.JSON(http.StatusBadRequest, res)
 	}
-
+	
 	fh, err := c.FormFile("scores")
 	if err != nil {
 		return fmt.Errorf("error c.FormFile(scores): %w", err)
@@ -1259,6 +1259,8 @@ func competitionScoreHandler(c echo.Context) error {
 		}
 	}
 	tx.Commit()
+	key := "/api/player/competition/"+competitionID+"/ranking"
+	redisClient.Del(ctx, key)
 
 	return c.JSON(http.StatusOK, SuccessResult{
 		Success: true,
@@ -1418,11 +1420,12 @@ func playerHandler(c echo.Context) error {
 			},
 			Scores: psds,
 		},
-	}
+}
 	playerHandlerCache.Store(playerID, res)
 	b, _ := json.Marshal(res)
 	bs := string(b)
 	redisClient.Set(ctx, fmt.Sprintf("/api/player/player/%s", playerID), bs, 60 * time.Second)
+	c.Response().Header().Set("Content-Type", "application/json")
 	return c.String(http.StatusOK, bs)
 }
 
@@ -1587,7 +1590,15 @@ func competitionRankingHandler(c echo.Context) error {
 			Ranks: pagedRanks,
 		},
 	}
-	return c.JSON(http.StatusOK, res)
+	b, _ := json.Marshal(res)
+	bs := string(b)
+	key := "/api/player/competition/"+competition.ID+"/ranking"
+	if rankAfterStr != "" {
+		key = key + "?rank_after=" + rankAfterStr
+	}
+	redisClient.Set(ctx, key, bs, 60 * time.Second)
+	c.Response().Header().Set("Content-Type", "application/json")
+	return c.String(http.StatusOK, bs)
 }
 
 type CompetitionsHandlerResult struct {
