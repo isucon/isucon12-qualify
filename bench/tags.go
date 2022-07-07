@@ -32,6 +32,7 @@ const (
 	ScenarioTagOrganizerPopularTenant  ScenarioTag = "OrganizerPopularTenant"
 	ScenarioTagOrganizerPeacefulTenant ScenarioTag = "OrganizerPeacefulTenant"
 	ScenarioTagPlayer                  ScenarioTag = "Player"
+	ScenarioTagPlayerValidate          ScenarioTag = "PlayerValidate"
 	ScenarioTagTenantBillingValidate   ScenarioTag = "TenantBillingValidate"
 	ScenarioTagAdminBillingValidate    ScenarioTag = "AdminBillingValidate"
 )
@@ -61,6 +62,7 @@ var (
 		ScenarioTagOrganizerPopularTenant,
 		ScenarioTagOrganizerPeacefulTenant,
 		ScenarioTagPlayer,
+		ScenarioTagPlayerValidate,
 		ScenarioTagTenantBillingValidate,
 		ScenarioTagAdminBillingValidate,
 	}
