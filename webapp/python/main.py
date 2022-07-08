@@ -2,7 +2,7 @@ import os
 import re
 import sqlite3
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
@@ -75,6 +75,30 @@ def create_tenant_db(id: int):
 
     command = f"sqlite3 {path} < {TENANT_DB_SCHEMA_FILE_PATH}"
     subprocess.run(["bash", "-c", command])
+
+
+def dispense_id():
+    """システム全体で一意なIDを生成する"""
+    id = 0
+    last_err = None
+    for i in range(100):
+        cnx = connect_admin_db()
+        try:
+            cur = cnx.cursor()
+            cur.execute("REPLACE INTO id_generator (stub) VALUES (%s)", ("a",))
+            cnx.commit()
+        except mysql.connector.Error as e:
+            if e.errno == 1213:  # deadlock
+                last_err = e
+                continue
+            cnx.rollback()
+            raise e
+        finally:
+            id = cur.lastrowid
+            cnx.close()
+    if id != 0:
+        return int(id)
+    raise last_err
 
 
 @app.errorhandler(HTTPException)
@@ -159,7 +183,7 @@ def retrieve_tenant_row_from_header():
     cnx = connect_admin_db()
     row = None
     try:
-        query = "SELECT * FROM `tenant` WHERE `name` = (%s)"
+        query = "SELECT * FROM tenant WHERE name = (%s)"
         row = select_row(cnx, query, (tenant_name,))
     finally:
         cnx.close()
@@ -187,6 +211,23 @@ class PlayerRow:
     is_disqualified: bool
     created_at: int
     updated_at: int
+
+
+def retrieve_player(tenant_db, id: str) -> PlayerRow:
+    """参加者を取得する"""
+    tenant_db.row_factory = sqlite3.Row
+    query = "SELECT * FROM player WHERE id = (?)"
+    cur = tenant_db.cursor()
+    cur.execute(query, (id,))
+    row = cur.fetchone()
+    return PlayerRow(
+        tenant_id=row["tenant_id"],
+        id=row["id"],
+        display_name=row["display_name"],
+        is_disqualified=bool(row["is_disqualified"]),
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
 
 
 @dataclass
@@ -217,11 +258,6 @@ class TenantDetail:
     display_name: str
 
 
-@dataclass
-class TenantsAddHandlerResult:
-    tenant: TenantDetail
-
-
 @app.route("/api/admin/tenants/add", methods=["POST"])
 def admin_add_tenants():
     """
@@ -244,23 +280,25 @@ def admin_add_tenants():
     now = int(datetime.now().timestamp())
     cnx = connect_admin_db()
     try:
-        cnx.start_transaction()
         cur = cnx.cursor()
-        query = "INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (%s, %s, %s, %s)"
-        cur.execute(query, (name, display_name, now, now))
+        cur.execute(
+            "INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (%s, %s, %s, %s)",
+            (name, display_name, now, now),
+        )
         cnx.commit()
-    except Exception as e:
+    except mysql.connector.Error as e:
+        if e.errno == 1062:  # duplicate entry
+            abort(400, "duplicate tenant")
         cnx.rollback()
-        abort(400, "duplicate tenant")
+        raise e
     finally:
         id = cur.lastrowid
+
         cnx.close()
 
     create_tenant_db(id)
 
-    res = TenantsAddHandlerResult(TenantDetail(name, display_name))
-
-    return jsonify(SuccessResult(status=True, data=res))
+    return jsonify(SuccessResult(status=True, data={"tenant": TenantDetail(name, display_name)}))
 
 
 def validate_tenant_name(name):
@@ -335,7 +373,39 @@ def organizer_add_players():
     テナント管理者向けAPI
     テナントに参加者を追加する
     """
-    raise NotImplementedError()  # TODO
+    viewer = parse_viewer()
+    if viewer.role != ROLE_ORGANIZER:
+        abort(403, "role organizer required")
+
+    tenant_db = connect_to_tenant_db(viewer.tenant_id)
+
+    display_names = request.values.getlist("display_name[]")
+
+    player_details = []
+    for display_name in display_names:
+        id = dispense_id()
+
+        now = int(datetime.now().timestamp())
+
+        cur = tenant_db.cursor()
+        cur.execute(
+            "INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (id, viewer.tenant_id, display_name, False, now, now),
+        )
+        tenant_db.commit()
+
+        player = retrieve_player(tenant_db, id)
+        player_details.append(
+            PlayerDetail(
+                id=player.id,
+                display_name=player.display_name,
+                is_disqualified=player.is_disqualified,
+            )
+        )
+
+    tenant_db.close()
+
+    return jsonify(SuccessResult(status=True, data={"players": player_details}))
 
 
 @app.route("/api/organizer/player/<player_id>/disqualified", methods=["POST"])
