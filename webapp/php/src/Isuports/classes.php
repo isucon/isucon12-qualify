@@ -83,11 +83,11 @@ final class TenantRow
     public static function fromDB(array $row): self
     {
         return new self(
-            id: $row['id'],
+            id: (int)$row['id'],
             name: $row['name'],
             displayName: $row['display_name'],
-            createdAt: $row['created_at'],
-            updatedAt: $row['updated_at'],
+            createdAt: (int)$row['created_at'],
+            updatedAt: (int)$row['updated_at'],
         );
     }
 }
@@ -117,12 +117,12 @@ final class PlayerRow
     public static function fromDB(array $row): self
     {
         return new self(
-            tenantID: $row['tenant_id'],
+            tenantID: (int)$row['tenant_id'],
             id: $row['id'],
             displayName: $row['display_name'],
-            isDisqualified: $row['is_disqualified'],
-            createdAt: $row['created_at'],
-            updatedAt: $row['updated_at'],
+            isDisqualified: (bool)$row['is_disqualified'],
+            createdAt: (int)$row['created_at'],
+            updatedAt: (int)$row['updated_at'],
         );
     }
 }
