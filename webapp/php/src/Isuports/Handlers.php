@@ -110,7 +110,10 @@ final class Handlers
                     );
                     continue;
                 }
-                throw new RuntimeException(sprintf('error REPLACE INTO id_generator: %s', $e->getMessage()));
+                throw new RuntimeException(
+                    sprintf('error REPLACE INTO id_generator: %s', $e->getMessage()),
+                    previous: $e,
+                );
             }
 
             try {
@@ -148,7 +151,7 @@ final class Handlers
                 config: $this->sqliteConfiguration,
             );
         } catch (DBException $e) {
-            throw new RuntimeException(message: 'failed to open tenant DB: ' . $e->getMessage(), previous: $e);
+            throw new RuntimeException('failed to open tenant DB: ' . $e->getMessage(), previous: $e);
         }
     }
 
@@ -381,7 +384,7 @@ final class Handlers
             )->executeStatement([$name, $displayName, $now, $now]);
         } catch (DBException $e) {
             if ($e->getCode() === 1062) { // duplicate entry
-                throw new HttpBadRequestException($request, 'duplicate tenant');
+                throw new HttpBadRequestException($request, 'duplicate tenant', $e);
             }
 
             throw new RuntimeException(
@@ -396,7 +399,7 @@ final class Handlers
         try {
             $id = (int)$this->adminDB->lastInsertId();
         } catch (DBException $e) {
-            throw new RuntimeException(sprintf('error get LastInsertId: %s', $e->getMessage()));
+            throw new RuntimeException(sprintf('error get LastInsertId: %s', $e->getMessage()), previous: $e);
         }
 
         $this->createTenantDB($id);
