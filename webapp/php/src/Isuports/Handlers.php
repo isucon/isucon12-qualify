@@ -453,8 +453,37 @@ final class Handlers
      */
     public function playersListHandler(Request $request, Response $response): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $v = $this->parseViewer($request);
+
+        if ($v->role !== self::ROLE_ORGANIZER) {
+            throw new HttpForbiddenException($request, 'role organizer required');
+        }
+
+        $tenantDB = $this->connectToTenantDB($v->tenantID);
+
+        /** @var list<PlayerDetail> $pds */
+        $pds = [];
+        try {
+            $result = $tenantDB->prepare('SELECT * FROM player WHERE tenant_id=? ORDER BY created_at DESC')
+                ->executeQuery([$v->tenantID]);
+            while ($row = $result->fetchAssociative()) {
+                $pds[] = new PlayerDetail(
+                    id: $row['id'],
+                    displayName: $row['display_name'],
+                    isDisqualified: (bool)$row['is_disqualified'],
+                );
+            }
+        } catch (DBException $e) {
+            throw new RuntimeException(sprintf('error Select player: %s', $e->getMessage()), previous: $e);
+        }
+
+        $tenantDB->close();
+
+        $res = new PlayersListHandlerResult(
+            players: $pds,
+        );
+
+        return $this->jsonResponse($response, new SuccessResult(success: true, data: $res));
     }
 
     /**
