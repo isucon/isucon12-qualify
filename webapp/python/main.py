@@ -364,7 +364,32 @@ def organizer_get_players():
     テナント管理者向けAPI
     参加者一覧を返す
     """
-    raise NotImplementedError()  # TODO
+    viewer = parse_viewer()
+    if viewer.role != ROLE_ORGANIZER:
+        abort(403, "role organizer required")
+
+    tenant_db = connect_to_tenant_db(viewer.tenant_id)
+
+    tenant_db.row_factory = sqlite3.Row
+    cur = tenant_db.cursor()
+    cur.execute(
+        "SELECT * FROM player WHERE tenant_id=? ORDER BY created_at DESC",
+        (viewer.tenant_id,),
+    )
+    tenant_db.commit()
+    rows = cur.fetchall()
+
+    player_details = []
+    for row in rows:
+        player_details.append(
+            PlayerDetail(
+                id=row["id"],
+                display_name=row["display_name"],
+                is_disqualified=bool(row["is_disqualified"]),
+            )
+        )
+
+    return jsonify(SuccessResult(status=True, data={"players": player_details}))
 
 
 @app.route("/api/organizer/players/add", methods=["POST"])
