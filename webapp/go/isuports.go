@@ -118,7 +118,7 @@ func dispenseID(ctx context.Context) (string, error) {
 		break
 	}
 	if id != 0 {
-		return strconv.FormatInt(id, 10), nil
+		return fmt.Sprintf("%x", id), nil
 	}
 	return "", lastErr
 }
