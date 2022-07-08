@@ -152,12 +152,12 @@ final class CompetitionRow
     public static function fromDB(array $row): self
     {
         return new self(
-            tenantID: $row['tenant_id'],
+            tenantID: (int)$row['tenant_id'],
             id: $row['id'],
             title: $row['title'],
-            finishedAt: $row['finished_at'],
-            createdAt: $row['created_at'],
-            updatedAt: $row['updated_at'],
+            finishedAt: isset($row['finished_at']) ? (int)$row['finished_at'] : null,
+            createdAt: (int)$row['created_at'],
+            updatedAt: (int)$row['updated_at'],
         );
     }
 }
