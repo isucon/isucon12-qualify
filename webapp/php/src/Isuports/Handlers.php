@@ -289,6 +289,7 @@ final class Handlers
                 ->executeQuery([$id])
                 ->fetchAssociative();
         } catch (DBException $e) {
+            $tenantDB->close();
             throw new RuntimeException(
                 sprintf('error Select player: id=%s, %s', $id, $e->getMessage()),
                 previous: $e,
@@ -484,9 +485,9 @@ final class Handlers
             }
         } catch (DBException $e) {
             throw new RuntimeException(sprintf('error Select player: %s', $e->getMessage()), previous: $e);
+        } finally {
+            $tenantDB->close();
         }
-
-        $tenantDB->close();
 
         $res = new PlayersListHandlerResult(
             players: $pds,
@@ -529,6 +530,7 @@ final class Handlers
                 $tenantDB->prepare('INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
                     ->executeStatement([$id, $v->tenantID, $displayName, false, $now, $now]);
             } catch (DBException $e) {
+                $tenantDB->close();
                 throw new RuntimeException(
                     vsprintf(
                         'error Insert player at tenantDB: id=%s, displayName=%s, isDisqualified=%s, createdAt=%d, updatedAt=%d, %s',
@@ -592,9 +594,9 @@ final class Handlers
                 ),
                 previous: $e,
             );
+        } finally {
+            $tenantDB->close();
         }
-
-        $tenantDB->close();
 
         $res = new CompetitionsAddHandlerResult(
             competition: new CompetitionDetail(
