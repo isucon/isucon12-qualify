@@ -144,11 +144,11 @@ var mu sync.Mutex
 var idMap = map[int64]int64{}
 var generatedMaxID int64
 
-var GenID = func(ts int64) int64 {
+var GenID = func(ts int64) string {
 	return genID(ts)
 }
 
-func genID(ts int64) int64 {
+func genID(ts int64) string {
 	mu.Lock()
 	defer mu.Unlock()
 	id := ts - EpochUnix
@@ -171,7 +171,7 @@ func genID(ts int64) int64 {
 	if generatedMaxID >= maxID {
 		panic("generatedMaxID must be smaller than maxID")
 	}
-	return newID
+	return fmt.Sprintf("%x", newID)
 }
 
 func loadSchema(db *sqlx.DB, schemaFile string) error {
@@ -358,7 +358,7 @@ func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 	created := fake.Int64Between(tenant.CreatedAt, NowUnix())
 	player := isuports.PlayerRow{
 		TenantID:       tenant.ID,
-		ID:             strconv.FormatInt(GenID(created), 10),
+		ID:             GenID(created),
 		DisplayName:    fake.Person().Name(),
 		IsDisqualified: rand.Intn(100) < disqualifiedRate,
 		CreatedAt:      created,
@@ -390,7 +390,7 @@ func CreateCompetition(tenant *isuports.TenantRow) *isuports.CompetitionRow {
 	isFinished := rand.Intn(100) < 50
 	competition := isuports.CompetitionRow{
 		TenantID:  tenant.ID,
-		ID:        strconv.FormatInt(GenID(created), 10),
+		ID:        GenID(created),
 		Title:     FakeCompetitionName(),
 		CreatedAt: created,
 	}
@@ -457,7 +457,7 @@ func CreatePlayerData(
 					created := fake.Int64Between(c.CreatedAt, end)
 					competitionScores = append(competitionScores, &isuports.PlayerScoreRow{
 						TenantID:      tenant.ID,
-						ID:            strconv.FormatInt(GenID(created), 10),
+						ID:            GenID(created),
 						PlayerID:      p.ID,
 						CompetitionID: c.ID,
 						Score:         CreateScore(),
