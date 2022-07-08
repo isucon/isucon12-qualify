@@ -96,8 +96,37 @@ final class Handlers
      */
     private function dispenseID(): string
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $id = 0;
+        /** @var ?RuntimeException $lastErr */
+        $lastErr = null;
+        for ($i = 0; $i < 100; $i++) {
+            try {
+                $this->adminDB->prepare('REPLACE INTO id_generator (stub) VALUES (?);')
+                    ->executeStatement(['a']);
+            } catch (DBException $e) {
+                if ($e->getCode() === 1213) { // deadlock
+                    $lastErr = new RuntimeException(
+                        sprintf('error REPLACE INTO id_generator: %s', $e->getMessage()),
+                        previous: $e
+                    );
+                    continue;
+                }
+                throw new RuntimeException(sprintf('error REPLACE INTO id_generator: %s', $e->getMessage()));
+            }
+
+            try {
+                $id = $this->adminDB->lastInsertId();
+            } catch (DBException $e) {
+                throw new RuntimeException(sprintf('error ret.LastInsertId: %s', $e->getMessage()), previous: $e);
+            }
+            break;
+        }
+
+        if ($id !== 0) {
+            return (string)$id;
+        }
+
+        throw $lastErr;
     }
 
     /**
@@ -456,13 +485,77 @@ final class Handlers
 
     /**
      * テナント管理者向けAPI
-     * GET /api/organizer/players/add
+     * POST /api/organizer/players/add
      * テナントに参加者を追加する
      */
     public function playersAddHandler(Request $request, Response $response): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        try {
+            $v = $this->parseViewer($request);
+        } catch (Exception $e) {
+            throw new RuntimeException(
+                sprintf('error parseViewer: %s', $e->getMessage()),
+                previous: $e,
+            );
+        }
+
+        if ($v->role !== self::ROLE_ORGANIZER) {
+            throw new HttpForbiddenException($request, 'role organizer required');
+        }
+
+
+        $tenantDB = $this->connectToTenantDB($v->tenantID);
+
+        $params = $request->getParsedBody();
+        if (!is_array($params)) {
+            throw new RuntimeException('error $request->getParsedBody()');
+        }
+
+        /** @var list<string> $displayNames */
+        $displayNames = $params['display_name'] ?? [];
+
+        /** @var list<PlayerDetail> $pds */
+        $pds = [];
+        foreach ($displayNames as $displayName) {
+            try {
+                $id = $this->dispenseID($request);
+            } catch (Exception $e) {
+                throw new RuntimeException(sprintf('error dispenseID: %s', $e->getMessage()));
+            }
+            $id = $this->dispenseID();
+
+            $now = time();
+            try {
+                $tenantDB->prepare('INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+                    ->executeStatement([$id, $v->tenantID, $displayName, false, $now, $now]);
+            } catch (DBException $e) {
+                throw new RuntimeException(
+                    vsprintf(
+                        'error Insert player at tenantDB: id=%s, displayName=%s, isDisqualified=%s, createdAt=%d, updatedAt=%d, %s',
+                        [$id, $displayName, false, $now, $now, $e->getMessage()],
+                    ),
+                    previous: $e,
+                );
+            }
+
+            try {
+                $p = $this->retrievePlayer($tenantDB, $id);
+            } catch (Exception $e) {
+                throw new RuntimeException(sprintf('error retrievePlayer: %s', $e->getMessage()), previous: $e);
+            }
+
+            $pds[] = new PlayerDetail(
+                id: $p->id,
+                displayName: $p->displayName,
+                isDisqualified: $p->isDisqualified,
+            );
+        }
+
+        $tenantDB->close();
+
+        $res = new PlayersAddHandlerResult(players: $pds);
+
+        return $this->jsonResponse($response, new SuccessResult(success: true, data: $res));
     }
 
     /**
