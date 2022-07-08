@@ -534,8 +534,39 @@ final class Handlers
      */
     public function competitionsAddHandler(Request $request, Response $response): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $v = $this->parseViewer($request);
+
+        $tenantDB = $this->connectToTenantDB($v->tenantID);
+
+        $title = $request->getParsedBody()['title'] ?? '';
+
+        $now = time();
+        $id = $this->dispenseID();
+
+        try {
+            $tenantDB->prepare('INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
+                ->executeStatement([$id, $v->tenantID, $title, null, $now, $now]);
+        } catch (DBException $e) {
+            throw new RuntimeException(
+                vsprintf(
+                    'error Insert competition: id=%s, tenant_id=%d, title=%s, finishedAt=null, createdAt=%d, updatedAt=%d, %s',
+                    [$id, $v->tenantID, $title, $now, $now, $e->getMessage()],
+                ),
+                previous: $e,
+            );
+        }
+
+        $tenantDB->close();
+
+        $res = new CompetitionsAddHandlerResult(
+            competition: new CompetitionDetail(
+                id: $id,
+                title: $title,
+                isFinished: false,
+            ),
+        );
+
+        return $this->jsonResponse($response, new SuccessResult(success: true, data: $res));
     }
 
     /**
