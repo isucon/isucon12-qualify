@@ -576,10 +576,46 @@ final class Handlers
      * POST /api/organizer/player/:player_id/disqualified
      * 参加者を失格にする
      */
-    public function playerDisqualifiedHandler(Request $request, Response $response): Response
+    public function playerDisqualifiedHandler(Request $request, Response $response, array $params): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $v = $this->parseViewer($request);
+        if ($v->role !== self::ROLE_ORGANIZER) {
+            throw new HttpForbiddenException($request, 'role organizer required');
+        }
+
+        $tenantDB = $this->connectToTenantDB($v->tenantID);
+
+        $playerID = $params['player_id'];
+
+        $now = time();
+        try {
+            $tenantDB->prepare('UPDATE player SET is_disqualified = ?, updated_at = ? WHERE id = ?')
+                ->executeStatement([true, $now, $playerID]);
+        } catch (DBException $e) {
+            $tenantDB->close();
+            throw new RuntimeException(
+                sprintf('error Update player: isDisqualified=%s, updatedAt=%d, id=%s, %s', true, $now, $playerID, $e->getMessage()),
+                previous: $e,
+            );
+        }
+
+        $p = $this->retrievePlayer($tenantDB, $playerID);
+        if (is_null($p)) {
+            // 存在しないプレイヤー
+            throw new HttpNotFoundException($request, 'player not found');
+        }
+
+        $tenantDB->close();
+
+        $res = new PlayerDisqualifiedHandlerResult(
+            player: new PlayerDetail(
+                id: $p->id,
+                displayName: $p->displayName,
+                isDisqualified: $p->isDisqualified,
+            ),
+        );
+
+        return $this->jsonResponse($response, new SuccessResult(success: true, data: $res));
     }
 
     /**
