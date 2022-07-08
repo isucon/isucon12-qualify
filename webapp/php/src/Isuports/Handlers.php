@@ -8,7 +8,6 @@ use Doctrine\DBAL\Configuration;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Exception as DBException;
-use Exception;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use JsonSerializable;
@@ -174,9 +173,7 @@ final class Handlers
         try {
             $token = JWT::decode($tokenStr, $key);
         } catch (UnexpectedValueException $e) {
-            throw new HttpUnauthorizedException($request, $e->getMessage());
-        } catch (Exception $e) {
-            throw new RuntimeException(sprintf('failed to parse token: %s', $e->getMessage()), previous: $e);
+            throw new HttpUnauthorizedException($request, $e->getMessage(), $e);
         }
 
         if ($token->sub == '') {
@@ -211,14 +208,7 @@ final class Handlers
             );
         }
 
-        try {
-            $tenant = $this->retrieveTenantRowFromHeader($request);
-        } catch (Exception $e) {
-            throw new RuntimeException(
-                sprintf('error retrieveTenantRowFromHeader at parseViewer: %s', $e->getMessage()),
-                previous: $e,
-            );
-        }
+        $tenant = $this->retrieveTenantRowFromHeader($request);
 
         if (is_null($tenant)) {
             throw new HttpUnauthorizedException($request, 'tenant not found');
@@ -364,14 +354,7 @@ final class Handlers
      */
     public function tenantsAddHandler(Request $request, Response $response): Response
     {
-        try {
-            $v = $this->parseViewer($request);
-        } catch (Exception $e) {
-            throw new RuntimeException(
-                sprintf('error parseViewer: %s', $e->getMessage()),
-                previous: $e,
-            );
-        }
+        $v = $this->parseViewer($request);
 
         if ($v->tenantName !== 'admin') {
             throw new HttpNotFoundException(
@@ -416,19 +399,7 @@ final class Handlers
             throw new RuntimeException(sprintf('error get LastInsertId: %s', $e->getMessage()));
         }
 
-        try {
-            $this->createTenantDB($id);
-        } catch (Exception $e) {
-            throw new RuntimeException(
-                sprintf(
-                    'error createTenantDB: id=%d name=%s %s',
-                    $id,
-                    $name,
-                    $e->getMessage()
-                ),
-                previous: $e,
-            );
-        }
+        $this->createTenantDB($id);
 
         $res = new TenantsAddHandlerResult(
             tenant: new TenantDetail(
@@ -490,14 +461,7 @@ final class Handlers
      */
     public function playersAddHandler(Request $request, Response $response): Response
     {
-        try {
-            $v = $this->parseViewer($request);
-        } catch (Exception $e) {
-            throw new RuntimeException(
-                sprintf('error parseViewer: %s', $e->getMessage()),
-                previous: $e,
-            );
-        }
+        $v = $this->parseViewer($request);
 
         if ($v->role !== self::ROLE_ORGANIZER) {
             throw new HttpForbiddenException($request, 'role organizer required');
@@ -517,11 +481,6 @@ final class Handlers
         /** @var list<PlayerDetail> $pds */
         $pds = [];
         foreach ($displayNames as $displayName) {
-            try {
-                $id = $this->dispenseID($request);
-            } catch (Exception $e) {
-                throw new RuntimeException(sprintf('error dispenseID: %s', $e->getMessage()));
-            }
             $id = $this->dispenseID();
 
             $now = time();
@@ -538,11 +497,7 @@ final class Handlers
                 );
             }
 
-            try {
-                $p = $this->retrievePlayer($tenantDB, $id);
-            } catch (Exception $e) {
-                throw new RuntimeException(sprintf('error retrievePlayer: %s', $e->getMessage()), previous: $e);
-            }
+            $p = $this->retrievePlayer($tenantDB, $id);
 
             $pds[] = new PlayerDetail(
                 id: $p->id,
@@ -670,14 +625,8 @@ final class Handlers
      */
     public function meHandler(Request $request, Response $response): Response
     {
-        try {
-            $tenant = $this->retrieveTenantRowFromHeader($request);
-        } catch (RuntimeException $e) {
-            throw new RuntimeException(
-                sprintf('error retrieveTenantRowFromHeader: %s', $e->getMessage()),
-                previous: $e,
-            );
-        }
+        $tenant = $this->retrieveTenantRowFromHeader($request);
+
         $td = new TenantDetail(
             name: $tenant->name,
             displayName: $tenant->displayName,
@@ -695,11 +644,6 @@ final class Handlers
                     loggedIn: false,
                 ),
             ));
-        } catch (RuntimeException $e) {
-            throw new RuntimeException(
-                sprintf('error parseViewer: %s', $e->getMessage()),
-                previous: $e,
-            );
         }
 
         if ($v->role === self::ROLE_ADMIN || $v->role === self::ROLE_ORGANIZER) {
@@ -714,23 +658,9 @@ final class Handlers
             ));
         }
 
-        try {
-            $tenantDB = $this->connectToTenantDB($v->tenantID);
-        } catch (RuntimeException $e) {
-            throw new RuntimeException(
-                sprintf('error connectToTenantDB: %s', $e->getMessage()),
-                previous: $e,
-            );
-        }
+        $tenantDB = $this->connectToTenantDB($v->tenantID);
 
-        try {
-            $p = $this->retrievePlayer($tenantDB, $v->playerID);
-        } catch (RuntimeException $e) {
-            throw new RuntimeException(
-                sprintf('error retrievePlayer: %s', $e->getMessage()),
-                previous: $e,
-            );
-        }
+        $p = $this->retrievePlayer($tenantDB, $v->playerID);
 
         $tenantDB->close();
 
