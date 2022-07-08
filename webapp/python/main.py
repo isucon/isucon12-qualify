@@ -1,3 +1,7 @@
+import codecs
+import csv
+import fcntl
+import io
 import os
 import re
 import sqlite3
@@ -243,6 +247,19 @@ class CompetitionRow:
     updated_at: int
 
 
+def retrieve_competition(tenant_db, id: str) -> Optional[CompetitionRow]:
+    """大会を取得する"""
+    tenant_db.row_factory = sqlite3.Row
+    query = "SELECT * FROM competition WHERE id = ?"
+    cur = tenant_db.cursor()
+    cur.execute(query, (id,))
+    row = cur.fetchone()
+    if not row:
+        return None
+
+    return CompetitionRow(**row)
+
+
 @dataclass
 class PlayerScoreRow:
     tenant_id: int
@@ -253,6 +270,26 @@ class PlayerScoreRow:
     row_num: int
     created_at: int
     updated_at: int
+
+
+def lock_file_path(id: int) -> str:
+    """排他ロックのためのファイル名を生成する"""
+    tenant_db_dir = os.getenv("ISUCON_TENANT_DB_DIR", "../tenant_db")
+    return os.path.join(tenant_db_dir, f"{id}.lock")
+
+
+def flock_by_tenant_id(tenant_id):
+    """排他ロックする"""
+    path = lock_file_path(tenant_id)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_TRUNC)
+    lock_file_fd = None
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (IOError, OSError):
+        pass
+    else:
+        lock_file_fd = fd
+    return lock_file_fd
 
 
 @dataclass
@@ -532,7 +569,87 @@ def organizer_score_competitions(competition_id: str):
     テナント管理者向けAPI
     大会のスコアをCSVでアップロードする
     """
-    raise NotImplementedError()  # TODO
+    viewer = parse_viewer()
+    if viewer.role != ROLE_ORGANIZER:
+        abort(403, "role organizer required")
+
+    tenant_db = connect_to_tenant_db(viewer.tenant_id)
+
+    competition = retrieve_competition(tenant_db, competition_id)
+    if not competition:
+        abort(404, "competition not found")
+
+    if competition.finished_at:
+        return jsonify(FailureResult(status=False, message="competition is finished")), 400
+
+    form_file = request.files.get("scores")
+    csv_reader = csv.reader(codecs.iterdecode(form_file, "utf-8"))
+    header = next(csv_reader)
+
+    if header != ["player_id", "score"]:
+        abort(400, "invalid CSV headers")
+
+    # DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
+    lock_file_fd = flock_by_tenant_id(viewer.tenant_id)
+    if not lock_file_fd:
+        app.logger.warning("error flock_by_tenant_id")
+        raise
+
+    row_num = 0
+    player_score_rows = []
+    for row in csv_reader:
+        row_num += 1
+        if len(row) != 2:
+            continue
+        player_id = row[0]
+        score_str = row[1]
+        if retrieve_player(tenant_db, player_id) is None:
+            # 存在しない参加者が含まれている
+            continue
+
+        score = int(score_str, 10)
+        id = dispense_id()
+        now = int(datetime.now().timestamp())
+        player_score_rows.append(
+            PlayerScoreRow(
+                id=id,
+                tenant_id=viewer.tenant_id,
+                player_id=player_id,
+                competition_id=competition_id,
+                score=score,
+                row_num=row_num,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+    cur = tenant_db.cursor()
+    cur.execute(
+        "DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?",
+        (viewer.tenant_id, competition_id),
+    )
+    tenant_db.commit()
+
+    for player_score_row in player_score_rows:
+        cur.execute(
+            "INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                player_score_row.id,
+                player_score_row.tenant_id,
+                player_score_row.player_id,
+                player_score_row.competition_id,
+                player_score_row.score,
+                player_score_row.row_num,
+                player_score_row.created_at,
+                player_score_row.updated_at,
+            ),
+        )
+        tenant_db.commit()
+
+    tenant_db.close()
+    fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
+
+    return jsonify(SuccessResult(status=True, data={"rows": len(player_score_rows)}))
 
 
 @app.route("/api/organizer/billing", methods=["GET"])
