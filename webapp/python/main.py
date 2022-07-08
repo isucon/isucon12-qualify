@@ -77,7 +77,7 @@ def create_tenant_db(id: int):
     subprocess.run(["bash", "-c", command])
 
 
-def dispense_id():
+def dispense_id() -> str:
     """システム全体で一意なIDを生成する"""
     id = 0
     last_err = None
@@ -97,7 +97,7 @@ def dispense_id():
             id = cur.lastrowid
             cnx.close()
     if id != 0:
-        return int(id)
+        return str(id)
     raise last_err
 
 
@@ -455,7 +455,32 @@ def organizer_add_competitions():
     テナント管理者向けAPI
     大会を追加する
     """
-    raise NotImplementedError()  # TODO
+    viewer = parse_viewer()
+    if viewer.role != ROLE_ORGANIZER:
+        abort(403, "role organizer required")
+
+    tenant_db = connect_to_tenant_db(viewer.tenant_id)
+
+    title = request.values.get("title")
+
+    now = int(datetime.now().timestamp())
+    id = dispense_id()
+
+    cur = tenant_db.cursor()
+    cur.execute(
+        "INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (id, viewer.tenant_id, title, None, now, now),
+    )
+    tenant_db.commit()
+
+    tenant_db.close()
+
+    return jsonify(
+        SuccessResult(
+            status=True,
+            data={"competition": CompetitionDetail(id=id, title=title, is_finished=False)},
+        )
+    )
 
 
 @app.route("/api/organizer/competition/<competition_id>/finish", methods=["POST"])
