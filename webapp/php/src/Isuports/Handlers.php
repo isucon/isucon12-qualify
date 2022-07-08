@@ -306,10 +306,19 @@ final class Handlers
      * 参加者を認可する
      * 参加者向けAPIで呼ばれる
      */
-    private function authorizePlayer(Connection $tenantDB, string $id): void
+    private function authorizePlayer(Request $request, Connection $tenantDB, string $id): void
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $player = $this->retrievePlayer($tenantDB, $id);
+
+        if (is_null($player)) {
+            $tenantDB->close();
+            throw new HttpUnauthorizedException($request, 'player not found');
+        }
+
+        if ($player->isDisqualified) {
+            $tenantDB->close();
+            throw new HttpForbiddenException($request, 'player is disqualified');
+        }
     }
 
     /**
@@ -660,8 +669,21 @@ final class Handlers
      */
     public function playerCompetitionsHandler(Request $request, Response $response): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $v = $this->parseViewer($request);
+
+        if ($v->role !== self::ROLE_PLAYER) {
+            throw new HttpForbiddenException($request, 'role player required');
+        }
+
+        $tenantDB = $this->connectToTenantDB($v->tenantID);
+
+        $this->authorizePlayer($request, $tenantDB, $v->playerID);
+
+        $response = $this->competitionsHandler($response, $v, $tenantDB);
+
+        $tenantDB->close();
+
+        return $response;
     }
 
     /**
@@ -677,8 +699,31 @@ final class Handlers
 
     private function competitionsHandler(Response $response, Viewer $v, Connection $tenantDB): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        /** @var list<CompetitionDetail> $cds */
+        $cds = [];
+        try {
+            $result = $tenantDB->prepare('SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC')
+                ->executeQuery([$v->tenantID]);
+            while ($row = $result->fetchAssociative()) {
+                $cds[] = new CompetitionDetail(
+                    id: $row['id'],
+                    title: $row['title'],
+                    isFinished: !is_null($row['finished_at']),
+                );
+            }
+        } catch (DBException $e) {
+            $tenantDB->close();
+            throw new RuntimeException(sprintf('error Select competition: %s', $e->getMessage()), previous: $e);
+        }
+
+        $res = new SuccessResult(
+            success: true,
+            data: new CompetitionsHandlerResult(
+                competitions: $cds,
+            ),
+        );
+
+        return $this->jsonResponse($response, $res);
     }
 
     /**
