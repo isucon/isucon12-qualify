@@ -220,6 +220,9 @@ def retrieve_player(tenant_db, id: str) -> PlayerRow:
     cur = tenant_db.cursor()
     cur.execute(query, (id,))
     row = cur.fetchone()
+    if not row:
+        return None
+
     return PlayerRow(
         tenant_id=row["tenant_id"],
         id=row["id"],
@@ -439,7 +442,38 @@ def organizer_disqualified_players(player_id: str):
     テナント管理者向けAPI
     参加者を失格にする
     """
-    raise NotImplementedError()  # TODO
+    viewer = parse_viewer()
+    if viewer.role != ROLE_ORGANIZER:
+        abort(403, "role organizer required")
+
+    tenant_db = connect_to_tenant_db(viewer.tenant_id)
+
+    now = int(datetime.now().timestamp())
+    id = dispense_id()
+
+    cur = tenant_db.cursor()
+    cur.execute(
+        "UPDATE player SET is_disqualified = ?, updated_at = ? WHERE id = ?",
+        (True, now, player_id),
+    )
+    tenant_db.commit()
+
+    player = retrieve_player(tenant_db, player_id)
+    if not player:
+        abort(404, "player not found")
+
+    tenant_db.close()
+
+    return jsonify(
+        SuccessResult(
+            status=True,
+            data={
+                "player": PlayerDetail(
+                    id=player.id, display_name=player.display_name, is_disqualified=player.is_disqualified
+                )
+            },
+        )
+    )
 
 
 @dataclass
