@@ -1,19 +1,19 @@
+use nix::sys::stat::Mode;
 use sqlx::{ConnectOptions, Connection};
 use std::any::Any;
-use std::error::Error;
 use std::fs;
+use std::os::unix::prelude::RawFd;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use actix_web::web;
+use actix_web::{web, HttpResponse, HttpRequest};
 use lazy_static::lazy_static;
 use nix::fcntl::{flock, open, FlockArg, OFlag};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::mysql::MySqlConnectOptions;
-use sqlx::sqlite::SqliteConnectOptions;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::result::Result;
 use std::collections::HashMap;
+use jsonwebtoken;
 
 const TENANT_DB_SCHEMA_FILE_PATH: &str = "../sql/tenant/10_schema.sql";
 const INITIALIZE_SCRIPT: &str = "..sql/init.sh";
@@ -47,7 +47,7 @@ fn tenant_db_path(id: i64) -> PathBuf {
 }
 
 // テナントDBに接続する
-async fn connect_to_tenant_db(id: i64)->Result<sqlx::SqliteConnection, > {
+async fn connect_to_tenant_db(id: i64)->sqlx::Result<sqlx::SqliteConnection> {
     let p = tenant_db_path(id);
     let uri = format!("sqlite:{}?mode=rw", p.to_str().unwrap());
     let conn = sqlx::SqliteConnection::connect(&uri).await?;
@@ -78,20 +78,20 @@ async fn create_tenant_db(id: i64) {
 async fn dispense_id(
     pool: web::Data<sqlx::MySqlPool>,
 )-> Result<String, sqlx::Error> {
-    let mut id = 0;
+    let mut id: u8 = 0;
     for _ in 1..100{
         let ret = sqlx::query("REPLACE INTO id_generator (stub) VALUES (?);")
             .bind("a")
             .execute(pool.as_ref())
             .await;
-        let id = ret.last_insert_id();
+        let id:u8 = ret.unwrap().last_insert_id().try_into().unwrap();
 
     }
 
     if id != 0{
         Ok(id.to_string())
     }else{
-        sqlx::Error::RowNotFound
+        Err(sqlx::Error::RowNotFound)
     }
 }
 
@@ -160,13 +160,13 @@ async fn run() -> std::io::Result<()> {
 // TODO:
 
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct SuccessResult {
     success: bool,
     data: dyn Any,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,Deserialize)]
 struct FailureResult {
     success: bool,
     message: String,
@@ -202,7 +202,7 @@ async fn parse_viewer(
 
 
     let token = jsonwebtoken::decode(req_jwt, &key, &jsonwebtoken::Validation::ES256).unwrap();
-    let token = match jsonwebtoken::decode(req_jwt, &key, &jsonwebtoken::Validation::ES256) {
+    let token = match jsonwebtoken::decode(req_jwt, &key.unwrap(), &jsonwebtoken::Validation::ES256) {
         Ok(token) => token,
         Err(e) => {
             if matches!(e.kind(), jsonwebtoken::errors::ErrorKind::Json(_)) {
@@ -272,7 +272,7 @@ async fn retrieve_tenant_row_from_header(
 
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct TenantRow {
     id: i64,
     name: String,
@@ -286,7 +286,7 @@ trait dbOrTx {
 
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,Deserialize)]
 struct PlayerRow {
     tenant_id: i64,
     id: String,
@@ -321,7 +321,7 @@ async fn authorize_player(
 }
 
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,Deserialize)]
 struct CompetitionRow {
     tenant_id: i64,
     id: String,
@@ -343,7 +343,7 @@ async fn retrieve_competition(
 }
 
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct PlayerScoreRow {
     tenant_id: i64,
     id: String,
@@ -362,19 +362,19 @@ fn lock_file_path(id: i64) -> String {
 }
 
 // 排他ロックする
-fn flock_by_tenant_id(tenant_id: i64) -> Result<Error> {
+fn flock_by_tenant_id(tenant_id: i64) -> Result<RawFd,()> {
     let p = lock_file_path(tenant_id);
     let mut lock_file = open(p.as_str(), OFlag::empty(), Mode::empty())?;
     match flock(lock_file, FlockArg::LockExclusiveNonblock) {
         Ok(()) => Ok(lock_file),
-        Err(e) => {
+        Err() => {
             println!("existing process!");
-            Err(e)
+            Err("existing process!".to_string())
         }
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,Deserialize)]
 struct TenantDetail {
     name: String,
     display_name: String,
@@ -385,7 +385,7 @@ struct TenantsAddHandlerResult {
     tenant: TenantDetail,
 }
 
-#[derive(Debug,Deserialize)]
+#[derive(Debug,Serialize, Deserialize)]
 struct FormInfo{
     name: String,
     display_name: String,
@@ -439,7 +439,7 @@ fn validate_tenant_name(name: String) -> Result<(),String> {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct BillingReport {
     competition_id: String,
     competition_title: String,
@@ -450,7 +450,7 @@ struct BillingReport {
     billing_yen: i64,         // 合計請求金額
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct VisitHistoryRow {
     player_id: String,
     tenant_id: i64,
@@ -459,7 +459,7 @@ struct VisitHistoryRow {
     updated_at: i64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct VisitHistorySummaryRow {
     player_id: String,
     min_created_at: i64,
@@ -489,6 +489,8 @@ async fn billing_report_by_competition(
     }
     // player_scoreを読んでいる時に更新が走ると不整合が起こるのでロックを取得する
     let fl = flock_by_tenant_id(tenant_id)?;
+
+    // スコアを登録した参加者のIDを取得する
     sqlx::query(
         "SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?")
 
@@ -497,18 +499,18 @@ async fn billing_report_by_competition(
         .fetch_all(tenant_db).await?
         .into_iter()
         .for_each(|ps| {
-            if billing_map.contains_key(&ps) {
-                return;
-            }
             billing_map.insert(ps, "player".to_string());
         });
+
+    // 大会が終了している場合のみ請求金額が確定するので計算する
     let mut player_count = 0;
     let mut visitor_count = 0;
     if comp.finished_at.is_sum(){
         for category in billing_map{
-            match category{
-                "player" => player_count++,
-                "visitor" => visitor_count++,
+            if(category == "player"){
+                player_count+=1;
+            }else if(category == "visitor"){
+                visitor_count+=1;
             }
         }
     }
@@ -523,7 +525,7 @@ async fn billing_report_by_competition(
     })
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct TenantWithBilling {
     id: String,
     name: String,
@@ -531,7 +533,7 @@ struct TenantWithBilling {
     billing: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct TenantsBillingHandlerResult {
     tenants: Vec<TenantWithBilling>,
 }
@@ -564,6 +566,7 @@ async fn tenants_billing_handler(
         before_id = match i64::from_str_radix(&before, 10){
             Ok(id)=> id,
             Err(_)=> return Ok(actix_web::HttpResponse::BadRequest().body("before is not number")),
+        };
     }
     // テナントごとに
 	//   大会ごとに
@@ -585,6 +588,7 @@ async fn tenants_billing_handler(
             id: i64::from_str_radix(t.id, 10),
             name: t.name,
             display_name: t.display_name,
+            billing: 0,
         };
         let tenant_db = connect_to_tenant_db(t.id)?;
         let cs: Vec<CompetitionRow>=sqlx::query("SELECT * FROM competition WHERE tenant_id=?")
@@ -607,14 +611,14 @@ async fn tenants_billing_handler(
 
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct PlayerDetail {
     id: String,
     display_name: String,
     is_disqualified: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,DeSerialize)]
 struct PlayersListHandlerResult {
     players: Vec<PlayerDetail>,
 }
@@ -624,7 +628,7 @@ struct PlayersListHandlerResult {
 // 参加者一覧を返す
 async fn players_list_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: web::Data<actix_web::HttpRequest>,
     session: actix_session::Session,
 ) -> actix_web::Result<actix_web::HttpResponse> {
     let v: Viewer = parse_viewer(pool, request, session).await?;
@@ -701,7 +705,7 @@ async fn players_add_handler(
 
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct PlayerDisqualifiedHandlerResult {
     player: PlayerDetail,
 }
@@ -743,14 +747,14 @@ async fn player_disqualified_handler(
     Ok(web::Json(res))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct CompetitionDetail {
     id: String,
     title: String,
     is_finished: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct CompetitionsAddHandlerResult {
     competition: CompetitionDetail,
 }
@@ -775,6 +779,7 @@ async fn competitions_add_handler(
     }
     let tenant_db = connect_to_tenant_db(v.tenant_id)?;
     let title = form.into_inner().title;
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
     let id = dispense_id(pool)?;
     sqlx::query("INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?")
     .bind(id)
@@ -796,7 +801,7 @@ async fn competitions_add_handler(
 }
 
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct CompetitionFinishFormQuery {
     competition_id: String,
 }
@@ -829,11 +834,12 @@ async fn competition_finish_handler(
 
     let res = SuccessResult{
         success: true,
-    }
+        data: None
+    };
     Ok(web::Json(res))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct ScoreHandlerResult {
     rows: i64,
 }
@@ -857,26 +863,23 @@ async fn competition_score_handler(
     }
     let tenant_db = connect_to_tenant_db(v.tenant_id)?;
     let competition_id = form.into_inner().competition_id;
-    if competitionid == ""{
+    if competition_id == ""{
         return Ok(actix_web::HttpResponse::BadRequest().finish());
     }
     let comp = retrieve_competition(tenant_db, competition_id)?;
     if comp.finished_at.is_some(){
         let res = FailureResult{
-            failure: false,
+            success: false,
             message: "competition is finished",
         };
         return Ok(web::Json(res));
     }
     let mut file = form.file("file").unwrap();
     let mut headers  = Vec::new();
-    file.read_to_end(&mut headers).await?;
-    // TODO:
-
-
+    file.read_to_end(&mut headers).await?
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,DeSerialize)]
 struct BillingHandlerResult {
     reports: Vec<BillingReport>,
 }
@@ -902,7 +905,7 @@ async fn billing_handler(
     let tbrs = Vec::<BillingReport>::new();
     for comp in cs{
         let report:BillingReport = billing_report_by_competition(pool, tenant_db, v.tenant_id, comp.id)?;
-        trbs.push(report);
+        tbrs.push(report);
     }
     let res = SuccessResult{
         success: true,
@@ -913,19 +916,19 @@ async fn billing_handler(
     Ok(web::Json(res))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,DeSerialize)]
 struct PlayerScoreDetail {
     competition_title: String,
     score: i64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize,DeSerialize)]
 struct PlayerScoreHandlerResult {
     player: PlayerDetail,
     scores: Vec<PlayerScoreDetail>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct PlayerHandlerQueryParam {
     player_id: String,
 }
@@ -957,7 +960,7 @@ async fn player_handler(
 
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct CompetitionRank {
     rank: i64,
     score: i64,
@@ -967,14 +970,14 @@ struct CompetitionRank {
     row_num: i64, // APIレスポンスのJSONには含まれない
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct CompetitionRankingHandlerResult {
     competition: CompetitionDetail,
     ranks: Vec<CompetitionRank>,
 }
 
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct CompetitionRankingHandlerQueryParam {
     competition_id: String,
     rank_after: String,
@@ -1021,7 +1024,7 @@ async fn competition_ranking_handler(
     // TODO:
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct CompetitionsHandlerResult {
     competitions: Vec<CompetitionDetail>,
 }
@@ -1040,7 +1043,7 @@ async fn player_competitions_handler(
     }
     let tenant_db = connect_to_tenant_db(v.tenant_id)?;
     authorize_player(tenant_db, v.player_id)?;
-    return competitions_handler(pool, request, session).await;
+    return competitions_handler(Ok(v), tenant_db).await;
 }
 
 // 主催者向けAPI
@@ -1056,15 +1059,32 @@ async fn organizer_competitions_handler(
         Ok(actix_web::HttpResponse::Forbidden().finish())
     }
     let tenant_db = connect_to_tenant_db(v.tenant_id)?;
-    authorize_organizer(tenant_db, v.organizer_id)?;
-    return competitions_handler(pool, request, session).await;
+    return competitions_handler(Ok(v), tenant_db).await;
 }
 
-fn competitions_handler(v: Option<Viewer>, tenant_db: &dyn dbOrTx) -> Result<()> {
-    // TODO:
+async fn competitions_handler(v: Option<Viewer>, tenant_db: &dyn dbOrTx) -> actix_web::Result<actix_web::HttpResponse> {
+    let cs: Vec::<CompetitionRow> = sqlx::query("SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC")
+    .bind(v.map(|v| v.tenant_id).unwrap_or(""))
+    .fetch_all(tenant_db)
+    .await?;
+    let cds = Vec::<CompetitionDetail>::new();
+    for comp in cs{
+        cds.append(CompetitionDetail{
+            id: comp.id,
+            title: comp.title,
+            is_finished: comp.finished_at.is_some(),
+        })
+    }
+    let res = SuccessResult{
+        success: true,
+        data: CompetitionsHandlerResult{
+            competitions: cds,
+        }
+    };
+    Ok(HttpResponse::Ok().json(res))
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct MeHandlerResult {
     tenant: Option<TenantDetail>,
     me: Option<PlayerDetail>,
@@ -1082,7 +1102,7 @@ async fn me_handler(
     // TODO:
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, DeSerialize)]
 struct InitializeHandlerResult {
     lang: String,
     appeal: String,
@@ -1092,6 +1112,16 @@ struct InitializeHandlerResult {
 // POST /initialize
 // ベンチマーカーが起動した時に最初に呼ぶ
 // データベースの初期化などが実行されるため, スキーマを変更した場合などは適宜改変すること
-async fn initialize_handler() -> actix_web::Result<actix_web::HttpResponse> {
-    // TODO:
+async fn initialize_handler(pool: web::Data<sqlx::MySqlPool>) -> actix_web::Result<HttpResponse> {
+    if !tokio::process::Command::new(INITIALIZE_SCRIPT).output().await.is_ok() {
+        return Err(actix_web::error::ErrorInternalServerError(""));
+    }
+    let res = InitializeHandlerResult {
+        lang: "rust".to_string(),
+        // 頑張ったポイントやこだわりポイントがあれば書いてください
+        // 競技中の最後に計測したものを参照して, 講評記事などで使わせていただきます
+        appeal: "".to_string(),
+    };
+
+    Ok(HttpResponse::Ok().json(res))
 }
