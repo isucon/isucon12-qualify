@@ -109,7 +109,7 @@ async fn run() -> std::io::Result<()> {
         .username(&get_env("ISUCON_DB_USER", "isucon"))
         .password(&get_env("ISUCON_DB_PASSWORD", "isucon"))
         .database(&get_env("ISUCON_DB_NAME", "isuports"))
-        .port(&get_env("ISUCON_DB_PORT", "3306"));
+        .port(get_env("ISUCON_DB_PORT", "3306").parse::<u16>().unwrap());
 
     let pool = sqlx::mysql::MySqlPoolOptions::new()
         .max_connections(10)
@@ -160,7 +160,7 @@ async fn run() -> std::io::Result<()> {
 // TODO:
 
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 struct SuccessResult {
     success: bool,
     data: dyn Any,
@@ -201,7 +201,7 @@ async fn parse_viewer(
     let key = jsonwebtoken::DecodingKey::from_rsa_pem(key_src.as_bytes());
 
 
-    let token = jsonwebtoken::decode(req_jwt, &key, &jsonwebtoken::Validation::ES256).unwrap();
+    let token = jsonwebtoken::decode(req_jwt, &key.unwrap(), &jsonwebtoken::Validation::ES256).unwrap();
     let token = match jsonwebtoken::decode(req_jwt, &key.unwrap(), &jsonwebtoken::Validation::ES256) {
         Ok(token) => token,
         Err(e) => {
@@ -343,7 +343,7 @@ async fn retrieve_competition(
 }
 
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct PlayerScoreRow {
     tenant_id: i64,
     id: String,
@@ -364,12 +364,12 @@ fn lock_file_path(id: i64) -> String {
 // 排他ロックする
 fn flock_by_tenant_id(tenant_id: i64) -> Result<RawFd,()> {
     let p = lock_file_path(tenant_id);
-    let mut lock_file = open(p.as_str(), OFlag::empty(), Mode::empty())?;
+    let mut lock_file = open(p.as_str(), OFlag::empty(), Mode::empty());
     match flock(lock_file, FlockArg::LockExclusiveNonblock) {
         Ok(()) => Ok(lock_file),
-        Err() => {
+        Err(_) => {
             println!("existing process!");
-            Err("existing process!".to_string())
+            Err()
         }
     }
 }
@@ -439,7 +439,7 @@ fn validate_tenant_name(name: String) -> Result<(),String> {
     }
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct BillingReport {
     competition_id: String,
     competition_title: String,
@@ -450,7 +450,7 @@ struct BillingReport {
     billing_yen: i64,         // 合計請求金額
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct VisitHistoryRow {
     player_id: String,
     tenant_id: i64,
@@ -459,7 +459,7 @@ struct VisitHistoryRow {
     updated_at: i64,
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct VisitHistorySummaryRow {
     player_id: String,
     min_created_at: i64,
@@ -525,7 +525,7 @@ async fn billing_report_by_competition(
     })
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct TenantWithBilling {
     id: String,
     name: String,
@@ -533,7 +533,7 @@ struct TenantWithBilling {
     billing: i64,
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct TenantsBillingHandlerResult {
     tenants: Vec<TenantWithBilling>,
 }
@@ -611,14 +611,14 @@ async fn tenants_billing_handler(
 
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct PlayerDetail {
     id: String,
     display_name: String,
     is_disqualified: bool,
 }
 
-#[derive(Debug, Serialize,DeSerialize)]
+#[derive(Debug, Serialize,Deserialize)]
 struct PlayersListHandlerResult {
     players: Vec<PlayerDetail>,
 }
@@ -705,7 +705,7 @@ async fn players_add_handler(
 
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct PlayerDisqualifiedHandlerResult {
     player: PlayerDetail,
 }
@@ -747,14 +747,14 @@ async fn player_disqualified_handler(
     Ok(web::Json(res))
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CompetitionDetail {
     id: String,
     title: String,
     is_finished: bool,
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CompetitionsAddHandlerResult {
     competition: CompetitionDetail,
 }
@@ -801,7 +801,7 @@ async fn competitions_add_handler(
 }
 
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CompetitionFinishFormQuery {
     competition_id: String,
 }
@@ -818,11 +818,11 @@ async fn competition_finish_handler(
     if v.role != ROLE_ORGANIZER{
         Ok(actix_web::HttpResponse::Forbidden().finish())
     }
-    let tenant_db = connect_to_tenant_db(v.tenant_id)?;
+    let tenant_db = connect_to_tenant_db(v.tenant_id).await?;
     let id = form.into_inner().competition_id;
 
 
-    retrieve_competition(tenant_db, id)?;
+    retrieve_competition(tenant_db, id).await?;
     let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
 
     sqlx::query("UPDATE competition SET finished_at = ?, updated_at=? WHERE id = ?")
@@ -839,7 +839,7 @@ async fn competition_finish_handler(
     Ok(web::Json(res))
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct ScoreHandlerResult {
     rows: i64,
 }
@@ -879,7 +879,7 @@ async fn competition_score_handler(
     file.read_to_end(&mut headers).await?
 }
 
-#[derive(Debug, Serialize,DeSerialize)]
+#[derive(Debug, Serialize,Deserialize)]
 struct BillingHandlerResult {
     reports: Vec<BillingReport>,
 }
@@ -916,19 +916,19 @@ async fn billing_handler(
     Ok(web::Json(res))
 }
 
-#[derive(Debug, Serialize,DeSerialize)]
+#[derive(Debug, Serialize,Deserialize)]
 struct PlayerScoreDetail {
     competition_title: String,
     score: i64,
 }
 
-#[derive(Debug, Serialize,DeSerialize)]
+#[derive(Debug, Serialize,Deserialize)]
 struct PlayerScoreHandlerResult {
     player: PlayerDetail,
     scores: Vec<PlayerScoreDetail>,
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct PlayerHandlerQueryParam {
     player_id: String,
 }
@@ -960,7 +960,7 @@ async fn player_handler(
 
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CompetitionRank {
     rank: i64,
     score: i64,
@@ -970,14 +970,14 @@ struct CompetitionRank {
     row_num: i64, // APIレスポンスのJSONには含まれない
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CompetitionRankingHandlerResult {
     competition: CompetitionDetail,
     ranks: Vec<CompetitionRank>,
 }
 
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CompetitionRankingHandlerQueryParam {
     competition_id: String,
     rank_after: String,
@@ -1024,7 +1024,7 @@ async fn competition_ranking_handler(
     // TODO:
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct CompetitionsHandlerResult {
     competitions: Vec<CompetitionDetail>,
 }
@@ -1058,13 +1058,13 @@ async fn organizer_competitions_handler(
     if v.role != ROLE_ORGANIZER{
         Ok(actix_web::HttpResponse::Forbidden().finish())
     }
-    let tenant_db = connect_to_tenant_db(v.tenant_id)?;
-    return competitions_handler(Ok(v), tenant_db).await;
+    let tenant_db = connect_to_tenant_db(v.tennant_id)atait?;
+    return competitions_handler(Some(v), tenant_db).await;
 }
 
 async fn competitions_handler(v: Option<Viewer>, tenant_db: &dyn dbOrTx) -> actix_web::Result<actix_web::HttpResponse> {
     let cs: Vec::<CompetitionRow> = sqlx::query("SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC")
-    .bind(v.map(|v| v.tenant_id).unwrap_or(""))
+    .bind(v.map(|v| v.tennant_id).unwrap_or(""))
     .fetch_all(tenant_db)
     .await?;
     let cds = Vec::<CompetitionDetail>::new();
@@ -1084,7 +1084,7 @@ async fn competitions_handler(v: Option<Viewer>, tenant_db: &dyn dbOrTx) -> acti
     Ok(HttpResponse::Ok().json(res))
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct MeHandlerResult {
     tenant: Option<TenantDetail>,
     me: Option<PlayerDetail>,
@@ -1102,7 +1102,7 @@ async fn me_handler(
     // TODO:
 }
 
-#[derive(Debug, Serialize, DeSerialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct InitializeHandlerResult {
     lang: String,
     appeal: String,
