@@ -568,7 +568,28 @@ def organizer_finish_competitions(competition_id: str):
     テナント管理者向けAPI
     大会を終了する
     """
-    raise NotImplementedError()  # TODO
+    viewer = parse_viewer()
+    if viewer.role != ROLE_ORGANIZER:
+        abort(403, "role organizer required")
+
+    tenant_db = connect_to_tenant_db(viewer.tenant_id)
+
+    competition = retrieve_competition(tenant_db, competition_id)
+    if not competition:
+        abort(404, "competition not found")
+
+    now = int(datetime.now().timestamp())
+
+    cur = tenant_db.cursor()
+    cur.execute(
+        "UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?",
+        (now, now, competition_id),
+    )
+    tenant_db.commit()
+
+    tenant_db.close()
+
+    return jsonify({"status": True})
 
 
 @app.route("/api/organizer/competition/<competition_id>/score", methods=["POST"])
