@@ -856,10 +856,104 @@ final class Handlers
      * GET /api/player/player/:player_id
      * 参加者の詳細情報を取得する
      */
-    public function playerHandler(Request $request, Response $response): Response
+    public function playerHandler(Request $request, Response $response, array $params): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $v = $this->parseViewer($request);
+        if ($v->role !== self::ROLE_PLAYER) {
+            throw new HttpForbiddenException($request, 'role player required');
+        }
+
+        $tenantDB = $this->connectToTenantDB($v->tenantID);
+
+        $this->authorizePlayer($request, $tenantDB, $v->playerID);
+
+        $playerID = $params['player_id'] ?? '';
+        if ($playerID === '') {
+            $tenantDB->close();
+            throw new HttpBadRequestException($request, 'player_id is required');
+        }
+
+        $p = $this->retrievePlayer($tenantDB, $playerID);
+        if (is_null($p)) {
+            throw new HttpNotFoundException($request, 'player not found');
+        }
+
+        /** @var list<CompetitionRow> $cs */
+        $cs = [];
+        try {
+            $result = $tenantDB->executeQuery('SELECT * FROM competition ORDER BY created_at ASC');
+            while ($row = $result->fetchAssociative()) {
+                $cs[] = CompetitionRow::fromDB($row);
+            }
+        } catch (DBException $e) {
+            $tenantDB->close();
+            throw new RuntimeException(
+                sprintf('error Select competition: %s', $e->getMessage()),
+                previous: $e,
+            );
+        }
+
+        // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+        $fl = $this->flockByTenantID($v->tenantID);
+
+        $pss = [];
+        foreach ($cs as $c) {
+            try {
+                $ps = $tenantDB->prepare('SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1')
+                    ->executeQuery([$v->tenantID, $c->id, $p->id])
+                    ->fetchAssociative();
+            } catch (DBException $e) {
+                $tenantDB->close();
+                fclose($fl);
+                throw new RuntimeException(
+                    sprintf('error Select player_score: tenantID=%d, competitionID=%s, playerID=%s, %s', $v->tenantID, $c->id, $p->id, $e->getMessage()),
+                    previous: $e,
+                );
+            }
+            // 行がない = スコアが記録されてない
+            if ($ps === false) {
+                continue;
+            }
+
+            $pss[] = $ps;
+        }
+
+        /** @var list<PlayerScoreDetail> $psds */
+        $psds = [];
+        foreach ($pss as $ps) {
+            try {
+                $comp = $this->retrieveCompetition($tenantDB, $ps['competition_id']);
+            } catch (RuntimeException $e) {
+                fclose($fl);
+                throw $e;
+            }
+            if (is_null($comp)) {
+                $tenantDB->close();
+                fclose($fl);
+                throw new RuntimeException('error retrieveCompetition');
+            }
+            $psds[] = new PlayerScoreDetail(
+                competitionTitle: $comp->title,
+                score: (int)$ps['score'],
+            );
+        }
+
+        $res = new SuccessResult(
+            success: true,
+            data: new PlayerHandlerResult(
+                player: new PlayerDetail(
+                    id: $p->id,
+                    displayName: $p->displayName,
+                    isDisqualified: $p->isDisqualified,
+                ),
+                scores: $psds,
+            ),
+        );
+
+        $tenantDB->close();
+        fclose($fl);
+
+        return $this->jsonResponse($response, $res);
     }
 
     /**
