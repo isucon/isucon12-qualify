@@ -348,6 +348,9 @@ func CreatePlayers(tenant *isuports.TenantRow) []*isuports.PlayerRow {
 	for i := 0; i < playersNum; i++ {
 		players = append(players, CreatePlayer(tenant))
 	}
+	if tenant.ID <= 2 { // id 1, 2 は特別に固定のplayerを作る
+		players = append(players, CreateFixedPlayer(tenant))
+	}
 	sort.SliceStable(players, func(i int, j int) bool {
 		return players[i].CreatedAt < players[j].CreatedAt
 	})
@@ -363,6 +366,19 @@ func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 		IsDisqualified: rand.Intn(100) < disqualifiedRate,
 		CreatedAt:      created,
 		UpdatedAt:      fake.Int64Between(created, NowUnix()),
+	}
+	return &player
+}
+
+func CreateFixedPlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
+	created := tenant.CreatedAt
+	player := isuports.PlayerRow{
+		TenantID:       tenant.ID,
+		ID:             "000" + fmt.Sprintf("%x", tenant.ID),
+		DisplayName:    fake.Person().Name(),
+		IsDisqualified: false,
+		CreatedAt:      created,
+		UpdatedAt:      created,
 	}
 	return &player
 }
