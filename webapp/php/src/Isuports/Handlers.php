@@ -125,7 +125,7 @@ final class Handlers
         }
 
         if ($id !== 0) {
-            return (string)$id;
+            return sprintf('%x', $id);
         }
 
         throw $lastErr;
