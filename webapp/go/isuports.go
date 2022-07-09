@@ -118,7 +118,7 @@ func dispenseID(ctx context.Context) (string, error) {
 		break
 	}
 	if id != 0 {
-		return strconv.FormatInt(id, 10), nil
+		return fmt.Sprintf("%x", id), nil
 	}
 	return "", lastErr
 }
@@ -576,10 +576,8 @@ func billingReportByCompetition(ctx context.Context, tenantDB dbOrTx, tenantID i
 		return nil, fmt.Errorf("error Select count player_score: tenantID=%d, competitionID=%s, %w", tenantID, competitonID, err)
 	}
 	for _, pid := range scoredPlayerIDs {
-		if _, ok := billingMap[pid]; ok {
-			// スコアが登録されている参加者
-			billingMap[pid] = "player"
-		}
+		// スコアが登録されている参加者
+		billingMap[pid] = "player"
 	}
 
 	// 大会が終了している場合のみ請求金額が確定するので計算する
@@ -786,7 +784,7 @@ func playersAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error c.FormParams: %w", err)
 	}
-	displayNames := params["display_name"]
+	displayNames := params["display_name[]"]
 
 	pds := make([]PlayerDetail, 0, len(displayNames))
 	for _, displayName := range displayNames {

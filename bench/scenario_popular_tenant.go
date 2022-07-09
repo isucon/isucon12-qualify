@@ -2,7 +2,7 @@ package bench
 
 import (
 	"context"
-	"time"
+	"fmt"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
@@ -23,7 +23,7 @@ func (sc *Scenario) PopularTenantScenarioWorker(step *isucandar.BenchmarkStep, p
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.PopularTenantScenario(ctx, step, scTag, isHeavyTenant); err != nil {
 			sc.ScenarioError(scTag, err)
-			time.Sleep(SleepOnError)
+			SleepWithCtx(ctx, SleepOnError)
 		}
 	},
 		// // 無限回繰り返す
@@ -62,17 +62,19 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 		tenantName = data.TenantName
 	}
 
-	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
+	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
 	if err != nil {
 		return err
 	}
 
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
 	orgJobConf := &OrganizerJobConfig{
-		orgAg:       orgAg,
-		scTag:       scTag,
-		tenantName:  tenantName,
-		scoreRepeat: 2,
+		orgAc:         orgAc,
+		scTag:         scTag,
+		tenantName:    tenantName,
+		scoreRepeat:   ConstPopularTenantScenarioScoreRepeat,
+		addScoreNum:   ConstPopularTenantScenarioAddScoreNum,
+		scoreInterval: 1000, // 結果の検証時には3s、負荷かける用は1s
 	}
 
 	for {
@@ -82,8 +84,9 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 
 		// テナント請求ダッシュボードの閲覧
 		{
-			res, err := GetOrganizerBillingAction(ctx, orgAg)
-			v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
+			res, err, txt := GetOrganizerBillingAction(ctx, orgAg)
+			msg := fmt.Sprintf("%s %s", orgAc, txt)
+			v := ValidateResponseWithMsg("テナント内の請求情報", step, res, err, msg, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPIBilling) error {
 					_ = r
 					return nil

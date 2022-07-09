@@ -11,21 +11,21 @@ import (
 	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 )
 
-type playerScenarioWorker struct {
+type playerValidateScenarioWorker struct {
 	worker *worker.Worker
 }
 
-func (playerScenarioWorker) String() string {
-	return "PlayerScenarioWorker"
+func (playerValidateScenarioWorker) String() string {
+	return "PlayerValidateScenarioWorker"
 }
-func (w *playerScenarioWorker) Process(ctx context.Context) { w.worker.Process(ctx) }
+func (w *playerValidateScenarioWorker) Process(ctx context.Context) { w.worker.Process(ctx) }
 
-// competition一覧を取り、rankingを参照するプレイヤー
-func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32, tenantName, playerID string) (Worker, error) {
-	scTag := ScenarioTagPlayer
+// PlayerHandlerが不正な値を返さないかチェックする
+func (sc *Scenario) PlayerValidateScenarioWorker(step *isucandar.BenchmarkStep, p int32) (Worker, error) {
+	scTag := ScenarioTagPlayerValidate
 
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		if err := sc.PlayerScenario(ctx, step, scTag, tenantName, playerID); err != nil {
+		if err := sc.PlayerValidateScenario(ctx, step, scTag); err != nil {
 			sc.ScenarioError(scTag, err)
 			SleepWithCtx(ctx, SleepOnError)
 		}
@@ -38,20 +38,26 @@ func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32,
 		return nil, err
 	}
 	w.SetParallelism(p)
-	return &playerScenarioWorker{
+	return &playerValidateScenarioWorker{
 		worker: w,
 	}, nil
 }
 
-func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag, tenantName, playerID string) error {
+func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag) error {
 	report := timeReporter(string(scTag))
 	defer report()
 	sc.ScenarioStart(scTag)
 
-	playerAc, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerID)
+	// TODO: score入稿するので破壊シナリオから選ばないとダメ、直す
+	initialData := sc.InitialData.Choise()
+	playerAc, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, initialData.TenantName, initialData.PlayerID)
 	if err != nil {
 		return err
 	}
+
+	// player handlerを舐める（cacheさせる）
+	// score入稿
+	// なめ直して更新されていることを確認
 
 	var competitions []isuports.CompetitionDetail
 	for {
