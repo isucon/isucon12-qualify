@@ -665,10 +665,43 @@ final class Handlers
      * POST /api/organizer/competition/:competition_id/finish
      * 大会を終了する
      */
-    public function competitionFinishHandler(Request $request, Response $response): Response
+    public function competitionFinishHandler(Request $request, Response $response, array $params): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $v = $this->parseViewer($request);
+        if ($v->role !== self::ROLE_ORGANIZER) {
+            throw new HttpForbiddenException($request, 'role organizer required');
+        }
+
+        $tenantDB = $this->connectToTenantDB($v->tenantID);
+        $id = $params['competition_id'] ?? '';
+        if ($id === '') {
+            throw new HttpBadRequestException($request, 'competition_id required');
+        }
+
+        // 存在しない大会
+        if (is_null($this->retrieveCompetition($tenantDB, $id))) {
+            $tenantDB->close();
+            throw new HttpNotFoundException($request, 'competition not found');
+        }
+
+        $now = time();
+        try {
+            $tenantDB->prepare('UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?')
+                ->executeStatement([$now, $now, $id]);
+        } catch (DBException $e) {
+            $tenantDB->close();
+            throw new RuntimeException(
+                vsprintf(
+                    'error Update competition: finishedAt=%d, updatedAt=%d, id=%s, %s',
+                    [$now, $now, $id, $e->getMessage()],
+                ),
+                previous: $e
+            );
+        }
+
+        $tenantDB->close();
+
+        return $this->jsonResponse($response, new SuccessResult(success: true));
     }
 
     /**
