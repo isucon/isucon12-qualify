@@ -1,7 +1,6 @@
 import codecs
 import csv
 import fcntl
-import io
 import os
 import re
 import sqlite3
@@ -235,6 +234,15 @@ def retrieve_player(tenant_db, id: str) -> PlayerRow:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
+
+
+def authorize_player(tenant_db, id: str):
+    player = retrieve_player(tenant_db, id)
+    if not player:
+        abort(401, "player not found")
+
+    if player.is_disqualified:
+        abort(403, "player is disqualified")
 
 
 @dataclass
@@ -682,7 +690,67 @@ def player_get_detail(player_id: str):
     参加者向けAPI
     参加者の詳細情報を取得する
     """
-    raise NotImplementedError()  # TODO
+    viewer = parse_viewer()
+    if viewer.role != ROLE_PLAYER:
+        abort(403, "role player required")
+
+    tenant_db = connect_to_tenant_db(viewer.tenant_id)
+
+    authorize_player(tenant_db, viewer.player_id)
+
+    player = retrieve_player(tenant_db, player_id)
+    if not player:
+        abort(404, "player not found")
+
+    competition_rows = []
+
+    cur = tenant_db.cursor()
+    cur.execute("SELECT * FROM competition ORDER BY created_at ASC")
+    rows = cur.fetchall()
+    for row in rows:
+        competition_rows.append(CompetitionRow(**row))
+
+    # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+    lock_file_fd = flock_by_tenant_id(viewer.tenant_id)
+    if not lock_file_fd:
+        raise
+
+    player_score_rows = []
+    for competition_row in competition_rows:
+        # 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
+        cur.execute(
+            "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1",
+            (viewer.tenant_id, competition_row.id, player.id),
+        )
+        rows = cur.fetchone()
+        if not rows:
+            # 行がない = スコアが記録されてない
+            continue
+        player_score_rows.append(PlayerScoreRow(**row))
+
+    player_score_details = []
+    for player_score_row in player_score_rows:
+        competition = retrieve_competition(tenant_db, player_score_row.competition_id)
+        if not competition:
+            continue
+        player_score_details.append(
+            PlayerScoreDetail(competition_title=competition.title, score=player_score_row.score)
+        )
+
+    tenant_db.close()
+    fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
+
+    return jsonify(
+        SuccessResult(
+            status=True,
+            data={
+                "player": PlayerDetail(
+                    id=player.id, display_name=player.display_name, is_disqualified=player.is_disqualified
+                ),
+                "scores": player_score_details,
+            },
+        )
+    )
 
 
 @dataclass
