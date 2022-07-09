@@ -872,7 +872,7 @@ async fn competition_score_handler(
     if competition_id == ""{
         return Ok(actix_web::HttpResponse::BadRequest().finish());
     };
-    let comp = retrieve_competition(tenant_db, competition_id)await?;
+    let comp = retrieve_competition(tenant_db, competition_id).await?;
     if comp.finished_at.is_some(){
         let res = FailureResult{
             success: false,
