@@ -867,10 +867,157 @@ final class Handlers
      * GET /api/player/competition/:competition_id/ranking
      * 大会ごとのランキングを取得する
      */
-    public function competitionRankingHandler(Request $request, Response $response): Response
+    public function competitionRankingHandler(Request $request, Response $response, array $params): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $v = $this->parseViewer($request);
+
+        if ($v->role !== self::ROLE_PLAYER) {
+            throw new HttpForbiddenException($request, 'role player required');
+        }
+
+        $tenantDB = $this->connectToTenantDB($v->tenantID);
+
+        $this->authorizePlayer($request, $tenantDB, $v->playerID);
+
+        $competitionID = $params['competition_id'] ?? '';
+        if ($competitionID === '') {
+            throw new HttpBadRequestException($request, 'competition_id is required');
+        }
+
+        // 大会の存在確認
+        $competition = $this->retrieveCompetition($tenantDB, $competitionID);
+        if (is_null($competition)) {
+            throw new HttpNotFoundException($request, 'competition not found');
+        }
+
+        $now = time();
+        try {
+            $row = $this->adminDB->prepare('SELECT * FROM tenant WHERE id = ?')
+                ->executeQuery([$v->tenantID])
+                ->fetchAssociative();
+        } catch (DBException $e) {
+            $tenantDB->close();
+            throw new RuntimeException(
+                sprintf('error Select tenant: id=%d, %s', $v->tenantID, $e->getMessage()),
+                previous: $e,
+            );
+        }
+        if ($row === false) {
+            $tenantDB->close();
+            throw new RuntimeException(sprintf('error Select tenant: id=%d', $v->tenantID));
+        }
+
+        $tenant = TenantRow::fromDB($row);
+
+        try {
+            $this->adminDB->prepare('INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+                ->executeStatement([$v->playerID, $tenant->id, $competitionID, $now, $now]);
+        } catch (DBException $e) {
+            $tenantDB->close();
+            throw new RuntimeException(
+                vsprintf(
+                    'error Insert visit_history: playerID=%s, tenantID=%d, competitionID=%s, createdAt=%d, updatedAt=%d, %s',
+                    [$v->playerID, $tenant->id, $competitionID, $now, $now, $e->getMessage()],
+                ),
+                previous: $e,
+            );
+        }
+
+        $rankAfter = 0;
+        $rankAfterStr = $request->getQueryParams()['rank_after'] ?? '';
+        if ($rankAfterStr !== '') {
+            $rankAfter = filter_var($rankAfterStr, FILTER_VALIDATE_INT);
+            if (!is_int($rankAfter)) {
+                $tenantDB->close();
+                throw new RuntimeException(sprintf('error filter_var: rankAfterStr=%s', $rankAfterStr));
+            }
+        }
+
+        // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+        $fl = $this->flockByTenantID($v->tenantID);
+
+        /** @var list<PlayerScoreRow> $pss */
+        $pss = [];
+        try {
+            $result = $tenantDB->prepare('SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC')
+                ->executeQuery([$tenant->id, $competitionID]);
+            while ($row = $result->fetchAssociative()) {
+                $pss[] = PlayerScoreRow::fromDB($row);
+            }
+        } catch (DBException $e) {
+            $tenantDB->close();
+            fclose($fl);
+            throw new RuntimeException(
+                sprintf('error Select player_score: tenantID=%d, competitionID=%s, %s', $tenant->id, $competitionID, $e->getMessage()),
+                previous: $e,
+            );
+        }
+
+        /** @var list<CompetitionRank> $ranks */
+        $ranks = [];
+        /** @var array<string, null> $scoredPlayerSet */
+        $scoredPlayerSet = [];
+        foreach ($pss as $ps) {
+            // player_scoreが同一player_id内ではrow_numの降順でソートされているので
+            // 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
+            if (array_key_exists($ps->playerID, $scoredPlayerSet)) {
+                continue;
+            }
+            $scoredPlayerSet[$ps->playerID] = null;
+            try {
+                $p = $this->retrievePlayer($tenantDB, $ps->playerID);
+            } catch (RuntimeException $e) {
+                fclose($fl);
+                throw $e;
+            }
+            $ranks[] = new CompetitionRank(
+                score: $ps->score,
+                playerID: $p->id,
+                playerDisplayName: $p->displayName,
+                rowNum: $ps->rowNum,
+            );
+        }
+        usort($ranks, function (CompetitionRank $x, CompetitionRank $y): int {
+            if ($x->score === $y->score) {
+                return $y->rowNum <=> $x->rowNum;
+            }
+
+            return $y->score <=> $x->score;
+        });
+
+        /** @var list<CompetitionRank> $pageRanks */
+        $pageRanks = [];
+        foreach ($ranks as $i => $rank) {
+            if ($i < $rankAfter) {
+                continue;
+            }
+            $pageRanks[] = new CompetitionRank(
+                rank: $i + 1,
+                score: $rank->score,
+                playerID: $rank->playerID,
+                playerDisplayName: $rank->playerDisplayName,
+            );
+            if (count($pageRanks) >= 100) {
+                break;
+            }
+        }
+
+        $tenantDB->close();
+        fclose($fl);
+
+        $res = new SuccessResult(
+            success: true,
+            data: new CompetitionRankingHandlerResult(
+                competition: new CompetitionDetail(
+                    id: $competition->id,
+                    title: $competition->title,
+                    isFinished: !is_null($competition->finishedAt),
+                ),
+                ranks: $pageRanks,
+            ),
+        );
+
+        return $this->jsonResponse($response, $res);
     }
 
     /**

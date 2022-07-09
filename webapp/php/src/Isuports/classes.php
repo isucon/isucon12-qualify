@@ -178,27 +178,27 @@ final class PlayerScoreRow
 
     /**
      * @param array{
-     *     tenant_id: int,
+     *     tenant_id: string,
      *     id: string,
      *     player_id: string,
      *     competition_id: string,
-     *     score: int,
-     *     row_num: int,
-     *     created_at: int,
-     *     updated_at: int,
+     *     score: string,
+     *     row_num: string,
+     *     created_at: string,
+     *     updated_at: string,
      * } $row
      */
     public static function fromDB(array $row): self
     {
         return new self(
-            tenantID: $row['tenant_id'],
+            tenantID: (int)$row['tenant_id'],
             id: $row['id'],
             playerID: $row['player_id'],
             competitionID: $row['competition_id'],
-            score: $row['score'],
-            rowNum: $row['row_num'],
-            createdAt: $row['created_at'],
-            updatedAt: $row['updated_at'],
+            score: (int)$row['score'],
+            rowNum: (int)$row['row_num'],
+            createdAt: (int)$row['created_at'],
+            updatedAt: (int)$row['updated_at'],
         );
     }
 }
@@ -512,11 +512,11 @@ final class PlayerHandlerResult implements JsonSerializable
 final class CompetitionRank implements JsonSerializable
 {
     public function __construct(
-        private int $rank,
-        private int $score,
-        private string $playerID,
-        private string $playerDisplayName,
-        public int $rowNum, // APIレスポンスのJSONには含まれない
+        public int $score,
+        public string $playerID,
+        public string $playerDisplayName,
+        public int $rank = 0,
+        public int $rowNum = 0, // APIレスポンスのJSONには含まれない
     ) {
     }
 
