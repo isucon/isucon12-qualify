@@ -603,59 +603,60 @@ def organizer_score_competitions(competition_id: str):
         app.logger.warning("error flock_by_tenant_id")
         raise
 
-    row_num = 0
-    player_score_rows = []
-    for row in csv_reader:
-        row_num += 1
-        if len(row) != 2:
-            continue
-        player_id = row[0]
-        score_str = row[1]
-        if retrieve_player(tenant_db, player_id) is None:
-            # 存在しない参加者が含まれている
-            continue
+    try:
+        row_num = 0
+        player_score_rows = []
+        for row in csv_reader:
+            row_num += 1
+            if len(row) != 2:
+                continue
+            player_id = row[0]
+            score_str = row[1]
+            if retrieve_player(tenant_db, player_id) is None:
+                # 存在しない参加者が含まれている
+                abort(400, f"player not found: {player_id}")
 
-        score = int(score_str, 10)
-        id = dispense_id()
-        now = int(datetime.now().timestamp())
-        player_score_rows.append(
-            PlayerScoreRow(
-                id=id,
-                tenant_id=viewer.tenant_id,
-                player_id=player_id,
-                competition_id=competition_id,
-                score=score,
-                row_num=row_num,
-                created_at=now,
-                updated_at=now,
+            score = int(score_str, 10)
+            id = dispense_id()
+            now = int(datetime.now().timestamp())
+            player_score_rows.append(
+                PlayerScoreRow(
+                    id=id,
+                    tenant_id=viewer.tenant_id,
+                    player_id=player_id,
+                    competition_id=competition_id,
+                    score=score,
+                    row_num=row_num,
+                    created_at=now,
+                    updated_at=now,
+                )
             )
-        )
 
-    cur = tenant_db.cursor()
-    cur.execute(
-        "DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?",
-        (viewer.tenant_id, competition_id),
-    )
-    tenant_db.commit()
-
-    for player_score_row in player_score_rows:
+        cur = tenant_db.cursor()
         cur.execute(
-            "INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                player_score_row.id,
-                player_score_row.tenant_id,
-                player_score_row.player_id,
-                player_score_row.competition_id,
-                player_score_row.score,
-                player_score_row.row_num,
-                player_score_row.created_at,
-                player_score_row.updated_at,
-            ),
+            "DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?",
+            (viewer.tenant_id, competition_id),
         )
         tenant_db.commit()
 
-    tenant_db.close()
-    fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
+        for player_score_row in player_score_rows:
+            cur.execute(
+                "INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    player_score_row.id,
+                    player_score_row.tenant_id,
+                    player_score_row.player_id,
+                    player_score_row.competition_id,
+                    player_score_row.score,
+                    player_score_row.row_num,
+                    player_score_row.created_at,
+                    player_score_row.updated_at,
+                ),
+            )
+            tenant_db.commit()
+    finally:
+        tenant_db.close()
+        fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
 
     return jsonify(SuccessResult(status=True, data={"rows": len(player_score_rows)}))
 
@@ -713,32 +714,34 @@ def player_get_detail(player_id: str):
     # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
     lock_file_fd = flock_by_tenant_id(viewer.tenant_id)
     if not lock_file_fd:
+        app.logger.warning("error flock_by_tenant_id")
         raise
 
-    player_score_rows = []
-    for competition_row in competition_rows:
-        # 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
-        cur.execute(
-            "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1",
-            (viewer.tenant_id, competition_row.id, player.id),
-        )
-        rows = cur.fetchone()
-        if not rows:
-            # 行がない = スコアが記録されてない
-            continue
-        player_score_rows.append(PlayerScoreRow(**row))
+    try:
+        player_score_rows = []
+        for competition_row in competition_rows:
+            # 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
+            cur.execute(
+                "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1",
+                (viewer.tenant_id, competition_row.id, player.id),
+            )
+            row = cur.fetchone()
+            if not row:
+                # 行がない = スコアが記録されてない
+                continue
+            player_score_rows.append(PlayerScoreRow(**row))
 
-    player_score_details = []
-    for player_score_row in player_score_rows:
-        competition = retrieve_competition(tenant_db, player_score_row.competition_id)
-        if not competition:
-            continue
-        player_score_details.append(
-            PlayerScoreDetail(competition_title=competition.title, score=player_score_row.score)
-        )
-
-    tenant_db.close()
-    fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
+        player_score_details = []
+        for player_score_row in player_score_rows:
+            competition = retrieve_competition(tenant_db, player_score_row.competition_id)
+            if not competition:
+                continue
+            player_score_details.append(
+                PlayerScoreDetail(competition_title=competition.title, score=player_score_row.score)
+            )
+    finally:
+        tenant_db.close()
+        fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
 
     return jsonify(
         SuccessResult(
@@ -768,7 +771,111 @@ def player_get_competition_ranking(competition_id):
     参加者向けAPI
     大会ごとのランキングを取得する
     """
-    raise NotImplementedError()  # TODO
+    viewer = parse_viewer()
+    if viewer.role != ROLE_PLAYER:
+        abort(403, "role player required")
+
+    tenant_db = connect_to_tenant_db(viewer.tenant_id)
+
+    authorize_player(tenant_db, viewer.player_id)
+
+    # 大会の存在確認
+    competition = retrieve_competition(tenant_db, competition_id)
+    if not competition:
+        abort(404, "competition not found")
+
+    now = int(datetime.now().timestamp())
+    admin_db = connect_admin_db()
+    admin_cur = admin_db.cursor(dictionary=True)
+    admin_cur.execute("SELECT * FROM tenant WHERE id = %s", (viewer.tenant_id,))
+    row = admin_cur.fetchone()
+    if not row:
+        return
+    tenant_row = TenantRow(**row)
+
+    admin_cur.execute(
+        "INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (%s, %s, %s, %s, %s)",
+        (viewer.player_id, tenant_row.id, competition_id, now, now),
+    )
+    admin_db.commit()
+
+    rank_after = 0
+    rank_after_str = request.args.get("rank_after")
+    if rank_after_str:
+        rank_after = int(rank_after_str)
+
+    # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+    lock_file_fd = flock_by_tenant_id(viewer.tenant_id)
+    if not lock_file_fd:
+        app.logger.warning("error flock_by_tenant_id")
+        raise
+
+    try:
+        player_score_rows = []
+        tenant_cur = tenant_db.cursor()
+        tenant_cur.execute(
+            "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
+            (tenant_row.id, competition_id),
+        )
+        rows = tenant_cur.fetchall()
+        for row in rows:
+            player_score_rows.append(PlayerScoreRow(**row))
+
+        ranks = []
+        scored_player_set = {}
+        for player_score_row in player_score_rows:
+            # player_scoreが同一player_id内ではrow_numの降順でソートされているので
+            # 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
+            if scored_player_set.get(player_score_row.player_id) is not None:
+                continue
+
+            scored_player_set[player_score_row.player_id] = {}
+            player = retrieve_player(tenant_db, player_score_row.player_id)
+            if not player:
+                raise
+            ranks.append(
+                CompetitionRank(
+                    rank=0,
+                    score=player_score_row.score,
+                    player_id=player.id,
+                    player_display_name=player.display_name,
+                    row_num=player_score_row.row_num,
+                )
+            )
+
+        ranks.sort(key=lambda rank: (rank.score, rank.row_num), reverse=True)
+
+        paged_ranks = []
+        for i, rank in enumerate(ranks):
+            if i < rank_after:
+                continue
+            paged_ranks.append(
+                CompetitionRank(
+                    rank=i + 1,
+                    score=rank.score,
+                    player_id=rank.player_id,
+                    player_display_name=rank.player_display_name,
+                    row_num=0,
+                )
+            )
+            if len(paged_ranks) >= 100:
+                break
+    finally:
+        admin_db.close()
+        tenant_db.close()
+        fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
+
+    return jsonify(
+        SuccessResult(
+            status=True,
+            data={
+                "competition": CompetitionDetail(
+                    id=competition.id, title=competition.title, is_finished=bool(competition.finished_at)
+                ),
+                "ranks": paged_ranks,
+            },
+        )
+    )
 
 
 @app.route("/api/player/competitions", methods=["GET"])
