@@ -3,16 +3,15 @@ import csv
 import fcntl
 import os
 import re
-import sqlite3
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
 
 import jwt
-import mysql.connector
 from flask import Flask, abort, jsonify, make_response, request
-from sqlalchemy.pool import QueuePool
+from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError, OperationalError
 from werkzeug.exceptions import HTTPException
 
 INITIALIZE_SCRIPT = "../sql/init.sh"
@@ -27,37 +26,20 @@ ROLE_NONE = "none"
 # 正しいテナント名の正規表現
 TENANT_NAME_REGEXP = re.compile(r"^[a-z][a-z0-9-]{0,61}[a-z0-9]$")
 
+admin_db = None
+
 app = Flask(__name__)
-
-mysql_connection_env = {
-    "host": os.getenv("ISUCON_DB_HOST", "127.0.0.1"),
-    "port": os.getenv("ISUCON_DB_PORT", 3306),
-    "user": os.getenv("ISUCON_DB_USER", "isucon"),
-    "password": os.getenv("ISUCON_DB_PASSWORD", "isucon"),
-    "database": os.getenv("ISUCON_DB_NAME", "isuports"),
-}
-
-cnxpool = QueuePool(lambda: mysql.connector.connect(**mysql_connection_env), pool_size=10)
-
-
-def select_all(cnx, query, *args, dictionary=True):
-    # 管理用DBに接続する
-    try:
-        cur = cnx.cursor(dictionary=dictionary)
-        cur.execute(query, *args)
-        return cur.fetchall()
-    finally:
-        cnx.close()
-
-
-def select_row(cnx, *args, **kwargs):
-    rows = select_all(cnx, *args, **kwargs)
-    return rows[0] if len(rows) > 0 else None
 
 
 def connect_admin_db():
     """管理用DBに接続する"""
-    return cnxpool.connect()
+    host = os.getenv("ISUCON_DB_HOST", "127.0.0.1")
+    port = os.getenv("ISUCON_DB_PORT", 3306)
+    user = os.getenv("ISUCON_DB_USER", "isucon")
+    password = os.getenv("ISUCON_DB_PASSWORD", "isucon")
+    database = os.getenv("ISUCON_DB_NAME", "isuports")
+
+    return create_engine(f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}")
 
 
 def tenant_db_path(id: int) -> str:
@@ -69,7 +51,7 @@ def tenant_db_path(id: int) -> str:
 def connect_to_tenant_db(id: int):
     """テナントDBに接続する"""
     path = tenant_db_path(id)
-    return sqlite3.connect(path)
+    return create_engine(f"sqlite:///{path}")
 
 
 def create_tenant_db(id: int):
@@ -85,23 +67,22 @@ def dispense_id() -> str:
     id = 0
     last_err = None
     for i in range(100):
-        cnx = connect_admin_db()
         try:
-            cur = cnx.cursor()
-            cur.execute("REPLACE INTO id_generator (stub) VALUES (%s)", ("a",))
-            cnx.commit()
-        except mysql.connector.Error as e:
-            if e.errno == 1213:  # deadlock
-                last_err = e
-                continue
-            cnx.rollback()
-            raise e
-        finally:
-            id = cur.lastrowid
-            cnx.close()
+            res = admin_db.execute("REPLACE INTO id_generator (stub) VALUES (%s);", ("a",))
+            id = res.lastrowid
+        except OperationalError as e:  # deadlock
+            last_err = e
+            continue
     if id != 0:
-        return str(id)
+        return hex(id)
     raise last_err
+
+
+def run():
+    global admin_db
+    admin_db = connect_admin_db()
+
+    app.run(host="0.0.0.0", port=3000, debug=True, threaded=True)
 
 
 @app.errorhandler(HTTPException)
@@ -183,15 +164,8 @@ def retrieve_tenant_row_from_header():
         )
 
     # テナントの存在確認
-    cnx = connect_admin_db()
-    row = None
-    try:
-        query = "SELECT * FROM tenant WHERE name = (%s)"
-        row = select_row(cnx, query, (tenant_name,))
-    finally:
-        cnx.close()
-
-    if row is None:
+    row = admin_db.execute("SELECT * FROM tenant WHERE name = %s", (tenant_name,)).fetchone()
+    if not row:
         abort(401, "tenant not found")
 
     return TenantRow(**row)
@@ -218,11 +192,7 @@ class PlayerRow:
 
 def retrieve_player(tenant_db, id: str) -> PlayerRow:
     """参加者を取得する"""
-    tenant_db.row_factory = sqlite3.Row
-    query = "SELECT * FROM player WHERE id = (?)"
-    cur = tenant_db.cursor()
-    cur.execute(query, (id,))
-    row = cur.fetchone()
+    row = tenant_db.execute("SELECT * FROM player WHERE id = ?", (id,)).fetchone()
     if not row:
         return None
 
@@ -257,11 +227,7 @@ class CompetitionRow:
 
 def retrieve_competition(tenant_db, id: str) -> Optional[CompetitionRow]:
     """大会を取得する"""
-    tenant_db.row_factory = sqlite3.Row
-    query = "SELECT * FROM competition WHERE id = ?"
-    cur = tenant_db.cursor()
-    cur.execute(query, (id,))
-    row = cur.fetchone()
+    row = tenant_db.execute("SELECT * FROM competition WHERE id = ?", (id,)).fetchone()
     if not row:
         return None
 
@@ -317,7 +283,7 @@ def admin_add_tenants():
         # admin: SaaS管理者用の特別なテナント名
         abort(404, f"{viewer.tenant_name} has not this API")
 
-    if viewer.role != "admin":
+    if viewer.role != ROLE_ADMIN:
         abort(403, "admin role required")
 
     display_name = request.values.get("display_name")
@@ -326,23 +292,14 @@ def admin_add_tenants():
     validate_tenant_name(name)
 
     now = int(datetime.now().timestamp())
-    cnx = connect_admin_db()
     try:
-        cur = cnx.cursor()
-        cur.execute(
+        res = admin_db.execute(
             "INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (%s, %s, %s, %s)",
             (name, display_name, now, now),
         )
-        cnx.commit()
-    except mysql.connector.Error as e:
-        if e.errno == 1062:  # duplicate entry
-            abort(400, "duplicate tenant")
-        cnx.rollback()
-        raise e
-    finally:
-        id = cur.lastrowid
-
-        cnx.close()
+        id = res.lastrowid
+    except IntegrityError:  # duplicate entry
+        abort(400, "duplicate tenant")
 
     create_tenant_db(id)
 
@@ -418,14 +375,10 @@ def organizer_get_players():
 
     tenant_db = connect_to_tenant_db(viewer.tenant_id)
 
-    tenant_db.row_factory = sqlite3.Row
-    cur = tenant_db.cursor()
-    cur.execute(
+    rows = tenant_db.execute(
         "SELECT * FROM player WHERE tenant_id=? ORDER BY created_at DESC",
         (viewer.tenant_id,),
-    )
-    tenant_db.commit()
-    rows = cur.fetchall()
+    ).fetchall()
 
     player_details = []
     for row in rows:
@@ -460,12 +413,10 @@ def organizer_add_players():
 
         now = int(datetime.now().timestamp())
 
-        cur = tenant_db.cursor()
-        cur.execute(
+        tenant_db.execute(
             "INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
             (id, viewer.tenant_id, display_name, False, now, now),
         )
-        tenant_db.commit()
 
         player = retrieve_player(tenant_db, id)
         player_details.append(
@@ -475,8 +426,6 @@ def organizer_add_players():
                 is_disqualified=player.is_disqualified,
             )
         )
-
-    tenant_db.close()
 
     return jsonify(SuccessResult(status=True, data={"players": player_details}))
 
@@ -494,20 +443,15 @@ def organizer_disqualified_players(player_id: str):
     tenant_db = connect_to_tenant_db(viewer.tenant_id)
 
     now = int(datetime.now().timestamp())
-    id = dispense_id()
 
-    cur = tenant_db.cursor()
-    cur.execute(
+    tenant_db.execute(
         "UPDATE player SET is_disqualified = ?, updated_at = ? WHERE id = ?",
         (True, now, player_id),
     )
-    tenant_db.commit()
 
     player = retrieve_player(tenant_db, player_id)
     if not player:
         abort(404, "player not found")
-
-    tenant_db.close()
 
     return jsonify(
         SuccessResult(
@@ -545,14 +489,10 @@ def organizer_add_competitions():
     now = int(datetime.now().timestamp())
     id = dispense_id()
 
-    cur = tenant_db.cursor()
-    cur.execute(
+    tenant_db.execute(
         "INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
         (id, viewer.tenant_id, title, None, now, now),
     )
-    tenant_db.commit()
-
-    tenant_db.close()
 
     return jsonify(
         SuccessResult(
@@ -580,14 +520,10 @@ def organizer_finish_competitions(competition_id: str):
 
     now = int(datetime.now().timestamp())
 
-    cur = tenant_db.cursor()
-    cur.execute(
+    tenant_db.execute(
         "UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?",
         (now, now, competition_id),
     )
-    tenant_db.commit()
-
-    tenant_db.close()
 
     return jsonify({"status": True})
 
@@ -653,15 +589,13 @@ def organizer_score_competitions(competition_id: str):
                 )
             )
 
-        cur = tenant_db.cursor()
-        cur.execute(
+        tenant_db.execute(
             "DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?",
             (viewer.tenant_id, competition_id),
         )
-        tenant_db.commit()
 
         for player_score_row in player_score_rows:
-            cur.execute(
+            tenant_db.execute(
                 "INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     player_score_row.id,
@@ -674,9 +608,7 @@ def organizer_score_competitions(competition_id: str):
                     player_score_row.updated_at,
                 ),
             )
-            tenant_db.commit()
     finally:
-        tenant_db.close()
         fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
 
     return jsonify(SuccessResult(status=True, data={"rows": len(player_score_rows)}))
@@ -726,9 +658,7 @@ def player_get_detail(player_id: str):
 
     competition_rows = []
 
-    cur = tenant_db.cursor()
-    cur.execute("SELECT * FROM competition ORDER BY created_at ASC")
-    rows = cur.fetchall()
+    rows = tenant_db.execute("SELECT * FROM competition ORDER BY created_at ASC").fetchall()
     for row in rows:
         competition_rows.append(CompetitionRow(**row))
 
@@ -742,11 +672,10 @@ def player_get_detail(player_id: str):
         player_score_rows = []
         for competition_row in competition_rows:
             # 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
-            cur.execute(
+            row = tenant_db.execute(
                 "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1",
                 (viewer.tenant_id, competition_row.id, player.id),
-            )
-            row = cur.fetchone()
+            ).fetchone()
             if not row:
                 # 行がない = スコアが記録されてない
                 continue
@@ -761,7 +690,6 @@ def player_get_detail(player_id: str):
                 PlayerScoreDetail(competition_title=competition.title, score=player_score_row.score)
             )
     finally:
-        tenant_db.close()
         fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
 
     return jsonify(
@@ -806,19 +734,15 @@ def player_get_competition_ranking(competition_id):
         abort(404, "competition not found")
 
     now = int(datetime.now().timestamp())
-    admin_db = connect_admin_db()
-    admin_cur = admin_db.cursor(dictionary=True)
-    admin_cur.execute("SELECT * FROM tenant WHERE id = %s", (viewer.tenant_id,))
-    row = admin_cur.fetchone()
+    row = admin_db.execute("SELECT * FROM tenant WHERE id = %s", (viewer.tenant_id,)).fetchone()
     if not row:
         return
     tenant_row = TenantRow(**row)
 
-    admin_cur.execute(
+    admin_db.execute(
         "INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (%s, %s, %s, %s, %s)",
         (viewer.player_id, tenant_row.id, competition_id, now, now),
     )
-    admin_db.commit()
 
     rank_after = 0
     rank_after_str = request.args.get("rank_after")
@@ -833,12 +757,10 @@ def player_get_competition_ranking(competition_id):
 
     try:
         player_score_rows = []
-        tenant_cur = tenant_db.cursor()
-        tenant_cur.execute(
+        rows = tenant_db.execute(
             "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
             (tenant_row.id, competition_id),
-        )
-        rows = tenant_cur.fetchall()
+        ).fetchall()
         for row in rows:
             player_score_rows.append(PlayerScoreRow(**row))
 
@@ -882,8 +804,6 @@ def player_get_competition_ranking(competition_id):
             if len(paged_ranks) >= 100:
                 break
     finally:
-        admin_db.close()
-        tenant_db.close()
         fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
 
     return jsonify(
@@ -949,4 +869,4 @@ def bench_initialize():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=3000, debug=True, threaded=True)
+    run()
