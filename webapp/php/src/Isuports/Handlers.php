@@ -14,6 +14,7 @@ use JsonSerializable;
 use PDO;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
+use Psr\Log\LoggerInterface as Logger;
 use RuntimeException;
 use Slim\Exception\HttpBadRequestException;
 use Slim\Exception\HttpForbiddenException;
@@ -38,6 +39,7 @@ class Handlers
     public function __construct(
         private Connection $adminDB,
         private Configuration $sqliteConfiguration, // sqliteのクエリログを出力する設定
+        private Logger $logger, // 初期実装では使っていませんがデバッグ用にお使いください
     ) {
     }
 
