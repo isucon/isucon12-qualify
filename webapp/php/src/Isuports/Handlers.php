@@ -21,7 +21,7 @@ use Slim\Exception\HttpNotFoundException;
 use Slim\Exception\HttpUnauthorizedException;
 use UnexpectedValueException;
 
-final class Handlers
+class Handlers
 {
     private const TENANT_DB_SCHEMA_FILE_PATH = __DIR__ . '/../../../sql/tenant/10_schema.sql';
     private const INITIALIZE_SCRIPT = __DIR__ . '/../../../sql/init.sh';

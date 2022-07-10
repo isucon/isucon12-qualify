@@ -6,11 +6,11 @@ namespace App\Isuports;
 
 use JsonSerializable;
 
-final class SuccessResult implements JsonSerializable
+class SuccessResult implements JsonSerializable
 {
     public function __construct(
-        private bool $success,
-        private JsonSerializable|array|null $data = null,
+        public bool $success,
+        public JsonSerializable|array|null $data = null,
     ) {
     }
 
@@ -29,11 +29,11 @@ final class SuccessResult implements JsonSerializable
     }
 }
 
-final class FailureResult implements JsonSerializable
+class FailureResult implements JsonSerializable
 {
     public function __construct(
-        private bool $success,
-        private string $message,
+        public bool $success,
+        public string $message,
     ) {
     }
 
@@ -49,7 +49,7 @@ final class FailureResult implements JsonSerializable
     }
 }
 
-final class Viewer
+class Viewer
 {
     public function __construct(
         public string $role,
@@ -60,7 +60,7 @@ final class Viewer
     }
 }
 
-final class TenantRow
+class TenantRow
 {
     public function __construct(
         public string $name,
@@ -72,7 +72,7 @@ final class TenantRow
     }
 }
 
-final class PlayerRow
+class PlayerRow
 {
     public function __construct(
         public int $tenantID,
@@ -85,7 +85,7 @@ final class PlayerRow
     }
 }
 
-final class CompetitionRow
+class CompetitionRow
 {
     public function __construct(
         public int $tenantID,
@@ -98,11 +98,11 @@ final class CompetitionRow
     }
 }
 
-final class TenantDetail implements JsonSerializable
+class TenantDetail implements JsonSerializable
 {
     public function __construct(
-        private string $name,
-        private string $displayName,
+        public string $name,
+        public string $displayName,
     ) {
     }
 
@@ -118,9 +118,9 @@ final class TenantDetail implements JsonSerializable
     }
 }
 
-final class TenantsAddHandlerResult implements JsonSerializable
+class TenantsAddHandlerResult implements JsonSerializable
 {
-    public function __construct(private TenantDetail $tenant)
+    public function __construct(public TenantDetail $tenant)
     {
     }
 
@@ -133,15 +133,15 @@ final class TenantsAddHandlerResult implements JsonSerializable
     }
 }
 
-final class BillingReport implements JsonSerializable
+class BillingReport implements JsonSerializable
 {
     public function __construct(
-        private string $competitionID,
-        private string $competitionTitle,
-        private int $playerCount,
-        private int $visitorCount,
-        private int $billingPlayerYen,
-        private int $billingVisitorYen,
+        public string $competitionID,
+        public string $competitionTitle,
+        public int $playerCount,
+        public int $visitorCount,
+        public int $billingPlayerYen,
+        public int $billingVisitorYen,
         public int $billingYen,
     ) {
     }
@@ -171,12 +171,12 @@ final class BillingReport implements JsonSerializable
     }
 }
 
-final class TenantWithBilling implements JsonSerializable
+class TenantWithBilling implements JsonSerializable
 {
     public function __construct(
-        private string $id,
-        private string $name,
-        private string $displayName,
+        public string $id,
+        public string $name,
+        public string $displayName,
         public int $billingYen = 0,
     ) {
     }
@@ -200,12 +200,12 @@ final class TenantWithBilling implements JsonSerializable
     }
 }
 
-final class TenantsBillingHandlerResult implements JsonSerializable
+class TenantsBillingHandlerResult implements JsonSerializable
 {
     /**
      * @param list<TenantWithBilling> $tenants
      */
-    public function __construct(private array $tenants)
+    public function __construct(public array $tenants)
     {
     }
 
@@ -218,12 +218,12 @@ final class TenantsBillingHandlerResult implements JsonSerializable
     }
 }
 
-final class PlayerDetail implements JsonSerializable
+class PlayerDetail implements JsonSerializable
 {
     public function __construct(
-        private string $id,
-        private string $displayName,
-        private bool $isDisqualified,
+        public string $id,
+        public string $displayName,
+        public bool $isDisqualified,
     ) {
     }
 
@@ -240,12 +240,12 @@ final class PlayerDetail implements JsonSerializable
     }
 }
 
-final class PlayersListHandlerResult implements JsonSerializable
+class PlayersListHandlerResult implements JsonSerializable
 {
     /**
      * @param list<PlayerDetail> $players
      */
-    public function __construct(private array $players)
+    public function __construct(public array $players)
     {
     }
 
@@ -258,12 +258,12 @@ final class PlayersListHandlerResult implements JsonSerializable
     }
 }
 
-final class PlayersAddHandlerResult implements JsonSerializable
+class PlayersAddHandlerResult implements JsonSerializable
 {
     /**
      * @param list<PlayerDetail> $players
      */
-    public function __construct(private array $players)
+    public function __construct(public array $players)
     {
     }
 
@@ -276,9 +276,9 @@ final class PlayersAddHandlerResult implements JsonSerializable
     }
 }
 
-final class PlayerDisqualifiedHandlerResult implements JsonSerializable
+class PlayerDisqualifiedHandlerResult implements JsonSerializable
 {
-    public function __construct(private PlayerDetail $player)
+    public function __construct(public PlayerDetail $player)
     {
     }
 
@@ -291,12 +291,12 @@ final class PlayerDisqualifiedHandlerResult implements JsonSerializable
     }
 }
 
-final class CompetitionDetail implements JsonSerializable
+class CompetitionDetail implements JsonSerializable
 {
     public function __construct(
-        private string $id,
-        private string $title,
-        private bool $isFinished,
+        public string $id,
+        public string $title,
+        public bool $isFinished,
     ) {
     }
 
@@ -313,9 +313,9 @@ final class CompetitionDetail implements JsonSerializable
     }
 }
 
-final class CompetitionsAddHandlerResult implements JsonSerializable
+class CompetitionsAddHandlerResult implements JsonSerializable
 {
-    public function __construct(private CompetitionDetail $competition)
+    public function __construct(public CompetitionDetail $competition)
     {
     }
 
@@ -328,9 +328,9 @@ final class CompetitionsAddHandlerResult implements JsonSerializable
     }
 }
 
-final class ScoreHandlerResult implements JsonSerializable
+class ScoreHandlerResult implements JsonSerializable
 {
-    public function __construct(private int $rows)
+    public function __construct(public int $rows)
     {
     }
 
@@ -343,12 +343,12 @@ final class ScoreHandlerResult implements JsonSerializable
     }
 }
 
-final class BillingHandlerResult implements JsonSerializable
+class BillingHandlerResult implements JsonSerializable
 {
     /**
      * @param list<BillingReport> $reports
      */
-    public function __construct(private array $reports)
+    public function __construct(public array $reports)
     {
     }
 
@@ -361,11 +361,11 @@ final class BillingHandlerResult implements JsonSerializable
     }
 }
 
-final class PlayerScoreDetail implements JsonSerializable
+class PlayerScoreDetail implements JsonSerializable
 {
     public function __construct(
-        private string $competitionTitle,
-        private int $score,
+        public string $competitionTitle,
+        public int $score,
     ) {
     }
 
@@ -381,14 +381,14 @@ final class PlayerScoreDetail implements JsonSerializable
     }
 }
 
-final class PlayerHandlerResult implements JsonSerializable
+class PlayerHandlerResult implements JsonSerializable
 {
     /**
      * @param list<PlayerScoreDetail> $scores
      */
     public function __construct(
-        private PlayerDetail $player,
-        private array $scores,
+        public PlayerDetail $player,
+        public array $scores,
     ) {
     }
 
@@ -404,7 +404,7 @@ final class PlayerHandlerResult implements JsonSerializable
     }
 }
 
-final class CompetitionRank implements JsonSerializable
+class CompetitionRank implements JsonSerializable
 {
     public function __construct(
         public int $score,
@@ -434,14 +434,14 @@ final class CompetitionRank implements JsonSerializable
     }
 }
 
-final class CompetitionRankingHandlerResult implements JsonSerializable
+class CompetitionRankingHandlerResult implements JsonSerializable
 {
     /**
      * @param list<CompetitionRank> $ranks
      */
     public function __construct(
-        private CompetitionDetail $competition,
-        private array $ranks,
+        public CompetitionDetail $competition,
+        public array $ranks,
     ) {
     }
 
@@ -460,12 +460,12 @@ final class CompetitionRankingHandlerResult implements JsonSerializable
     }
 }
 
-final class CompetitionsHandlerResult implements JsonSerializable
+class CompetitionsHandlerResult implements JsonSerializable
 {
     /**
      * @param list<CompetitionDetail> $competitions
      */
-    public function __construct(private array $competitions)
+    public function __construct(public array $competitions)
     {
     }
 
@@ -478,13 +478,13 @@ final class CompetitionsHandlerResult implements JsonSerializable
     }
 }
 
-final class MeHandlerResult implements JsonSerializable
+class MeHandlerResult implements JsonSerializable
 {
     public function __construct(
-        private TenantDetail $tenant,
-        private ?PlayerDetail $me,
-        private string $role,
-        private bool $loggedIn,
+        public TenantDetail $tenant,
+        public ?PlayerDetail $me,
+        public string $role,
+        public bool $loggedIn,
     ) {
     }
 
@@ -507,11 +507,11 @@ final class MeHandlerResult implements JsonSerializable
     }
 }
 
-final class InitializeHandlerResult implements JsonSerializable
+class InitializeHandlerResult implements JsonSerializable
 {
     public function __construct(
-        private string $lang,
-        private string $appeal,
+        public string $lang,
+        public string $appeal,
     ) {
     }
 
