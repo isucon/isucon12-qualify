@@ -450,13 +450,81 @@ final class Handlers
     /**
      * 大会ごとの課金レポートを計算する
      */
-    private function billingReportByCompetition(
-        Connection $tenantDB,
-        int $tenantID,
-        string $competitionID,
-    ): BillingReport {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+    private function billingReportByCompetition(Connection $tenantDB, int $tenantID, string $competitionID): BillingReport
+    {
+        $comp = $this->retrieveCompetition($tenantDB, $competitionID);
+        if (is_null($comp)) {
+            $tenantDB->close();
+            throw new RuntimeException('error retrieveCompetition');
+        }
+
+        // ランキングにアクセスした参加者のIDを取得する
+        try {
+            $vhs = $this->adminDB->prepare('SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id')
+                ->executeQuery([$tenantID, $comp->id])
+                ->fetchAllAssociative();
+        } catch (DBException $e) {
+            $tenantDB->close();
+            throw new RuntimeException(
+                vsprintf(
+                    'error Select visit_history: tenantID=%d, competitionID=%s, %s',
+                    [$tenantID, $comp->id, $e->getMessage()],
+                ),
+                previous: $e,
+            );
+        }
+
+        /** @var array<string, string> $billingMap */
+        $billingMap = [];
+        foreach ($vhs as $vh) {
+            // competition.finished_atよりもあとの場合は、終了後に訪問したとみなして大会開催内アクセス済みとみなさない
+            if (!is_null($comp->finishedAt) && $comp->finishedAt < $vh['min_created_at']) {
+                continue;
+            }
+            $billingMap[$vh['player_id']] = 'visitor';
+        }
+
+        // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+        $fl = $this->flockByTenantID($tenantID);
+
+        // スコアを登録した参加者のIDを取得する
+        try {
+            $scoredPlayerIDs = $tenantDB->prepare('SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?')
+                ->executeQuery([$tenantID, $comp->id])
+                ->fetchFirstColumn();
+        } catch (DBException $e) {
+            $tenantDB->close();
+            fclose($fl);
+            throw new RuntimeException(
+                sprintf('error Select count player_score: tenantID=%d, competitionID=%s, %s', $tenantID, $comp->id, $e->getMessage()),
+                previous: $e,
+            );
+        }
+        foreach ($scoredPlayerIDs as $pid) {
+            // スコアが登録されている参加者
+            $billingMap[$pid] = 'player';
+        }
+
+        // 大会が終了している場合のみ請求金額が確定するので計算する
+        $playerCount = 0;
+        $visitorCount = 0;
+        if (!is_null($comp->finishedAt)) {
+            $counts = array_count_values($billingMap);
+            $playerCount = $counts['player'] ?? 0;
+            $visitorCount =  $counts['visitor'] ?? 0;
+        }
+
+        fclose($fl);
+
+        return new BillingReport(
+            competitionID: $comp->id,
+            competitionTitle: $comp->title,
+            playerCount: $playerCount,
+            visitorCount: $visitorCount,
+            billingPlayerYen: 100 * $playerCount, // スコアを登録した参加者は100円
+            billingVisitorYen: 10 * $visitorCount, // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
+            billingYen: 100 * $playerCount + 10 * $visitorCount,
+        );
     }
 
     /**
@@ -880,8 +948,45 @@ final class Handlers
      */
     public function billingHandler(Request $request, Response $response): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $v = $this->parseViewer($request);
+        if ($v->role !== self::ROLE_ORGANIZER) {
+            throw new HttpForbiddenException($request, 'role organizer required');
+        }
+
+        $tenantDB = $this->connectToTenantDB($v->tenantID);
+
+        try {
+            $cs = $tenantDB->prepare('SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC')
+                ->executeQuery([$v->tenantID])
+                ->fetchAllAssociative();
+        } catch (DBException $e) {
+            $tenantDB->close();
+            throw new RuntimeException(
+                sprintf('error Select competition: %s', $e->getMessage()),
+                previous: $e,
+            );
+        }
+        if (count($cs) === 0) {
+            $tenantDB->close();
+            throw new RuntimeException('error Select competition');
+        }
+
+        /** @var list<BillingReport> $tbrs */
+        $tbrs = [];
+        foreach ($cs as $comp) {
+            $tbrs[] = $this->billingReportByCompetition($tenantDB, $v->tenantID, $comp['id']);
+        }
+
+        $tenantDB->close();
+
+        $res = new SuccessResult(
+            success: true,
+            data: new BillingHandlerResult(
+                reports: $tbrs,
+            ),
+        );
+
+        return $this->jsonResponse($response, $res);
     }
 
     /**
