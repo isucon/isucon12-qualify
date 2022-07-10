@@ -368,7 +368,7 @@ async fn retrieve_competition(
     Ok(row)
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 struct PlayerScoreRow {
     tenant_id: i64,
     id: String,
@@ -403,7 +403,7 @@ fn flock_by_tenant_id(tenant_id: i64) -> Result<i32, ()> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct TenantDetail {
     name: String,
     display_name: String,
@@ -988,7 +988,7 @@ struct PlayerScoreDetail {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct PlayerScoreHandlerResult {
+struct PlayerHandlerResult {
     player: PlayerDetail,
     scores: Vec<PlayerScoreDetail>,
 }
@@ -1023,7 +1023,40 @@ async fn player_handler(
             .await
             .unwrap();
     // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-    todo!()
+    let fl = flock_by_tenant_id(v.tenant_id.clone());
+    let mut pss = Vec::<PlayerScoreRow>::new();
+    for c in cs {
+        let ps: PlayerScoreRow = sqlx::query_as(
+            "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1")
+            .bind(v.tenant_id.clone())
+            .bind(c.id.clone())
+            .bind(p.id.clone())
+            .fetch_one(&mut tenant_db)
+            .await
+            .unwrap();
+        pss.push(ps);
+    }
+    let mut psds = Vec::<PlayerScoreDetail>::new();
+    for ps in  pss {
+        let comp = retrieve_competition(&mut tenant_db, ps.competition_id.clone()).await.unwrap();
+        psds.push(PlayerScoreDetail {
+            competition_title: comp.title,
+            score: ps.score,
+        });
+    }
+
+    let res = SuccessResult{
+        success: true,
+        data: Box::new(PlayerHandlerResult{
+            player: PlayerDetail{
+                id: p.id.clone(),
+                display_name: p.display_name.clone(),
+                is_disqualified: p.is_disqualified.clone(),
+            },
+            scores: psds,
+        }),
+    };
+    Ok(HttpResponse::Ok().json(res))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1081,18 +1114,79 @@ async fn competition_ranking_handler(
     sqlx::query("INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated) VALUES (?, ?, ?, ?, ?)")
     .bind(v.player_id)
     .bind(tenant.id)
-    .bind(competition_id)
+    .bind(competition_id.clone())
     .bind(now)
     .bind(now)
     .execute(pool.as_ref())
     .await.unwrap();
-    let rank_after_str = form.into_inner().rank_after;
-    if rank_after_str != "".to_string() {
-        let rank_after = i64::from_str_radix(&rank_after_str, 10).unwrap();
-    };
+    let rank_after_str = form.rank_after.clone();
+    // TODO: 数字以外の文字列を入力した場合はエラーにする
 
     // player_scoreを読んでいる時に更新が走ると不整合が走るのでロックを取得する
-    todo!()
+    let fl = flock_by_tenant_id(v.tenant_id.clone());
+    let pss: Vec<PlayerScoreRow> = sqlx::query_as(
+        "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC")
+        .bind(tenant.id.clone())
+        .bind(competition_id.clone())
+        .fetch_all(&mut tenant_db)
+        .await
+        .unwrap();
+    let mut ranks = Vec::<CompetitionRank>::new();
+    let mut scored_player_set = HashMap::<String, bool>::new();
+
+    for ps in pss {
+        // player_scoreが同一player_id内ではrow_numの降順でソートされているので
+        // 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
+        if scored_player_set.contains_key(&ps.player_id) {
+            continue;
+        }
+        scored_player_set.insert(ps.player_id.clone(), true);
+        let p = retrieve_player(&mut tenant_db, ps.player_id.clone()).await.unwrap();
+        ranks.push(CompetitionRank{
+            rank: 0,
+            score: ps.score.clone(),
+            player_id: p.id.clone(),
+            player_display_name: p.display_name.clone(),
+            row_num: ps.row_num.clone(),
+        })
+    }
+    ranks.sort_by(|a, b|
+        if a.score == b.score {
+            a.row_num.cmp(&b.row_num)
+        } else {
+            b.score.cmp(&a.score)
+        }
+    );
+    let mut paged_ranks = Vec::<CompetitionRank>::new();
+    for (i, rank) in ranks.iter().enumerate() {
+        let i = i as i64;
+        if i < Arc::new(form.rank_after.clone()).parse::<i64>().unwrap() {
+            continue;
+        }
+        paged_ranks.push(CompetitionRank{
+            rank: i + 1,
+            score: rank.score.clone(),
+            player_id: rank.player_id.clone(),
+            player_display_name: rank.player_display_name.clone(),
+            row_num: 0,
+        });
+        if paged_ranks.len() >= 100 {
+            break;
+        }
+    }
+    let res = SuccessResult{
+        success: true,
+        data: Box::new(CompetitionRankingHandlerResult{
+            competition: CompetitionDetail{
+                id: competition.id.clone(),
+                title: competition.title.clone(),
+                is_finished: competition.finished_at.is_some(),
+            },
+            ranks: paged_ranks,
+        }),
+    };
+
+    Ok(HttpResponse::Ok().json(res))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1172,9 +1266,41 @@ struct MeHandlerResult {
 async fn me_handler(
     pool: web::Data<sqlx::MySqlPool>,
     session: actix_session::Session,
+    request: web::Data<HttpRequest>,
 ) -> actix_web::Result<HttpResponse> {
-    todo!();
-    Ok(HttpResponse::Ok().json(()))
+    let tenant: TenantRow = retrieve_tenant_row_from_header(pool.clone(), request.clone()).await.unwrap();
+    let td = TenantDetail{
+        name: tenant.name,
+        display_name: tenant.display_name
+    };
+    let v: Viewer = parse_viewer(pool.clone(), request, session).await.unwrap();
+    if v.role == ROLE_ADMIN || v.role == ROLE_ORGANIZER{
+        return Ok(HttpResponse::Ok().json(SuccessResult {
+            success: true,
+            data: Box::new(MeHandlerResult {
+                tenant: Some(td.clone()),
+                me: None,
+                role: v.role,
+                logged_in: true,
+            }),
+        }));
+    }
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let p = retrieve_player(&mut tenant_db, v.player_id.clone()).await.unwrap();
+
+    Ok(HttpResponse::Ok().json(SuccessResult {
+        success: true,
+        data: Box::new(MeHandlerResult {
+            tenant: Some(td),
+            me: Some(PlayerDetail {
+                id: p.id,
+                display_name: p.display_name,
+                is_disqualified: p.is_disqualified,
+            }),
+            role: v.role,
+            logged_in: true,
+        }),
+    }))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
