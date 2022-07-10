@@ -476,7 +476,12 @@ class Handlers
         }
 
         // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-        $fl = $this->flockByTenantID($tenantID);
+        try {
+            $fl = $this->flockByTenantID($tenantID);
+        } catch (RuntimeException $e) {
+            $tenantDB->close();
+            throw $e;
+        }
 
         // スコアを登録した参加者のIDを取得する
         try {
@@ -671,7 +676,12 @@ class Handlers
         /** @var list<PlayerDetail> $pds */
         $pds = [];
         foreach ($displayNames as $displayName) {
-            $id = $this->dispenseID();
+            try {
+                $id = $this->dispenseID();
+            } catch (RuntimeException $e) {
+                $tenantDB->close();
+                throw $e;
+            }
 
             $now = time();
             try {
@@ -734,6 +744,7 @@ class Handlers
 
         $p = $this->retrievePlayer($tenantDB, $playerID);
         if (is_null($p)) {
+            $tenantDB->close();
             // 存在しないプレイヤー
             throw new HttpNotFoundException($request, 'player not found');
         }
@@ -765,7 +776,12 @@ class Handlers
         $title = $request->getParsedBody()['title'] ?? '';
 
         $now = time();
-        $id = $this->dispenseID();
+        try {
+            $id = $this->dispenseID();
+        } catch (RuntimeException $e) {
+            $tenantDB->close();
+            throw $e;
+        }
 
         try {
             $tenantDB->prepare('INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -905,7 +921,15 @@ class Handlers
         }
 
         // / DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
-        $fl = $this->flockByTenantID($v->tenantID);
+        try {
+            $fl = $this->flockByTenantID($v->tenantID);
+        } catch (RuntimeException $e) {
+            $tenantDB->close();
+            fclose($fh);
+            unlink($tmpFilePath);
+            throw $e;
+        }
+
         $rowNum = 0;
         /** @var list<array<string, mixed>> $playerScoreRows */
         $playerScoreRows = [];
@@ -1077,6 +1101,7 @@ class Handlers
 
         $p = $this->retrievePlayer($tenantDB, $playerID);
         if (is_null($p)) {
+            $tenantDB->close();
             throw new HttpNotFoundException($request, 'player not found');
         }
 
@@ -1093,7 +1118,12 @@ class Handlers
         }
 
         // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-        $fl = $this->flockByTenantID($v->tenantID);
+        try {
+            $fl = $this->flockByTenantID($v->tenantID);
+        } catch (RuntimeException $e) {
+            $tenantDB->close();
+            throw $e;
+        }
 
         $pss = [];
         foreach ($cs as $c) {
@@ -1180,6 +1210,7 @@ class Handlers
         // 大会の存在確認
         $competition = $this->retrieveCompetition($tenantDB, $competitionID);
         if (is_null($competition)) {
+            $tenantDB->close();
             throw new HttpNotFoundException($request, 'competition not found');
         }
 
@@ -1225,7 +1256,12 @@ class Handlers
         }
 
         // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-        $fl = $this->flockByTenantID($v->tenantID);
+        try {
+            $fl = $this->flockByTenantID($v->tenantID);
+        } catch (RuntimeException $e) {
+            $tenantDB->close();
+            throw $e;
+        }
 
         try {
             $pss = $tenantDB->prepare('SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC')
@@ -1389,6 +1425,9 @@ class Handlers
     public function meHandler(Request $request, Response $response): Response
     {
         $tenant = $this->retrieveTenantRowFromHeader($request);
+        if (is_null($tenant)) {
+            throw new RuntimeException('error retrieveTenantRowFromHeader');
+        }
 
         $td = new TenantDetail(
             name: $tenant->name,
