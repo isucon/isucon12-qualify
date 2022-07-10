@@ -1283,8 +1283,18 @@ final class Handlers
      */
     public function organizerCompetitionsHandler(Request $request, Response $response): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $v = $this->parseViewer($request);
+        if ($v->role !== self::ROLE_ORGANIZER) {
+            throw new HttpForbiddenException($request, 'role organizer required');
+        }
+
+        $tenantDB = $this->connectToTenantDB($v->tenantID);
+
+        $response = $this->competitionsHandler($response, $v, $tenantDB);
+
+        $tenantDB->close();
+
+        return $response;
     }
 
     private function competitionsHandler(Response $response, Viewer $v, Connection $tenantDB): Response
