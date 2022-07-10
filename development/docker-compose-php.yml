@@ -14,7 +14,7 @@ services:
       ISUCON_ADMIN_HOSTNAME: admin.t.isucon.dev
     ports:
       - "3000:3000"
-    depends_on:
+    links:
       - mysql
     volumes:
       - ../webapp:/home/isucon/webapp
