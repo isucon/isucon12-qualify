@@ -55,7 +55,7 @@ class Viewer
         public string $role,
         public string $playerID,
         public string $tenantName,
-        public int $tenantID,
+        public ?int $tenantID,
     ) {
     }
 }
@@ -65,9 +65,9 @@ class TenantRow
     public function __construct(
         public string $name,
         public string $displayName,
-        public int $id = 0,
-        public int $createdAt = 0,
-        public int $updatedAt = 0,
+        public ?int $id = null,
+        public ?int $createdAt = null,
+        public ?int $updatedAt = null,
     ) {
     }
 }
@@ -410,8 +410,8 @@ class CompetitionRank implements JsonSerializable
         public int $score,
         public string $playerID,
         public string $playerDisplayName,
-        public int $rank = 0,
-        public int $rowNum = 0, // APIレスポンスのJSONには含まれない
+        public ?int $rank = null,
+        public ?int $rowNum = null, // APIレスポンスのJSONには含まれない
     ) {
     }
 
