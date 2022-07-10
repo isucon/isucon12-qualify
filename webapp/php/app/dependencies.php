@@ -8,6 +8,7 @@ use DI\ContainerBuilder;
 use Doctrine\DBAL\Configuration as DBConfiguration;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
+use Monolog\Formatter\LineFormatter;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
 use Monolog\Processor\UidProcessor;
@@ -59,6 +60,8 @@ return function (ContainerBuilder $containerBuilder) {
                 $logger = new Logger($sqliteTraceSettings['name']);
 
                 $handler = new StreamHandler($traceFilePath);
+                $handler->setFormatter(new LineFormatter('%message%' . PHP_EOL));
+
                 $logger->pushHandler($handler);
 
                 $configuration->setMiddlewares([new SQLTraceMiddleware($logger)]);
