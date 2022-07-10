@@ -420,7 +420,42 @@ def admin_get_tenants_billing():
     テナントごとの課金レポートを最大20件、テナントのid降順で取得する
     URL引数beforeを指定した場合、指定した値よりもidが小さいテナントの課金レポートを取得する
     """
-    raise NotImplementedError()  # TODO
+    if request.host != os.getenv("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev"):
+        abort(404, f"invalid hostname {request.host}")
+
+    viewer = parse_viewer()
+    if viewer.role != ROLE_ADMIN:
+        abort(403, "admin role required")
+
+    before = request.args.get("before")
+    before_id = 0
+    if before:
+        before_id = int(before)
+
+    # テナントごとに
+    #   大会ごとに
+    #     scoreに登録されているplayerでアクセスした人 * 100
+    #     scoreに登録されているplayerでアクセスしていない人 * 50
+    #     scoreに登録されていないplayerでアクセスした人 * 10
+    #   を合計したものを
+    # テナントの課金とする
+    tenant_rows = admin_db.execute("SELECT * FROM tenant ORDER BY id DESC").fetchall()
+    tenant_billings = []
+    for tenant_row in tenant_rows:
+        if before_id != 0 and before_id <= tenant_row.id:
+            continue
+        tenant_billing = TenantWithBilling(
+            id=int(tenant_row.id), name=tenant_row.name, display_name=tenant_row.display_name, billing=0
+        )
+        tenant_db = connect_to_tenant_db(tenant_row.id)
+        competition_rows = tenant_db.execute("SELECT * FROM competition WHERE tenant_id=?", (tenant_row.id)).fetchall()
+
+        for competition_row in competition_rows:
+            report = billing_report_by_competition(tenant_db, tenant_row.id, competition_row.id)
+            tenant_billing.billing += report.billing_yen
+        tenant_billings.append(tenant_billing)
+
+    return jsonify(SuccessResult(status=True, data={"tenants": tenant_billings}))
 
 
 @app.route("/api/organizer/players", methods=["GET"])
