@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::result::Result;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const TENANT_DB_SCHEMA_FILE_PATH: &str = "../sql/tenant/10_schema.sql";
@@ -288,7 +289,7 @@ async fn retrieve_tenant_row_from_header(
 
     sqlx::query("SELECT * FROM tenants WHERE name = ?")
         .bind(tenant_name)
-        .fetch_one(&**pool)
+        .fetch_one(pool.as_ref())
         .await
         .ok();
 
@@ -320,12 +321,12 @@ struct PlayerRow {
 
 // 参加者を取得する
 async fn retrieve_player(
-    mut tenant_db: sqlx::SqliteConnection,
+    tenant_db: &mut sqlx::SqliteConnection,
     id: String,
 ) -> Result<PlayerRow, sqlx::Error> {
     let row: PlayerRow = sqlx::query_as("SELECT * FROM player WHERE id = ?")
         .bind(id)
-        .fetch_one(&mut tenant_db)
+        .fetch_one( tenant_db)
         .await
         .unwrap();
     Ok(row)
@@ -334,7 +335,7 @@ async fn retrieve_player(
 // 参加者を認可する
 // 参加者向けAPIで呼ばれる
 async fn authorize_player(
-    mut tenant_db: sqlx::SqliteConnection,
+    tenant_db: &mut sqlx::SqliteConnection,
     id: String,
 ) -> Result<(), actix_web::Error> {
     let player = retrieve_player(tenant_db, id).await.unwrap();
@@ -356,12 +357,12 @@ struct CompetitionRow {
 
 // 大会を取得する
 async fn retrieve_competition(
-    mut tenant_db: sqlx::SqliteConnection,
+    tenant_db: &mut sqlx::SqliteConnection,
     id: String,
 ) -> Result<CompetitionRow, sqlx::Error> {
     let row: CompetitionRow = sqlx::query_as("SELECT * FROM competition WHERE id = ?")
         .bind(id)
-        .fetch_one(&mut tenant_db)
+        .fetch_one( tenant_db)
         .await
         .unwrap();
     Ok(row)
@@ -427,7 +428,7 @@ async fn tenants_add_handler(
     session: actix_session::Session,
     form: web::Form<FormInfo>,
 ) -> actix_web::Result<HttpResponse> {
-    let v: Viewer = parse_viewer(pool, request, session).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.tenant_name != "admin".to_string() {
         // admin: SaaS管理者用の特別なテナント名
         return Err(actix_web::error::ErrorUnauthorized(
@@ -452,7 +453,7 @@ async fn tenants_add_handler(
     .bind(display_name)
     .bind(now)
     .bind(now)
-    .execute(&**pool)
+    .execute(pool.as_ref())
     .await
     .unwrap();
     let id = insert_res.last_insert_id();
@@ -501,22 +502,27 @@ struct VisitHistorySummaryRow {
     min_created_at: i64,
 }
 
+#[derive(Debug, sqlx::FromRow)]
+struct RowString{
+    value: String,
+}
+
 // 大会ごとの課金レポートを計算する
 async fn billing_report_by_competition(
     pool: web::Data<sqlx::MySqlPool>,
-    mut tenant_db: sqlx::SqliteConnection,
+    tenant_db: &mut sqlx::SqliteConnection,
     tenant_id: i64,
     competition_id: String,
 ) -> Result<BillingReport, sqlx::Error> {
-    // TODO:
+
     let comp: CompetitionRow = retrieve_competition(tenant_db, competition_id)
         .await
         .unwrap();
     let vhs: Vec<VisitHistorySummaryRow> = sqlx::query_as(
         "SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id")
         .bind(tenant_id)
-        .bind(comp.id)
-        .fetch_all(&mut tenant_db).await.unwrap();
+        .bind(comp.id.clone())
+        .fetch_all(tenant_db).await.unwrap();
     let mut billing_map: HashMap<String, String> = HashMap::new();
     for vh in vhs {
         // competition.finished_atよりも後の場合は, 終了後に訪問したとみなして大会開催内アクセス済みと見做さない
@@ -533,13 +539,13 @@ async fn billing_report_by_competition(
         "SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?",
     )
     .bind(tenant_id)
-    .bind(comp.id)
-    .fetch_all(&mut tenant_db)
+    .bind(comp.id.clone())
+    .fetch_all(tenant_db)
     .await
     .unwrap()
     .into_iter()
-    .for_each(|ps: String| {
-        billing_map.insert(ps, "player".to_string());
+    .for_each(|ps: RowString| {
+        billing_map.insert(ps.value, "player".to_string());
     });
 
     // 大会が終了している場合のみ請求金額が確定するので計算する
@@ -555,7 +561,7 @@ async fn billing_report_by_competition(
         }
     }
     Ok(BillingReport {
-        competition_id: comp.id,
+        competition_id: comp.id.clone(),
         competition_title: comp.title,
         player_count: player_count,
         visitor_count: visitor_count,
@@ -596,12 +602,12 @@ async fn tenants_billing_handler(
     if conn.host() != get_env("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
         return Ok(HttpResponse::Forbidden().finish());
     };
-    let v = parse_viewer(pool, request, session).await.unwrap();
+    let v = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.role != ROLE_ADMIN {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let before = query.before;
-    let before_id = 0;
+    let before = &query.before;
+    let mut before_id = 0;
     if before != "" {
         before_id = if let Ok(id) = i64::from_str_radix(&before, 10) {
             id
@@ -617,28 +623,28 @@ async fn tenants_billing_handler(
     //   を合計したものを
     // テナントの課金とする
     let ts: Vec<TenantRow> = sqlx::query_as("SELECT * FROM tenant ORDER BY id DESC")
-        .fetch_all(pool)
+        .fetch_all(pool.as_ref())
         .await
         .unwrap();
-    let tenant_billings = Vec::<TenantWithBilling>::new();
+    let mut tenant_billings = Vec::<TenantWithBilling>::new();
     for t in ts {
         if before_id != 0 && before_id <= t.id {
             continue;
         }
-        let tb = TenantWithBilling {
+        let mut tb = TenantWithBilling {
             id: t.id.to_string(),
             name: t.name,
             display_name: t.display_name,
             billing_yen: 0,
         };
-        let tenant_db = connect_to_tenant_db(t.id).await.unwrap();
+        let mut tenant_db = connect_to_tenant_db(t.id).await.unwrap();
         let cs: Vec<CompetitionRow> = sqlx::query_as("SELECT * FROM competition WHERE tenant_id=?")
             .bind(t.id)
             .fetch_all(&mut tenant_db)
             .await
             .unwrap();
         for comp in cs {
-            let report = billing_report_by_competition(pool, tenant_db, t.id, comp.id)
+            let report = billing_report_by_competition(pool.clone(),&mut tenant_db, t.id, comp.id)
                 .await
                 .unwrap();
             tb.billing_yen += report.billing_yen;
@@ -673,7 +679,7 @@ async fn players_list_handler(
     request: web::Data<actix_web::HttpRequest>,
     session: actix_session::Session,
 ) -> actix_web::Result<HttpResponse> {
-    let v: Viewer = parse_viewer(pool, request, session).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
@@ -715,15 +721,15 @@ async fn players_add_handler(
     session: actix_session::Session,
     form_param: web::Form<PlayerAddFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
-    let v: Viewer = parse_viewer(pool, request, session).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     let display_names = form_param.display_name;
     let pds = Vec::<PlayerDetail>::new();
     for display_name in display_names {
-        let id = dispense_id(pool).await.unwrap();
+        let id = dispense_id(pool.clone()).await.unwrap();
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -737,7 +743,7 @@ async fn players_add_handler(
             .bind(now)
             .execute(&mut tenant_db)
             .await.unwrap();
-        let p = retrieve_player(tenant_db, id).await.unwrap();
+        let p = retrieve_player(&mut tenant_db, id).await.unwrap();
         pds.push(PlayerDetail {
             id: p.id,
             display_name: p.display_name,
@@ -769,11 +775,11 @@ async fn player_disqualified_handler(
     session: actix_session::Session,
     form_param: web::Form<DisqualifiedFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
-    let v: Viewer = parse_viewer(pool, request, session).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     let player_id = form_param.into_inner().player_id;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -783,10 +789,10 @@ async fn player_disqualified_handler(
         .bind(true)
         .bind(now)
         .bind(player_id)
-        .execute(&mut tenant_db)
+        .execute( &mut tenant_db)
         .await
         .unwrap();
-    let p: PlayerRow = retrieve_player(tenant_db, player_id).await.unwrap();
+    let p: PlayerRow = retrieve_player(&mut tenant_db, player_id).await.unwrap();
     let res = PlayerDisqualifiedHandlerResult {
         player: PlayerDetail {
             id: p.id,
@@ -822,17 +828,17 @@ async fn competitions_add_handler(
     session: actix_session::Session,
     form: web::Form<CompetitionAddHandlerFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
-    let v: Viewer = parse_viewer(pool, request, session).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     let title = form.into_inner().title;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    let id = dispense_id(pool).await.unwrap();
+    let id = dispense_id(pool.clone()).await.unwrap();
     sqlx::query("INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?")
     .bind(id)
     .bind(v.tenant_id)
@@ -840,7 +846,7 @@ async fn competitions_add_handler(
     .bind(None)
     .bind(now)
     .bind(now)
-    .execute(&mut tenant_db)
+    .execute( &mut tenant_db)
     .await.unwrap();
     let res = CompetitionsAddHandlerResult {
         competition: CompetitionDetail {
@@ -865,14 +871,14 @@ async fn competition_finish_handler(
     session: actix_session::Session,
     form: web::Form<CompetitionFinishFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
-    let v: Viewer = parse_viewer(pool, request, session).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     let id = form.into_inner().competition_id;
 
-    retrieve_competition(tenant_db, id).await.unwrap();
+    retrieve_competition(&mut tenant_db, id).await.unwrap();
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -911,16 +917,16 @@ async fn competition_score_handler(
     session: actix_session::Session,
     form: web::Form<CompetitionScoreHandlerFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
-    let v = parse_viewer(pool, request, session).await.unwrap();
+    let v = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     let competition_id = form.into_inner().competition_id;
     if competition_id == "" {
         return Ok(actix_web::HttpResponse::BadRequest().finish());
     };
-    let comp = retrieve_competition(tenant_db, competition_id)
+    let comp = retrieve_competition(&mut tenant_db, competition_id)
         .await
         .unwrap();
     if comp.finished_at.is_some() {
@@ -948,7 +954,7 @@ async fn billing_handler(
     request: web::Data<HttpRequest>,
     session: actix_session::Session,
 ) -> actix_web::Result<HttpResponse> {
-    let v: Viewer = parse_viewer(pool, request, session).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
@@ -957,13 +963,13 @@ async fn billing_handler(
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at DESC")
             .bind(v.tenant_id)
-            .fetch_all(&mut tenant_db)
+            .fetch_all(&mut  tenant_db)
             .await
             .unwrap();
     let mut tbrs = Vec::<BillingReport>::new();
     for comp in cs {
         let report: BillingReport =
-            billing_report_by_competition(pool, &tenant_db, v.tenant_id, comp.id)
+            billing_report_by_competition(pool.clone(),  &mut tenant_db, v.tenant_id, comp.id)
                 .await
                 .unwrap();
         tbrs.push(report);
@@ -1000,24 +1006,24 @@ async fn player_handler(
     session: actix_session::Session,
     from: web::Query<PlayerHandlerQueryParam>,
 ) -> actix_web::Result<HttpResponse> {
-    let v: Viewer = parse_viewer(pool, request, session).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.role != ROLE_PLAYER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    authorize_player(tenant_db, v.player_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    authorize_player(&mut tenant_db, v.player_id).await.unwrap();
     let player_id = from.into_inner().player_id;
     if player_id == "" {
         return Ok(actix_web::HttpResponse::BadRequest().finish());
     };
-    let p = retrieve_player(tenant_db, player_id).await.unwrap();
+    let p = retrieve_player( &mut tenant_db, player_id).await.unwrap();
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition ORDER BY created_at ASC")
             .fetch_all(&mut tenant_db)
             .await
             .unwrap();
     // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-    // TODO:
+    todo!()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1036,7 +1042,7 @@ struct CompetitionRankingHandlerResult {
     ranks: Vec<CompetitionRank>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug,Clone, Serialize, Deserialize)]
 struct CompetitionRankingHandlerQueryParam {
     competition_id: String,
     rank_after: String,
@@ -1050,17 +1056,17 @@ async fn competition_ranking_handler(
     session: actix_session::Session,
     form: web::Form<CompetitionRankingHandlerQueryParam>,
 ) -> actix_web::Result<HttpResponse> {
-    let v: Viewer = parse_viewer(pool, request, session).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.role != ROLE_PLAYER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    let competition_id = form.into_inner().competition_id;
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let competition_id = form.clone().competition_id;
     if competition_id == "" {
         return Ok(actix_web::HttpResponse::BadRequest().finish());
     };
     // 大会の存在確認
-    let competition = retrieve_competition(tenant_db, competition_id)
+    let competition = retrieve_competition(&mut tenant_db, competition_id.clone())
         .await
         .unwrap();
     let now = SystemTime::now()
@@ -1078,7 +1084,7 @@ async fn competition_ranking_handler(
     .bind(competition_id)
     .bind(now)
     .bind(now)
-    .execute(&**pool)
+    .execute(pool.as_ref())
     .await.unwrap();
     let rank_after_str = form.into_inner().rank_after;
     if rank_after_str != "".to_string() {
@@ -1086,7 +1092,7 @@ async fn competition_ranking_handler(
     };
 
     // player_scoreを読んでいる時に更新が走ると不整合が走るのでロックを取得する
-    // TODO:
+    todo!()
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1102,13 +1108,13 @@ async fn player_competitions_handler(
     request: web::Data<HttpRequest>,
     session: actix_session::Session,
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    let v: Viewer = parse_viewer(pool, request, session).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request, session).await.unwrap();
     if &v.role != ROLE_PLAYER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    authorize_player(&tenant_db, &v.player_id).await.unwrap();
-    return competitions_handler(Some(v), tenant_db).await;
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    authorize_player(&mut tenant_db, v.player_id.clone()).await.unwrap();
+    return competitions_handler(Some(v),&mut tenant_db).await;
 }
 
 // 主催者向けAPI
@@ -1119,22 +1125,22 @@ async fn organizer_competitions_handler(
     request: web::Data<HttpRequest>,
     session: actix_session::Session,
 ) -> actix_web::Result<actix_web::HttpResponse> {
-    let v: Viewer = parse_viewer(pool, request, session).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    return competitions_handler(Some(v), tenant_db).await;
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    return competitions_handler(Some(v), &mut tenant_db).await;
 }
 
 async fn competitions_handler(
     v: Option<Viewer>,
-    mut tenant_db: sqlx::SqliteConnection,
+    tenant_db: &mut sqlx::SqliteConnection,
 ) -> actix_web::Result<actix_web::HttpResponse> {
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC")
             .bind(v.map(|v| v.tenant_id).unwrap())
-            .fetch_all(&mut tenant_db)
+            .fetch_all(tenant_db)
             .await
             .unwrap();
     let mut cds = Vec::<CompetitionDetail>::new();
@@ -1167,7 +1173,7 @@ async fn me_handler(
     pool: web::Data<sqlx::MySqlPool>,
     session: actix_session::Session,
 ) -> actix_web::Result<HttpResponse> {
-    // TODO:
+    todo!();
     Ok(HttpResponse::Ok().json(()))
 }
 
