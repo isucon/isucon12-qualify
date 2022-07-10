@@ -11,7 +11,9 @@
     <rule ref="PSR1.Classes.ClassDeclaration">
         <exclude-pattern>src/Isuports/classes\.php</exclude-pattern>
     </rule>
-    <rule ref="PSR12"/>
+    <rule ref="PSR12">
+        <exclude name="Generic.Files.LineLength"/>
+    </rule>
     <rule ref="Generic.Arrays.DisallowLongArraySyntax"/>
 
     <!-- Paths to check -->

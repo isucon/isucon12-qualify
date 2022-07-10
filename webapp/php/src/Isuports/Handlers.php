@@ -66,7 +66,7 @@ class Handlers
                 config: $this->sqliteConfiguration,
             );
         } catch (DBException $e) {
-            throw new RuntimeException('failed to open tenant DB: ' . $e->getMessage(), previous: $e);
+            throw new RuntimeException('failed to open tenant DB', previous: $e);
         }
     }
 
@@ -97,22 +97,16 @@ class Handlers
                     ->executeStatement(['a']);
             } catch (DBException $e) {
                 if ($e->getCode() === 1213) { // deadlock
-                    $lastErr = new RuntimeException(
-                        sprintf('error REPLACE INTO id_generator: %s', $e->getMessage()),
-                        previous: $e
-                    );
+                    $lastErr = new RuntimeException('error REPLACE INTO id_generator: %s', previous: $e);
                     continue;
                 }
-                throw new RuntimeException(
-                    sprintf('error REPLACE INTO id_generator: %s', $e->getMessage()),
-                    previous: $e,
-                );
+                throw new RuntimeException('error REPLACE INTO id_generator', previous: $e);
             }
 
             try {
                 $id = $this->adminDB->lastInsertId();
             } catch (DBException $e) {
-                throw new RuntimeException(sprintf('error ret.LastInsertId: %s', $e->getMessage()), previous: $e);
+                throw new RuntimeException('error lastInsertId', previous: $e);
             }
             break;
         }
@@ -149,35 +143,23 @@ class Handlers
         }
 
         if ($token->sub == '') {
-            throw new HttpUnauthorizedException(
-                $request,
-                sprintf('invalid token: subject is not found in token: %s', $tokenStr),
-            );
+            throw new HttpUnauthorizedException($request, sprintf('invalid token: subject is not found in token: %s', $tokenStr));
         }
 
         if (!property_exists($token, 'role')) {
-            throw new HttpUnauthorizedException(
-                $request,
-                sprintf('invalid token: role is not found in token: %s', $tokenStr),
-            );
+            throw new HttpUnauthorizedException($request, sprintf('invalid token: role is not found in token: %s', $tokenStr));
         }
 
         /** @var string $role */
         $role = match ($token->role) {
             self::ROLE_ADMIN, self::ROLE_ORGANIZER, self::ROLE_PLAYER => $token->role,
-            default => throw new HttpUnauthorizedException(
-                $request,
-                sprintf('invalid token: %s is invalid role: %s', $token->role, $tokenStr),
-            ),
+            default => throw new HttpUnauthorizedException($request, sprintf('invalid token: %s is invalid role: %s', $token->role, $tokenStr)),
         };
 
         /** @var list<string> $aud */
         $aud = $token->aud;
         if (count($aud) !== 1) {
-            throw new HttpUnauthorizedException(
-                $request,
-                sprintf('invalid token: aud field is few or too much: %s', $tokenStr),
-            );
+            throw new HttpUnauthorizedException($request, sprintf('invalid token: aud field is few or too much: %s', $tokenStr));
         }
 
         $tenant = $this->retrieveTenantRowFromHeader($request);
@@ -193,11 +175,7 @@ class Handlers
         if ($tenant->name !== $aud[0]) {
             throw new HttpUnauthorizedException(
                 $request,
-                sprintf(
-                    'invalid token: tenant name is not match with %s: %s',
-                    $request->getHeader('Host')[0],
-                    $tokenStr
-                ),
+                sprintf('invalid token: tenant name is not match with %s: %s', $request->getHeader('Host')[0], $tokenStr),
             );
         }
 
@@ -213,11 +191,7 @@ class Handlers
     {
         // JWTに入っているテナント名とHostヘッダのテナント名が一致しているか確認
         $baseHost = getenv('ISUCON_BASE_HOSTNAME') ?: '.t.isucon.dev';
-        $tenantName = preg_replace(
-            '/' . preg_quote($baseHost) . '$/',
-            '',
-            $request->getHeader('Host')[0]
-        );
+        $tenantName = preg_replace('/' . preg_quote($baseHost) . '$/', '', $request->getHeader('Host')[0]);
 
         // SaaS管理者用ドメイン
         if ($tenantName === 'admin') {
@@ -233,10 +207,7 @@ class Handlers
                 ->executeQuery([$tenantName])
                 ->fetchAssociative();
         } catch (DBException $e) {
-            throw new RuntimeException(
-                sprintf('failed to Select tenant: name=%s, %s', $tenantName, $e->getMessage()),
-                previous: $e,
-            );
+            throw new RuntimeException(sprintf('failed to Select tenant: name=%s', $tenantName), previous: $e);
         }
 
         if ($row === false) {
@@ -263,10 +234,7 @@ class Handlers
                 ->fetchAssociative();
         } catch (DBException $e) {
             $tenantDB->close();
-            throw new RuntimeException(
-                sprintf('error Select player: id=%s, %s', $id, $e->getMessage()),
-                previous: $e,
-            );
+            throw new RuntimeException(sprintf('error Select player: id=%s', $id), previous: $e);
         }
 
         if ($row === false) {
@@ -313,10 +281,7 @@ class Handlers
                 ->fetchAssociative();
         } catch (DBException $e) {
             $tenantDB->close();
-            throw new RuntimeException(
-                sprintf('error Select competition: id=%s, %s', $id, $e->getMessage()),
-                previous: $e,
-            );
+            throw new RuntimeException(sprintf('error Select competition: id=%s', $id), previous: $e);
         }
 
         if ($row === false) {
@@ -371,10 +336,7 @@ class Handlers
         $v = $this->parseViewer($request);
 
         if ($v->tenantName !== 'admin') {
-            throw new HttpNotFoundException(
-                $request,
-                sprintf('%s has not this API', $v->tenantName),
-            );
+            throw new HttpNotFoundException($request, sprintf('%s has not this API', $v->tenantName));
         }
 
         if ($v->role !== self::ROLE_ADMIN) {
@@ -390,19 +352,15 @@ class Handlers
 
         $now = time();
         try {
-            $this->adminDB->prepare(
-                'INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)'
-            )->executeStatement([$name, $displayName, $now, $now]);
+            $this->adminDB->prepare('INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)')
+                ->executeStatement([$name, $displayName, $now, $now]);
         } catch (DBException $e) {
             if ($e->getCode() === 1062) { // duplicate entry
                 throw new HttpBadRequestException($request, 'duplicate tenant', $e);
             }
 
             throw new RuntimeException(
-                vsprintf(
-                    'error Insert tenant: name=%s, displayName=%s, createdAt=%d, updatedAt=%d, %s',
-                    [$name, $displayName, $now, $now, $e->getMessage()],
-                ),
+                sprintf('error Insert tenant: name=%s, displayName=%s, createdAt=%d, updatedAt=%d', $name, $displayName, $now, $now),
                 previous: $e,
             );
         }
@@ -410,7 +368,7 @@ class Handlers
         try {
             $id = (int)$this->adminDB->lastInsertId();
         } catch (DBException $e) {
-            throw new RuntimeException(sprintf('error get LastInsertId: %s', $e->getMessage()), previous: $e);
+            throw new RuntimeException('error get LastInsertId', previous: $e);
         }
 
         $this->createTenantDB($id);
@@ -451,13 +409,7 @@ class Handlers
                 ->fetchAllAssociative();
         } catch (DBException $e) {
             $tenantDB->close();
-            throw new RuntimeException(
-                vsprintf(
-                    'error Select visit_history: tenantID=%d, competitionID=%s, %s',
-                    [$tenantID, $comp->id, $e->getMessage()],
-                ),
-                previous: $e,
-            );
+            throw new RuntimeException(sprintf('error Select visit_history: tenantID=%d, competitionID=%s', $tenantID, $comp->id), previous: $e);
         }
 
         /** @var array<string, string> $billingMap */
@@ -486,10 +438,7 @@ class Handlers
         } catch (DBException $e) {
             $tenantDB->close();
             fclose($fl);
-            throw new RuntimeException(
-                sprintf('error Select count player_score: tenantID=%d, competitionID=%s, %s', $tenantID, $comp->id, $e->getMessage()),
-                previous: $e,
-            );
+            throw new RuntimeException(sprintf('error Select count player_score: tenantID=%d, competitionID=%s', $tenantID, $comp->id), previous: $e);
         }
         foreach ($scoredPlayerIDs as $pid) {
             // スコアが登録されている参加者
@@ -556,7 +505,7 @@ class Handlers
             $ts = $this->adminDB->executeQuery('SELECT * FROM tenant ORDER BY id DESC')
                 ->fetchAllAssociative();
         } catch (DBException $e) {
-            throw new RuntimeException(sprintf('error Select tenant: %s', $e->getMessage()), previous: $e);
+            throw new RuntimeException('error Select tenant', previous: $e);
         }
 
         /** @var list<TenantWithBilling> $tenantBillings */
@@ -579,7 +528,7 @@ class Handlers
                     ->fetchAllAssociative();
             } catch (DBException $e) {
                 $tenantDB->close();
-                throw new RuntimeException(sprintf('failed to Select competition: %s', $e->getMessage()), previous: $e);
+                throw new RuntimeException('failed to Select competition', previous: $e);
             }
 
             foreach ($cs as $comp) {
@@ -632,7 +581,7 @@ class Handlers
                 );
             }
         } catch (DBException $e) {
-            throw new RuntimeException(sprintf('error Select player: %s', $e->getMessage()), previous: $e);
+            throw new RuntimeException('error Select player', previous: $e);
         } finally {
             $tenantDB->close();
         }
@@ -657,14 +606,12 @@ class Handlers
             throw new HttpForbiddenException($request, 'role organizer required');
         }
 
-
         $tenantDB = $this->connectToTenantDB($v->tenantID);
 
         $params = $request->getParsedBody();
         if (!is_array($params)) {
-            throw new RuntimeException('error $request->getParsedBody()');
+            throw new RuntimeException('error getParsedBody');
         }
-
         /** @var list<string> $displayNames */
         $displayNames = $params['display_name'] ?? [];
 
@@ -685,10 +632,7 @@ class Handlers
             } catch (DBException $e) {
                 $tenantDB->close();
                 throw new RuntimeException(
-                    vsprintf(
-                        'error Insert player at tenantDB: id=%s, displayName=%s, isDisqualified=%s, createdAt=%d, updatedAt=%d, %s',
-                        [$id, $displayName, false, $now, $now, $e->getMessage()],
-                    ),
+                    sprintf('error Insert player at tenantDB: id=%s, displayName=%s, isDisqualified=%s, createdAt=%d, updatedAt=%d', $id, $displayName, false, $now, $now),
                     previous: $e,
                 );
             }
@@ -731,10 +675,7 @@ class Handlers
                 ->executeStatement([true, $now, $playerID]);
         } catch (DBException $e) {
             $tenantDB->close();
-            throw new RuntimeException(
-                sprintf('error Update player: isDisqualified=%s, updatedAt=%d, id=%s, %s', true, $now, $playerID, $e->getMessage()),
-                previous: $e,
-            );
+            throw new RuntimeException(sprintf('error Update player: isDisqualified=%s, updatedAt=%d, id=%s', true, $now, $playerID), previous: $e);
         }
 
         $p = $this->retrievePlayer($tenantDB, $playerID);
@@ -782,13 +723,7 @@ class Handlers
             $tenantDB->prepare('INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
                 ->executeStatement([$id, $v->tenantID, $title, null, $now, $now]);
         } catch (DBException $e) {
-            throw new RuntimeException(
-                vsprintf(
-                    'error Insert competition: id=%s, tenant_id=%d, title=%s, finishedAt=null, createdAt=%d, updatedAt=%d, %s',
-                    [$id, $v->tenantID, $title, $now, $now, $e->getMessage()],
-                ),
-                previous: $e,
-            );
+            throw new RuntimeException(sprintf('error Insert competition: id=%s, tenant_id=%d, title=%s, finishedAt=null, createdAt=%d, updatedAt=%d', $id, $v->tenantID, $title, $now, $now,), previous: $e);
         } finally {
             $tenantDB->close();
         }
@@ -834,13 +769,7 @@ class Handlers
                 ->executeStatement([$now, $now, $id]);
         } catch (DBException $e) {
             $tenantDB->close();
-            throw new RuntimeException(
-                vsprintf(
-                    'error Update competition: finishedAt=%d, updatedAt=%d, id=%s, %s',
-                    [$now, $now, $id, $e->getMessage()],
-                ),
-                previous: $e
-            );
+            throw new RuntimeException(sprintf('error Update competition: finishedAt=%d, updatedAt=%d, id=%s', $now, $now, $id), previous: $e);
         }
 
         $tenantDB->close();
@@ -890,7 +819,7 @@ class Handlers
         $uploadedFile = $request->getUploadedFiles()['scores'] ?? null;
         if (is_null($uploadedFile) || $uploadedFile->getError() !== UPLOAD_ERR_OK) {
             $tenantDB->close();
-            throw new RuntimeException('error $request->getUploadedFiles()[\'scores\']');
+            throw new RuntimeException('error getUploadedFiles');
         }
 
         $tmpFilePath = tempnam(sys_get_temp_dir(), '');
@@ -989,13 +918,7 @@ class Handlers
         } catch (DBException $e) {
             $tenantDB->close();
             fclose($fl);
-            throw new RuntimeException(
-                vsprintf(
-                    'error Delete player_score: tenantID=%d, competitionID=%s, %s',
-                    [$v->tenantID, $competitionID, $e->getMessage()]
-                ),
-                previous: $e,
-            );
+            throw new RuntimeException(sprintf('error Delete player_score: tenantID=%d, competitionID=%s', $v->tenantID, $competitionID), previous: $e);
         }
 
         foreach ($playerScoreRows as $ps) {
@@ -1006,10 +929,7 @@ class Handlers
                 $tenantDB->close();
                 fclose($fl);
                 throw new RuntimeException(
-                    vsprintf(
-                        'error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNum=%d, createdAt=%d, updatedAt=%d, %s',
-                        [$ps['id'], $ps['tenant_id'], $ps['player_id'], $ps['competition_id'], $ps['score'], $ps['row_num'], $ps['created_at'], $ps['updated_at'], $e->getMessage()],
-                    ),
+                    sprintf('error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNum=%d, createdAt=%d, updatedAt=%d', $ps['id'], $ps['tenant_id'], $ps['player_id'], $ps['competition_id'], $ps['score'], $ps['row_num'], $ps['created_at'], $ps['updated_at']),
                     previous: $e,
                 );
             }
@@ -1044,10 +964,7 @@ class Handlers
                 ->fetchAllAssociative();
         } catch (DBException $e) {
             $tenantDB->close();
-            throw new RuntimeException(
-                sprintf('error Select competition: %s', $e->getMessage()),
-                previous: $e,
-            );
+            throw new RuntimeException('error Select competition', previous: $e);
         }
         if (count($cs) === 0) {
             $tenantDB->close();
@@ -1100,16 +1017,12 @@ class Handlers
             throw new HttpNotFoundException($request, 'player not found');
         }
 
-
         try {
             $cs = $tenantDB->executeQuery('SELECT * FROM competition ORDER BY created_at ASC')
                 ->fetchAllAssociative();
         } catch (DBException $e) {
             $tenantDB->close();
-            throw new RuntimeException(
-                sprintf('error Select competition: %s', $e->getMessage()),
-                previous: $e,
-            );
+            throw new RuntimeException('error Select competition', previous: $e);
         }
 
         // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
@@ -1129,10 +1042,7 @@ class Handlers
             } catch (DBException $e) {
                 $tenantDB->close();
                 fclose($fl);
-                throw new RuntimeException(
-                    sprintf('error Select player_score: tenantID=%d, competitionID=%s, playerID=%s, %s', $v->tenantID, $c['id'], $p->id, $e->getMessage()),
-                    previous: $e,
-                );
+                throw new RuntimeException(sprintf('error Select player_score: tenantID=%d, competitionID=%s, playerID=%s', $v->tenantID, $c['id'], $p->id), previous: $e);
             }
             // 行がない = スコアが記録されてない
             if ($ps === false) {
@@ -1216,10 +1126,7 @@ class Handlers
                 ->fetchAssociative();
         } catch (DBException $e) {
             $tenantDB->close();
-            throw new RuntimeException(
-                sprintf('error Select tenant: id=%d, %s', $v->tenantID, $e->getMessage()),
-                previous: $e,
-            );
+            throw new RuntimeException(sprintf('error Select tenant: id=%d', $v->tenantID), previous: $e);
         }
         if ($tenant === false) {
             $tenantDB->close();
@@ -1232,10 +1139,7 @@ class Handlers
         } catch (DBException $e) {
             $tenantDB->close();
             throw new RuntimeException(
-                vsprintf(
-                    'error Insert visit_history: playerID=%s, tenantID=%d, competitionID=%s, createdAt=%d, updatedAt=%d, %s',
-                    [$v->playerID, $tenant['id'], $competitionID, $now, $now, $e->getMessage()],
-                ),
+                sprintf('error Insert visit_history: playerID=%s, tenantID=%d, competitionID=%s, createdAt=%d, updatedAt=%d', $v->playerID, $tenant['id'], $competitionID, $now, $now),
                 previous: $e,
             );
         }
@@ -1265,10 +1169,7 @@ class Handlers
         } catch (DBException $e) {
             $tenantDB->close();
             fclose($fl);
-            throw new RuntimeException(
-                sprintf('error Select player_score: tenantID=%d, competitionID=%s, %s', $tenant['id'], $competitionID, $e->getMessage()),
-                previous: $e,
-            );
+            throw new RuntimeException(sprintf('error Select player_score: tenantID=%d, competitionID=%s', $tenant['id'], $competitionID), previous: $e);
         }
 
         /** @var list<CompetitionRank> $ranks */
@@ -1399,7 +1300,7 @@ class Handlers
             }
         } catch (DBException $e) {
             $tenantDB->close();
-            throw new RuntimeException(sprintf('error Select competition: %s', $e->getMessage()), previous: $e);
+            throw new RuntimeException('error Select competition', previous: $e);
         }
 
         $res = new SuccessResult(
