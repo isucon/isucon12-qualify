@@ -68,13 +68,13 @@ def dispense_id() -> str:
     last_err = None
     for i in range(100):
         try:
-            res = admin_db.execute("REPLACE INTO id_generator (stub) VALUES (%s);", ("a",))
+            res = admin_db.execute("REPLACE INTO id_generator (stub) VALUES (%s)", ("a",))
             id = res.lastrowid
         except OperationalError as e:  # deadlock
             last_err = e
             continue
     if id != 0:
-        return hex(id)
+        return hex(id)[2:]
     raise last_err
 
 
@@ -336,6 +336,62 @@ class VisitHistoryRow:
 class VisitHistorySummaryRow:
     player_id: str
     min_created_at: int
+
+
+def billing_report_by_competition(tenant_db, tenant_id: int, competition_id: str):
+    """大会ごとの課金レポートを計算する"""
+    competition = retrieve_competition(tenant_db, competition_id)
+    if not competition:
+        raise
+
+    visit_history_summary_rows = admin_db.execute(
+        "SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = %s AND competition_id = %s GROUP BY player_id",
+        (tenant_id, competition.id),
+    ).fetchall()
+
+    billing_map = {}
+    for vh in visit_history_summary_rows:
+        # competition.finished_atよりもあとの場合は、終了後に訪問したとみなして大会開催内アクセス済みとみなさない
+        if bool(competition.finished_at) and competition.finished_at < vh.min_created_at:
+            continue
+        billing_map[str(vh.player_id)] = "visitor"
+
+    # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+    lock_file_fd = flock_by_tenant_id(tenant_id)
+    if not lock_file_fd:
+        app.logger.warning("error flock_by_tenant_id")
+        raise
+
+    try:
+        # スコアを登録した参加者のIDを取得する
+        scored_player_id_rows = tenant_db.execute(
+            "SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?",
+            (tenant_id, competition.id),
+        ).fetchall()
+
+        for pid in scored_player_id_rows:
+            billing_map[str(pid.player_id)] = "player"
+
+        player_count = 0
+        visitor_count = 0
+        if bool(competition.finished_at):
+            for category in billing_map.values():
+                if category == "player":
+                    player_count += 1
+                if category == "visitor":
+                    visitor_count += 1
+    finally:
+        fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
+
+    return BillingReport(
+        competition_id=competition.id,
+        competition_title=competition.title,
+        player_count=player_count,
+        visitor_count=visitor_count,
+        billing_player_yen=100 * player_count,
+        billing_visitor_yen=10 * visitor_count,
+        billing_yen=100 * player_count + 10 * visitor_count,
+    )
 
 
 @dataclass
@@ -620,7 +676,25 @@ def organizer_get_billing():
     テナント管理者向けAPI
     テナント内の課金レポートを取得する
     """
-    raise NotImplementedError()  # TODO
+    viewer = parse_viewer()
+    if viewer.role != ROLE_ORGANIZER:
+        abort(403, "role organizer required")
+
+    tenant_db = connect_to_tenant_db(viewer.tenant_id)
+
+    rows = tenant_db.execute(
+        "SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC",
+        (viewer.tenant_id,),
+    ).fetchall()
+    if not rows:
+        raise
+
+    billing_reports = []
+    for competition_row in rows:
+        report = billing_report_by_competition(tenant_db, viewer.tenant_id, competition_row.id)
+        billing_reports.append(report)
+
+    return jsonify(SuccessResult(status=True, data={"reports": billing_reports}))
 
 
 @app.route("/api/organizer/competitions", methods=["GET"])
@@ -820,7 +894,7 @@ def player_get_competition_ranking(competition_id):
 
 
 @app.route("/api/player/competitions", methods=["GET"])
-def player_get_competitions(estate_id):
+def player_get_competitions():
     """
     参加者向けAPI
     大会の一覧を取得する
