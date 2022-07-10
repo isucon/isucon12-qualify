@@ -55,8 +55,6 @@ class Handlers
 
     /**
      * テナントDBに接続する
-     *
-     * @throws RuntimeException
      */
     private function connectToTenantDB(int $id): Connection
     {
@@ -287,8 +285,6 @@ class Handlers
 
     /**
      * 参加者を取得する
-     *
-     * @throws RuntimeException
      */
     private function retrievePlayer(Connection $tenantDB, string $id): ?PlayerRow
     {
@@ -382,7 +378,6 @@ class Handlers
      * 排他ロックする
      *
      * @return resource
-     * @throws RuntimeException
      */
     private function flockByTenantID(int $tenantID): mixed
     {
@@ -913,7 +908,6 @@ class Handlers
             throw new RuntimeException('error $request->getUploadedFiles()[\'scores\']');
         }
 
-        // TODO: このあたり他に良い方法があれば採用したい
         $tmpFilePath = tempnam(sys_get_temp_dir(), '');
         $uploadedFile->moveTo($tmpFilePath);
         $fh = fopen($tmpFilePath, 'r');
