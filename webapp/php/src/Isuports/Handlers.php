@@ -170,7 +170,7 @@ class Handlers
         /** @var string $role */
         $role = match ($token->role) {
             self::ROLE_ADMIN, self::ROLE_ORGANIZER, self::ROLE_PLAYER => $token->role,
-            default => new HttpUnauthorizedException(
+            default => throw new HttpUnauthorizedException(
                 $request,
                 sprintf('invalid token: %s is invalid role: %s', $token->role, $tokenStr),
             ),
