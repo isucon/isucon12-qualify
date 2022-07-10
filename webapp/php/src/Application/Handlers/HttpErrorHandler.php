@@ -21,9 +21,13 @@ class HttpErrorHandler extends SlimErrorHandler
             $statusCode = $this->exception->getCode();
         }
 
+        $message = '';
+        if ($this->displayErrorDetails) {
+            $message = $this->exception->getMessage();
+        }
         $payload = json_encode(new FailureResult(
             success: false,
-            message: $this->exception->getMessage()
+            message: $message,
         ), JSON_UNESCAPED_UNICODE);
 
         $response = $this->responseFactory->createResponse($statusCode);
