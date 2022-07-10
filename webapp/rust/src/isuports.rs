@@ -326,7 +326,7 @@ async fn retrieve_player(
 ) -> Result<PlayerRow, sqlx::Error> {
     let row: PlayerRow = sqlx::query_as("SELECT * FROM player WHERE id = ?")
         .bind(id)
-        .fetch_one( tenant_db)
+        .fetch_one(tenant_db)
         .await
         .unwrap();
     Ok(row)
@@ -362,7 +362,7 @@ async fn retrieve_competition(
 ) -> Result<CompetitionRow, sqlx::Error> {
     let row: CompetitionRow = sqlx::query_as("SELECT * FROM competition WHERE id = ?")
         .bind(id)
-        .fetch_one( tenant_db)
+        .fetch_one(tenant_db)
         .await
         .unwrap();
     Ok(row)
@@ -503,7 +503,7 @@ struct VisitHistorySummaryRow {
 }
 
 #[derive(Debug, sqlx::FromRow)]
-struct RowString{
+struct RowString {
     value: String,
 }
 
@@ -514,7 +514,6 @@ async fn billing_report_by_competition(
     tenant_id: i64,
     competition_id: String,
 ) -> Result<BillingReport, sqlx::Error> {
-
     let comp: CompetitionRow = retrieve_competition(tenant_db, competition_id)
         .await
         .unwrap();
@@ -644,7 +643,7 @@ async fn tenants_billing_handler(
             .await
             .unwrap();
         for comp in cs {
-            let report = billing_report_by_competition(pool.clone(),&mut tenant_db, t.id, comp.id)
+            let report = billing_report_by_competition(pool.clone(), &mut tenant_db, t.id, comp.id)
                 .await
                 .unwrap();
             tb.billing_yen += report.billing_yen;
@@ -789,7 +788,7 @@ async fn player_disqualified_handler(
         .bind(true)
         .bind(now)
         .bind(player_id)
-        .execute( &mut tenant_db)
+        .execute(&mut tenant_db)
         .await
         .unwrap();
     let p: PlayerRow = retrieve_player(&mut tenant_db, player_id).await.unwrap();
@@ -963,13 +962,13 @@ async fn billing_handler(
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at DESC")
             .bind(v.tenant_id)
-            .fetch_all(&mut  tenant_db)
+            .fetch_all(&mut tenant_db)
             .await
             .unwrap();
     let mut tbrs = Vec::<BillingReport>::new();
     for comp in cs {
         let report: BillingReport =
-            billing_report_by_competition(pool.clone(),  &mut tenant_db, v.tenant_id, comp.id)
+            billing_report_by_competition(pool.clone(), &mut tenant_db, v.tenant_id, comp.id)
                 .await
                 .unwrap();
         tbrs.push(report);
@@ -1016,7 +1015,7 @@ async fn player_handler(
     if player_id == "" {
         return Ok(actix_web::HttpResponse::BadRequest().finish());
     };
-    let p = retrieve_player( &mut tenant_db, player_id).await.unwrap();
+    let p = retrieve_player(&mut tenant_db, player_id).await.unwrap();
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition ORDER BY created_at ASC")
             .fetch_all(&mut tenant_db)
@@ -1037,18 +1036,20 @@ async fn player_handler(
         pss.push(ps);
     }
     let mut psds = Vec::<PlayerScoreDetail>::new();
-    for ps in  pss {
-        let comp = retrieve_competition(&mut tenant_db, ps.competition_id.clone()).await.unwrap();
+    for ps in pss {
+        let comp = retrieve_competition(&mut tenant_db, ps.competition_id.clone())
+            .await
+            .unwrap();
         psds.push(PlayerScoreDetail {
             competition_title: comp.title,
             score: ps.score,
         });
     }
 
-    let res = SuccessResult{
+    let res = SuccessResult {
         success: true,
-        data: Box::new(PlayerHandlerResult{
-            player: PlayerDetail{
+        data: Box::new(PlayerHandlerResult {
+            player: PlayerDetail {
                 id: p.id.clone(),
                 display_name: p.display_name.clone(),
                 is_disqualified: p.is_disqualified.clone(),
@@ -1075,7 +1076,7 @@ struct CompetitionRankingHandlerResult {
     ranks: Vec<CompetitionRank>,
 }
 
-#[derive(Debug,Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct CompetitionRankingHandlerQueryParam {
     competition_id: String,
     rank_after: String,
@@ -1141,8 +1142,10 @@ async fn competition_ranking_handler(
             continue;
         }
         scored_player_set.insert(ps.player_id.clone(), true);
-        let p = retrieve_player(&mut tenant_db, ps.player_id.clone()).await.unwrap();
-        ranks.push(CompetitionRank{
+        let p = retrieve_player(&mut tenant_db, ps.player_id.clone())
+            .await
+            .unwrap();
+        ranks.push(CompetitionRank {
             rank: 0,
             score: ps.score.clone(),
             player_id: p.id.clone(),
@@ -1150,20 +1153,20 @@ async fn competition_ranking_handler(
             row_num: ps.row_num.clone(),
         })
     }
-    ranks.sort_by(|a, b|
+    ranks.sort_by(|a, b| {
         if a.score == b.score {
             a.row_num.cmp(&b.row_num)
         } else {
             b.score.cmp(&a.score)
         }
-    );
+    });
     let mut paged_ranks = Vec::<CompetitionRank>::new();
     for (i, rank) in ranks.iter().enumerate() {
         let i = i as i64;
         if i < Arc::new(form.rank_after.clone()).parse::<i64>().unwrap() {
             continue;
         }
-        paged_ranks.push(CompetitionRank{
+        paged_ranks.push(CompetitionRank {
             rank: i + 1,
             score: rank.score.clone(),
             player_id: rank.player_id.clone(),
@@ -1174,10 +1177,10 @@ async fn competition_ranking_handler(
             break;
         }
     }
-    let res = SuccessResult{
+    let res = SuccessResult {
         success: true,
-        data: Box::new(CompetitionRankingHandlerResult{
-            competition: CompetitionDetail{
+        data: Box::new(CompetitionRankingHandlerResult {
+            competition: CompetitionDetail {
                 id: competition.id.clone(),
                 title: competition.title.clone(),
                 is_finished: competition.finished_at.is_some(),
@@ -1207,8 +1210,10 @@ async fn player_competitions_handler(
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    authorize_player(&mut tenant_db, v.player_id.clone()).await.unwrap();
-    return competitions_handler(Some(v),&mut tenant_db).await;
+    authorize_player(&mut tenant_db, v.player_id.clone())
+        .await
+        .unwrap();
+    return competitions_handler(Some(v), &mut tenant_db).await;
 }
 
 // 主催者向けAPI
@@ -1268,13 +1273,15 @@ async fn me_handler(
     session: actix_session::Session,
     request: web::Data<HttpRequest>,
 ) -> actix_web::Result<HttpResponse> {
-    let tenant: TenantRow = retrieve_tenant_row_from_header(pool.clone(), request.clone()).await.unwrap();
-    let td = TenantDetail{
+    let tenant: TenantRow = retrieve_tenant_row_from_header(pool.clone(), request.clone())
+        .await
+        .unwrap();
+    let td = TenantDetail {
         name: tenant.name,
-        display_name: tenant.display_name
+        display_name: tenant.display_name,
     };
     let v: Viewer = parse_viewer(pool.clone(), request, session).await.unwrap();
-    if v.role == ROLE_ADMIN || v.role == ROLE_ORGANIZER{
+    if v.role == ROLE_ADMIN || v.role == ROLE_ORGANIZER {
         return Ok(HttpResponse::Ok().json(SuccessResult {
             success: true,
             data: Box::new(MeHandlerResult {
@@ -1286,7 +1293,9 @@ async fn me_handler(
         }));
     }
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    let p = retrieve_player(&mut tenant_db, v.player_id.clone()).await.unwrap();
+    let p = retrieve_player(&mut tenant_db, v.player_id.clone())
+        .await
+        .unwrap();
 
     Ok(HttpResponse::Ok().json(SuccessResult {
         success: true,
