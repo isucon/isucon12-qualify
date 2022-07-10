@@ -6,14 +6,14 @@ use nix::sys::stat::Mode;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::mysql::MySqlConnectOptions;
-use sqlx::{ConnectOptions, Connection};
-use std::any::Any;
+use sqlx::{Sqlite, SqlitePool};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::result::Result;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+ use actix_form_data::Value;
 
 const TENANT_DB_SCHEMA_FILE_PATH: &str = "../sql/tenant/10_schema.sql";
 const INITIALIZE_SCRIPT: &str = "..sql/init.sh";
@@ -47,10 +47,10 @@ fn tenant_db_path(id: i64) -> PathBuf {
 }
 
 // テナントDBに接続する
-async fn connect_to_tenant_db(id: i64) -> sqlx::Result<sqlx::SqliteConnection> {
+async fn connect_to_tenant_db(id: i64) -> sqlx::Result<SqlitePool> {
     let p = tenant_db_path(id);
     let uri = format!("sqlite:{}?mode=rw", p.to_str().unwrap());
-    let conn = sqlx::SqliteConnection::connect(&uri).await.unwrap();
+    let conn = SqlitePool::connect(&uri).await.unwrap();
     Ok(conn)
     // TODO: sqliteDriverNameを使ってないのをなおす
 }
@@ -174,9 +174,10 @@ async fn run() -> std::io::Result<()> {
 // TODO:
 
 #[derive(Debug, Serialize)]
-struct SuccessResult {
+struct SuccessResult<T> {
     success: bool,
-    data: Box<dyn Any>,
+    #[serde(bound(serialize = "T: Serialize",))]
+    data: Option<T>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -305,10 +306,6 @@ struct TenantRow {
     updated_at: i64,
 }
 
-trait dbOrTx {
-    // TODO:
-}
-
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 struct PlayerRow {
     tenant_id: i64,
@@ -320,13 +317,10 @@ struct PlayerRow {
 }
 
 // 参加者を取得する
-async fn retrieve_player(
-    tenant_db: &mut sqlx::SqliteConnection,
-    id: String,
-) -> Result<PlayerRow, sqlx::Error> {
+async fn retrieve_player(tenant_db: SqlitePool, id: String) -> Result<PlayerRow, sqlx::Error> {
     let row: PlayerRow = sqlx::query_as("SELECT * FROM player WHERE id = ?")
         .bind(id)
-        .fetch_one(tenant_db)
+        .fetch_one(&tenant_db)
         .await
         .unwrap();
     Ok(row)
@@ -334,10 +328,7 @@ async fn retrieve_player(
 
 // 参加者を認可する
 // 参加者向けAPIで呼ばれる
-async fn authorize_player(
-    tenant_db: &mut sqlx::SqliteConnection,
-    id: String,
-) -> Result<(), actix_web::Error> {
+async fn authorize_player(tenant_db: SqlitePool, id: String) -> Result<(), actix_web::Error> {
     let player = retrieve_player(tenant_db, id).await.unwrap();
     if player.is_disqualified {
         return Err(actix_web::error::ErrorBadRequest("player is disqualified"));
@@ -357,12 +348,12 @@ struct CompetitionRow {
 
 // 大会を取得する
 async fn retrieve_competition(
-    tenant_db: &mut sqlx::SqliteConnection,
+    tenant_db: SqlitePool,
     id: String,
 ) -> Result<CompetitionRow, sqlx::Error> {
     let row: CompetitionRow = sqlx::query_as("SELECT * FROM competition WHERE id = ?")
         .bind(id)
-        .fetch_one(tenant_db)
+        .fetch_one(&tenant_db)
         .await
         .unwrap();
     Ok(row)
@@ -444,7 +435,7 @@ async fn tenants_add_handler(
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_secs();
+        .as_secs() as i64;
 
     let insert_res = sqlx::query(
         "INSERT INTO tenants (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)",
@@ -510,18 +501,18 @@ struct RowString {
 // 大会ごとの課金レポートを計算する
 async fn billing_report_by_competition(
     pool: web::Data<sqlx::MySqlPool>,
-    tenant_db: &mut sqlx::SqliteConnection,
+    tenant_db: SqlitePool,
     tenant_id: i64,
     competition_id: String,
 ) -> Result<BillingReport, sqlx::Error> {
-    let comp: CompetitionRow = retrieve_competition(tenant_db, competition_id)
+    let comp: CompetitionRow = retrieve_competition(tenant_db.clone(), competition_id)
         .await
         .unwrap();
     let vhs: Vec<VisitHistorySummaryRow> = sqlx::query_as(
         "SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id")
         .bind(tenant_id)
         .bind(comp.id.clone())
-        .fetch_all(tenant_db).await.unwrap();
+        .fetch_all(&tenant_db).await.unwrap();
     let mut billing_map: HashMap<String, String> = HashMap::new();
     for vh in vhs {
         // competition.finished_atよりも後の場合は, 終了後に訪問したとみなして大会開催内アクセス済みと見做さない
@@ -539,7 +530,7 @@ async fn billing_report_by_competition(
     )
     .bind(tenant_id)
     .bind(comp.id.clone())
-    .fetch_all(tenant_db)
+    .fetch_all(&tenant_db)
     .await
     .unwrap()
     .into_iter()
@@ -636,16 +627,17 @@ async fn tenants_billing_handler(
             display_name: t.display_name,
             billing_yen: 0,
         };
-        let mut tenant_db = connect_to_tenant_db(t.id).await.unwrap();
+        let tenant_db = connect_to_tenant_db(t.id).await.unwrap();
         let cs: Vec<CompetitionRow> = sqlx::query_as("SELECT * FROM competition WHERE tenant_id=?")
             .bind(t.id)
-            .fetch_all(&mut tenant_db)
+            .fetch_all(&tenant_db)
             .await
             .unwrap();
         for comp in cs {
-            let report = billing_report_by_competition(pool.clone(), &mut tenant_db, t.id, comp.id)
-                .await
-                .unwrap();
+            let report =
+                billing_report_by_competition(pool.clone(), tenant_db.clone(), t.id, comp.id)
+                    .await
+                    .unwrap();
             tb.billing_yen += report.billing_yen;
         }
         tenant_billings.push(tb);
@@ -682,11 +674,11 @@ async fn players_list_handler(
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     let pls: Vec<PlayerRow> =
         sqlx::query_as("SELECT * FROM player WHERE tenant_id=? ORDER BY created_at DESC")
             .bind(v.tenant_id)
-            .fetch_all(&mut tenant_db)
+            .fetch_all(&tenant_db)
             .await
             .unwrap();
     let mut pds: Vec<PlayerDetail> = Vec::<PlayerDetail>::new();
@@ -724,25 +716,25 @@ async fn players_add_handler(
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    let display_names = form_param.display_name;
-    let pds = Vec::<PlayerDetail>::new();
+    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let display_names = form_param.display_name.clone();
+    let mut pds = Vec::<PlayerDetail>::new();
     for display_name in display_names {
         let id = dispense_id(pool.clone()).await.unwrap();
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .as_secs();
+            .as_secs() as i64;
         sqlx::query("INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-            .bind(id)
+            .bind(id.clone())
             .bind(v.tenant_id)
             .bind(display_name)
             .bind(false)
             .bind(now)
             .bind(now)
-            .execute(&mut tenant_db)
+            .execute( &tenant_db)
             .await.unwrap();
-        let p = retrieve_player(&mut tenant_db, id).await.unwrap();
+        let p = retrieve_player(tenant_db.clone(), id).await.unwrap();
         pds.push(PlayerDetail {
             id: p.id,
             display_name: p.display_name,
@@ -752,7 +744,7 @@ async fn players_add_handler(
     let res = PlayersAddHandlerResult { players: pds };
     Ok(HttpResponse::Ok().json(SuccessResult {
         success: true,
-        data: Box::new(res),
+        data: Some(res),
     }))
 }
 
@@ -778,20 +770,20 @@ async fn player_disqualified_handler(
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     let player_id = form_param.into_inner().player_id;
-    let now = SystemTime::now()
+    let now: i64 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_secs();
-    sqlx::query("UPDATE player SET is_disqualified = ?, updated_at=? WHERE id = ?")
+        .as_secs() as i64;
+    sqlx::query::<Sqlite>("UPDATE player SET is_disqualified = ?, updated_at=? WHERE id = ?")
         .bind(true)
         .bind(now)
-        .bind(player_id)
-        .execute(&mut tenant_db)
+        .bind(player_id.clone())
+        .execute(&tenant_db)
         .await
         .unwrap();
-    let p: PlayerRow = retrieve_player(&mut tenant_db, player_id).await.unwrap();
+    let p: PlayerRow = retrieve_player(tenant_db, player_id).await.unwrap();
     let res = PlayerDisqualifiedHandlerResult {
         player: PlayerDetail {
             id: p.id,
@@ -831,21 +823,21 @@ async fn competitions_add_handler(
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    let title = form.into_inner().title;
-    let now = SystemTime::now()
+    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let title = form.title.clone();
+    let now: i64 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_secs();
+        .as_secs() as i64;
     let id = dispense_id(pool.clone()).await.unwrap();
-    sqlx::query("INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?")
-    .bind(id)
+    sqlx::query::<Sqlite>("INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?")
+    .bind(id.clone())
     .bind(v.tenant_id)
-    .bind(title)
-    .bind(None)
+    .bind(title.clone())
+    .bind(Option::<i64>::None)
     .bind(now)
     .bind(now)
-    .execute( &mut tenant_db)
+    .execute( &tenant_db)
     .await.unwrap();
     let res = CompetitionsAddHandlerResult {
         competition: CompetitionDetail {
@@ -874,26 +866,28 @@ async fn competition_finish_handler(
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     let id = form.into_inner().competition_id;
 
-    retrieve_competition(&mut tenant_db, id).await.unwrap();
-    let now = SystemTime::now()
+    retrieve_competition(tenant_db.clone(), id.clone())
+        .await
+        .unwrap();
+    let now: i64 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_secs();
+        .as_secs() as i64;
 
-    sqlx::query("UPDATE competition SET finished_at = ?, updated_at=? WHERE id = ?")
+    sqlx::query::<Sqlite>("UPDATE competition SET finished_at = ?, updated_at=? WHERE id = ?")
         .bind(now)
         .bind(now)
         .bind(id)
-        .execute(&mut tenant_db)
+        .execute(&tenant_db)
         .await
         .unwrap();
 
     let res = SuccessResult {
         success: true,
-        data: Box::new(()),
+        data: Option::<CompetitionFinishFormQuery>::None, // TODO: Option::<!>::None を使いたいが..
     };
     Ok(HttpResponse::Ok().json(res))
 }
@@ -914,18 +908,18 @@ async fn competition_score_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: web::Data<HttpRequest>,
     session: actix_session::Session,
-    form: web::Form<CompetitionScoreHandlerFormQuery>,
+    uploaded_content: Value<()>,
 ) -> actix_web::Result<HttpResponse> {
     let v = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     let competition_id = form.into_inner().competition_id;
     if competition_id == "" {
         return Ok(actix_web::HttpResponse::BadRequest().finish());
     };
-    let comp = retrieve_competition(&mut tenant_db, competition_id)
+    let comp = retrieve_competition(tenant_db, competition_id)
         .await
         .unwrap();
     if comp.finished_at.is_some() {
@@ -957,25 +951,25 @@ async fn billing_handler(
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
 
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at DESC")
             .bind(v.tenant_id)
-            .fetch_all(&mut tenant_db)
+            .fetch_all(&tenant_db)
             .await
             .unwrap();
     let mut tbrs = Vec::<BillingReport>::new();
     for comp in cs {
         let report: BillingReport =
-            billing_report_by_competition(pool.clone(), &mut tenant_db, v.tenant_id, comp.id)
+            billing_report_by_competition(pool.clone(), tenant_db.clone(), v.tenant_id, comp.id)
                 .await
                 .unwrap();
         tbrs.push(report);
     }
     let res = SuccessResult {
         success: true,
-        data: Box::new(BillingHandlerResult { reports: tbrs }),
+        data: Some(BillingHandlerResult { reports: tbrs }),
     };
     Ok(HttpResponse::Ok().json(res))
 }
@@ -1009,16 +1003,18 @@ async fn player_handler(
     if v.role != ROLE_PLAYER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    authorize_player(&mut tenant_db, v.player_id).await.unwrap();
+    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    authorize_player(tenant_db.clone(), v.player_id)
+        .await
+        .unwrap();
     let player_id = from.into_inner().player_id;
     if player_id == "" {
         return Ok(actix_web::HttpResponse::BadRequest().finish());
     };
-    let p = retrieve_player(&mut tenant_db, player_id).await.unwrap();
+    let p = retrieve_player(tenant_db.clone(), player_id).await.unwrap();
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition ORDER BY created_at ASC")
-            .fetch_all(&mut tenant_db)
+            .fetch_all(&tenant_db)
             .await
             .unwrap();
     // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
@@ -1030,14 +1026,14 @@ async fn player_handler(
             .bind(v.tenant_id.clone())
             .bind(c.id.clone())
             .bind(p.id.clone())
-            .fetch_one(&mut tenant_db)
+            .fetch_one(&tenant_db)
             .await
             .unwrap();
         pss.push(ps);
     }
     let mut psds = Vec::<PlayerScoreDetail>::new();
     for ps in pss {
-        let comp = retrieve_competition(&mut tenant_db, ps.competition_id.clone())
+        let comp = retrieve_competition(tenant_db.clone(), ps.competition_id.clone())
             .await
             .unwrap();
         psds.push(PlayerScoreDetail {
@@ -1048,7 +1044,7 @@ async fn player_handler(
 
     let res = SuccessResult {
         success: true,
-        data: Box::new(PlayerHandlerResult {
+        data: Some(PlayerHandlerResult {
             player: PlayerDetail {
                 id: p.id.clone(),
                 display_name: p.display_name.clone(),
@@ -1094,22 +1090,22 @@ async fn competition_ranking_handler(
     if v.role != ROLE_PLAYER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     let competition_id = form.clone().competition_id;
     if competition_id == "" {
         return Ok(actix_web::HttpResponse::BadRequest().finish());
     };
     // 大会の存在確認
-    let competition = retrieve_competition(&mut tenant_db, competition_id.clone())
+    let competition = retrieve_competition(tenant_db.clone(), competition_id.clone())
         .await
         .unwrap();
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_secs();
+        .as_secs() as i64;
     let tenant: TenantRow = sqlx::query_as("SELECT * FROM tenant WHERE id = ?")
         .bind(v.tenant_id)
-        .fetch_one(&mut tenant_db)
+        .fetch_one(&tenant_db)
         .await
         .unwrap();
     sqlx::query("INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated) VALUES (?, ?, ?, ?, ?)")
@@ -1129,7 +1125,7 @@ async fn competition_ranking_handler(
         "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC")
         .bind(tenant.id.clone())
         .bind(competition_id.clone())
-        .fetch_all(&mut tenant_db)
+        .fetch_all(&tenant_db)
         .await
         .unwrap();
     let mut ranks = Vec::<CompetitionRank>::new();
@@ -1142,7 +1138,7 @@ async fn competition_ranking_handler(
             continue;
         }
         scored_player_set.insert(ps.player_id.clone(), true);
-        let p = retrieve_player(&mut tenant_db, ps.player_id.clone())
+        let p = retrieve_player(tenant_db.clone(), ps.player_id.clone())
             .await
             .unwrap();
         ranks.push(CompetitionRank {
@@ -1179,7 +1175,7 @@ async fn competition_ranking_handler(
     }
     let res = SuccessResult {
         success: true,
-        data: Box::new(CompetitionRankingHandlerResult {
+        data: Some(CompetitionRankingHandlerResult {
             competition: CompetitionDetail {
                 id: competition.id.clone(),
                 title: competition.title.clone(),
@@ -1209,11 +1205,11 @@ async fn player_competitions_handler(
     if &v.role != ROLE_PLAYER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    authorize_player(&mut tenant_db, v.player_id.clone())
+    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    authorize_player(tenant_db.clone(), v.player_id.clone())
         .await
         .unwrap();
-    return competitions_handler(Some(v), &mut tenant_db).await;
+    return competitions_handler(Some(v), tenant_db.clone()).await;
 }
 
 // 主催者向けAPI
@@ -1228,18 +1224,18 @@ async fn organizer_competitions_handler(
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
-    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    return competitions_handler(Some(v), &mut tenant_db).await;
+    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    return competitions_handler(Some(v), tenant_db.clone()).await;
 }
 
 async fn competitions_handler(
     v: Option<Viewer>,
-    tenant_db: &mut sqlx::SqliteConnection,
+    tenant_db: SqlitePool,
 ) -> actix_web::Result<actix_web::HttpResponse> {
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC")
             .bind(v.map(|v| v.tenant_id).unwrap())
-            .fetch_all(tenant_db)
+            .fetch_all(&tenant_db)
             .await
             .unwrap();
     let mut cds = Vec::<CompetitionDetail>::new();
@@ -1252,7 +1248,7 @@ async fn competitions_handler(
     }
     let res = SuccessResult {
         success: true,
-        data: Box::new(CompetitionsHandlerResult { competitions: cds }),
+        data: Some(CompetitionsHandlerResult { competitions: cds }),
     };
     Ok(HttpResponse::Ok().json(res))
 }
@@ -1284,7 +1280,7 @@ async fn me_handler(
     if v.role == ROLE_ADMIN || v.role == ROLE_ORGANIZER {
         return Ok(HttpResponse::Ok().json(SuccessResult {
             success: true,
-            data: Box::new(MeHandlerResult {
+            data: Some(MeHandlerResult {
                 tenant: Some(td.clone()),
                 me: None,
                 role: v.role,
@@ -1292,14 +1288,14 @@ async fn me_handler(
             }),
         }));
     }
-    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    let p = retrieve_player(&mut tenant_db, v.player_id.clone())
+    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let p = retrieve_player(tenant_db.clone(), v.player_id.clone())
         .await
         .unwrap();
 
     Ok(HttpResponse::Ok().json(SuccessResult {
         success: true,
-        data: Box::new(MeHandlerResult {
+        data: Some(MeHandlerResult {
             tenant: Some(td),
             me: Some(PlayerDetail {
                 id: p.id,
