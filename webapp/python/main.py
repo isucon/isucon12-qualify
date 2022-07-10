@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 import jwt
-from flask import Flask, abort, jsonify, make_response, request
+from flask import Flask, abort, jsonify, request
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 from werkzeug.exceptions import HTTPException
@@ -70,11 +70,12 @@ def dispense_id() -> str:
         try:
             res = admin_db.execute("REPLACE INTO id_generator (stub) VALUES (%s)", ("a",))
             id = res.lastrowid
+            if id != 0:
+                return hex(id)[2:]
         except OperationalError as e:  # deadlock
             last_err = e
             continue
-    if id != 0:
-        return hex(id)[2:]
+
     raise last_err
 
 
@@ -85,9 +86,13 @@ def run():
     app.run(host="0.0.0.0", port=3000, debug=True, threaded=True)
 
 
-@app.errorhandler(HTTPException)
+@app.errorhandler(Exception)
 def error_handler(e):
-    return make_response(e.description, e.code, {"Content-Type": "text/plain"})
+    app.logger.error(f"error: {e}")
+    if isinstance(e, HTTPException):
+        return jsonify(FailureResult(status=False, message=e.description)), e.code
+    else:
+        return jsonify(FailureResult(status=False, message="Internal Server Error")), 500
 
 
 @dataclass
@@ -445,15 +450,18 @@ def admin_get_tenants_billing():
         if before_id != 0 and before_id <= tenant_row.id:
             continue
         tenant_billing = TenantWithBilling(
-            id=int(tenant_row.id), name=tenant_row.name, display_name=tenant_row.display_name, billing=0
+            id=str(tenant_row.id), name=tenant_row.name, display_name=tenant_row.display_name, billing=0
         )
-        tenant_db = connect_to_tenant_db(tenant_row.id)
+        tenant_db = connect_to_tenant_db(int(tenant_row.id))
         competition_rows = tenant_db.execute("SELECT * FROM competition WHERE tenant_id=?", (tenant_row.id)).fetchall()
 
         for competition_row in competition_rows:
             report = billing_report_by_competition(tenant_db, tenant_row.id, competition_row.id)
             tenant_billing.billing += report.billing_yen
         tenant_billings.append(tenant_billing)
+
+        if len(tenant_billings) >= 10:
+            break
 
     return jsonify(SuccessResult(status=True, data={"tenants": tenant_billings}))
 
