@@ -34,9 +34,9 @@ jobs:
       - name: "setup containers"
         run: |
           make initial_data
+          make down/rust
           make up/rust OPT=-d
           make install_initial_data
-          make init-mysql
         working-directory: ./development
         env:
           GITHUB_REF_NAME: ${{ github.ref_name }}
