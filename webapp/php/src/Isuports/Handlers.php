@@ -82,35 +82,9 @@ class Handlers
     {
         $p = $this->tenantDBPath($id);
 
-        $process = proc_open(
-            ['sh', '-c', sprintf('sqlite3 %s < %s', $p, self::TENANT_DB_SCHEMA_FILE_PATH)],
-            [
-                0 => ['pipe', 'r'],
-                1 => ['pipe', 'w'],
-                2 => ['pipe', 'w'],
-            ],
-            $pipes,
-        );
-
-        if ($process === false) {
-            throw new RuntimeException(
-                vsprintf(
-                    'failed to exec sqlite3 %s < %s: cannot open process',
-                    [$p, self::TENANT_DB_SCHEMA_FILE_PATH],
-                ),
-            );
-        }
-
-        fclose($pipes[0]);
-        $out = stream_get_contents($pipes[1]);
-        fclose($pipes[1]);
-        if (proc_close($process) !== 0) {
-            throw new RuntimeException(
-                vsprintf(
-                    'failed to exec sqlite3 %s < %s, out=%s',
-                    [$p, self::TENANT_DB_SCHEMA_FILE_PATH, $out],
-                ),
-            );
+        $cmd =  ['sh', '-c', sprintf('sqlite3 %s < %s', $p, self::TENANT_DB_SCHEMA_FILE_PATH)];
+        if ($this->execCommand($cmd, $out) !== 0) {
+            throw new RuntimeException(sprintf('failed to exec sqlite3 %s < %s, out=%s', $p, self::TENANT_DB_SCHEMA_FILE_PATH, $out));
         }
     }
 
@@ -1488,25 +1462,8 @@ class Handlers
      */
     public function initializeHandler(Request $request, Response $response): Response
     {
-        $process = proc_open(
-            [self::INITIALIZE_SCRIPT],
-            [
-                0 => ['pipe', 'r'],
-                1 => ['pipe', 'w'],
-                2 => ['pipe', 'w'],
-            ],
-            $pipes,
-        );
-
-        if ($process === false) {
-            throw new RuntimeException('error exec: cannot open process');
-        }
-
-        fclose($pipes[0]);
-        $out = stream_get_contents($pipes[1]);
-        fclose($pipes[1]);
-        if (proc_close($process) !== 0) {
-            throw new RuntimeException(sprintf('error exec: %s', $out));
+        if ($this->execCommand([self::INITIALIZE_SCRIPT], $out) !== 0) {
+            throw new RuntimeException(sprintf('error execCommand: %s', $out));
         }
 
         $res = new InitializeHandlerResult(
@@ -1517,6 +1474,27 @@ class Handlers
         );
 
         return $this->jsonResponse($response, new SuccessResult(success: true, data: $res));
+    }
+
+    private function execCommand(array|string $command, &$out): int
+    {
+        $fp = fopen('php://temp', 'w+');
+        $descriptorSpec = [
+            1 => $fp,
+            2 => $fp,
+        ];
+
+        $process = proc_open($command, $descriptorSpec, $_);
+        if ($process === false) {
+            throw new RuntimeException('error execCommand: cannot open process');
+        }
+
+        $exitCode = proc_close($process);
+
+        fseek($fp,0);
+        $out = stream_get_contents($fp);
+
+        return $exitCode;
     }
 
     /**
