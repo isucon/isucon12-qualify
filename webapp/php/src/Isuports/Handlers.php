@@ -1090,13 +1090,10 @@ final class Handlers
             throw new HttpNotFoundException($request, 'player not found');
         }
 
-        /** @var list<CompetitionRow> $cs */
-        $cs = [];
+
         try {
-            $result = $tenantDB->executeQuery('SELECT * FROM competition ORDER BY created_at ASC');
-            while ($row = $result->fetchAssociative()) {
-                $cs[] = CompetitionRow::fromDB($row);
-            }
+            $cs = $tenantDB->executeQuery('SELECT * FROM competition ORDER BY created_at ASC')
+                ->fetchAllAssociative();
         } catch (DBException $e) {
             $tenantDB->close();
             throw new RuntimeException(
@@ -1112,13 +1109,13 @@ final class Handlers
         foreach ($cs as $c) {
             try {
                 $ps = $tenantDB->prepare('SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1')
-                    ->executeQuery([$v->tenantID, $c->id, $p->id])
+                    ->executeQuery([$v->tenantID, $c['id'], $p->id])
                     ->fetchAssociative();
             } catch (DBException $e) {
                 $tenantDB->close();
                 fclose($fl);
                 throw new RuntimeException(
-                    sprintf('error Select player_score: tenantID=%d, competitionID=%s, playerID=%s, %s', $v->tenantID, $c->id, $p->id, $e->getMessage()),
+                    sprintf('error Select player_score: tenantID=%d, competitionID=%s, playerID=%s, %s', $v->tenantID, $c['id'], $p->id, $e->getMessage()),
                     previous: $e,
                 );
             }
@@ -1198,7 +1195,7 @@ final class Handlers
 
         $now = time();
         try {
-            $row = $this->adminDB->prepare('SELECT * FROM tenant WHERE id = ?')
+            $tenant = $this->adminDB->prepare('SELECT * FROM tenant WHERE id = ?')
                 ->executeQuery([$v->tenantID])
                 ->fetchAssociative();
         } catch (DBException $e) {
@@ -1208,22 +1205,20 @@ final class Handlers
                 previous: $e,
             );
         }
-        if ($row === false) {
+        if ($tenant === false) {
             $tenantDB->close();
             throw new RuntimeException(sprintf('error Select tenant: id=%d', $v->tenantID));
         }
 
-        $tenant = TenantRow::fromDB($row);
-
         try {
             $this->adminDB->prepare('INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-                ->executeStatement([$v->playerID, $tenant->id, $competitionID, $now, $now]);
+                ->executeStatement([$v->playerID, $tenant['id'], $competitionID, $now, $now]);
         } catch (DBException $e) {
             $tenantDB->close();
             throw new RuntimeException(
                 vsprintf(
                     'error Insert visit_history: playerID=%s, tenantID=%d, competitionID=%s, createdAt=%d, updatedAt=%d, %s',
-                    [$v->playerID, $tenant->id, $competitionID, $now, $now, $e->getMessage()],
+                    [$v->playerID, $tenant['id'], $competitionID, $now, $now, $e->getMessage()],
                 ),
                 previous: $e,
             );
@@ -1242,19 +1237,15 @@ final class Handlers
         // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
         $fl = $this->flockByTenantID($v->tenantID);
 
-        /** @var list<PlayerScoreRow> $pss */
-        $pss = [];
         try {
-            $result = $tenantDB->prepare('SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC')
-                ->executeQuery([$tenant->id, $competitionID]);
-            while ($row = $result->fetchAssociative()) {
-                $pss[] = PlayerScoreRow::fromDB($row);
-            }
+            $pss = $tenantDB->prepare('SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC')
+                ->executeQuery([$tenant['id'], $competitionID])
+                ->fetchAllAssociative();
         } catch (DBException $e) {
             $tenantDB->close();
             fclose($fl);
             throw new RuntimeException(
-                sprintf('error Select player_score: tenantID=%d, competitionID=%s, %s', $tenant->id, $competitionID, $e->getMessage()),
+                sprintf('error Select player_score: tenantID=%d, competitionID=%s, %s', $tenant['id'], $competitionID, $e->getMessage()),
                 previous: $e,
             );
         }
@@ -1266,21 +1257,21 @@ final class Handlers
         foreach ($pss as $ps) {
             // player_scoreが同一player_id内ではrow_numの降順でソートされているので
             // 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
-            if (array_key_exists($ps->playerID, $scoredPlayerSet)) {
+            if (array_key_exists($ps['player_id'], $scoredPlayerSet)) {
                 continue;
             }
-            $scoredPlayerSet[$ps->playerID] = null;
+            $scoredPlayerSet[$ps['player_id']] = null;
             try {
-                $p = $this->retrievePlayer($tenantDB, $ps->playerID);
+                $p = $this->retrievePlayer($tenantDB, $ps['player_id']);
             } catch (RuntimeException $e) {
                 fclose($fl);
                 throw $e;
             }
             $ranks[] = new CompetitionRank(
-                score: $ps->score,
+                score: (int)$ps['score'],
                 playerID: $p->id,
                 playerDisplayName: $p->displayName,
-                rowNum: $ps->rowNum,
+                rowNum: (int)$ps['row_num'],
             );
         }
         usort($ranks, function (CompetitionRank $x, CompetitionRank $y): int {

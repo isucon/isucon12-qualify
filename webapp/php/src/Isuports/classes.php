@@ -162,47 +162,6 @@ final class CompetitionRow
     }
 }
 
-final class PlayerScoreRow
-{
-    public function __construct(
-        public int $tenantID,
-        public string $id,
-        public string $playerID,
-        public string $competitionID,
-        public int $score,
-        public int $rowNum,
-        public int $createdAt,
-        public int $updatedAt,
-    ) {
-    }
-
-    /**
-     * @param array{
-     *     tenant_id: string,
-     *     id: string,
-     *     player_id: string,
-     *     competition_id: string,
-     *     score: string,
-     *     row_num: string,
-     *     created_at: string,
-     *     updated_at: string,
-     * } $row
-     */
-    public static function fromDB(array $row): self
-    {
-        return new self(
-            tenantID: (int)$row['tenant_id'],
-            id: $row['id'],
-            playerID: $row['player_id'],
-            competitionID: $row['competition_id'],
-            score: (int)$row['score'],
-            rowNum: (int)$row['row_num'],
-            createdAt: (int)$row['created_at'],
-            updatedAt: (int)$row['updated_at'],
-        );
-    }
-}
-
 final class TenantDetail implements JsonSerializable
 {
     public function __construct(
