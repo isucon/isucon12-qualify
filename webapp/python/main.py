@@ -122,7 +122,11 @@ def parse_viewer() -> Viewer:
     key = open(key_filename, "r").read()
 
     tenant = retrieve_tenant_row_from_header()
-    token = jwt.decode(token_str, key, audience=tenant.name, algorithms=["RS256"])
+    try:
+        token = jwt.decode(token_str, key, audience=tenant.name, algorithms=["RS256"])
+    except jwt.ExpiredSignatureError:
+        abort(401, "Signature has expire")
+
     if not token.get("sub"):
         abort(401, f"invalid token: subject is not found in token: {token_str}")
 
@@ -703,7 +707,13 @@ def organizer_get_competitions():
     主催者向けAPI
     大会の一覧を取得する
     """
-    raise NotImplementedError()  # TODO
+    viewer = parse_viewer()
+    if viewer.role != ROLE_ORGANIZER:
+        abort(403, "role organizer required")
+
+    tenant_db = connect_to_tenant_db(viewer.tenant_id)
+
+    return competitions_handler(viewer, tenant_db)
 
 
 @dataclass
@@ -899,7 +909,33 @@ def player_get_competitions():
     参加者向けAPI
     大会の一覧を取得する
     """
-    raise NotImplementedError()  # TODO
+    viewer = parse_viewer()
+    if viewer.role != ROLE_PLAYER:
+        abort(403, "role player required")
+
+    tenant_db = connect_to_tenant_db(viewer.tenant_id)
+
+    authorize_player(tenant_db, viewer.player_id)
+
+    return competitions_handler(viewer, tenant_db)
+
+
+def competitions_handler(viewer: Viewer, tenant_db):
+    competition_rows = tenant_db.execute(
+        "SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC", (viewer.tenant_id)
+    ).fetchall()
+
+    competition_details = []
+    for competition_row in competition_rows:
+        competition_details.append(
+            CompetitionDetail(
+                id=competition_row.id,
+                title=competition_row.title,
+                is_finished=bool(competition_row.finished_at),
+            )
+        )
+
+    return jsonify(SuccessResult(status=True, data={"competitions": competition_details}))
 
 
 @app.route("/api/me", methods=["GET"])
