@@ -4,7 +4,9 @@ services:
   webapp:
     cpus: 1
     mem_limit: 1g
-    build: ./backend-php
+    build:
+      context: ..
+      dockerfile: ./development/backend-php/Dockerfile
     environment:
       ISUCON_DB_HOST: mysql
       ISUCON_DB_PORT: 3306
@@ -22,7 +24,6 @@ services:
       - initial_data:/home/isucon/initial_data
     init: true
     restart: always
-    command: ./composer.phar start
 
 volumes:
   tenant_db:

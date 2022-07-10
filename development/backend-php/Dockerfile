@@ -26,6 +26,12 @@ RUN wget https://github.com/jwilder/dockerize/releases/download/$DOCKERIZE_VERSI
 
 RUN ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime
 
-COPY ./php.ini /usr/local/etc/php/php.ini
+COPY ./development/backend-php/php.ini /usr/local/etc/php/php.ini
 
 WORKDIR /home/isucon/webapp/php
+
+COPY ./webapp/php /home/isucon/webapp/php
+
+RUN ./composer.phar install
+
+CMD ["./composer.phar", "start"]
