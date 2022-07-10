@@ -3,9 +3,16 @@
 declare(strict_types=1);
 
 use App\Isuports\Handlers;
+use Psr\Http\Message\ResponseInterface as Response;
+use Psr\Http\Message\ServerRequestInterface as Request;
 use Slim\App;
 
 return function (App $app) {
+    $app->options('/{routes:.*}', function (Request $request, Response $response) {
+        // CORS Pre-Flight OPTIONS Request Handler
+        return $response;
+    });
+
     // SaaS管理者向けAPI
     $app->post('/api/admin/tenants/add', Handlers::class . ':tenantsAddHandler');
     $app->get('/api/admin/tenants/billing', Handlers::class . ':tenantsBillingHandler');
