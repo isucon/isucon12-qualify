@@ -52,6 +52,30 @@ class Handlers
     }
 
     /**
+     * テナントDBに接続する
+     *
+     * @throws RuntimeException
+     */
+    private function connectToTenantDB(int $id): Connection
+    {
+        try {
+            return DriverManager::getConnection(
+                params: [
+                    'path' => $this->tenantDBPath($id),
+                    'driver' => 'pdo_sqlite',
+                    'driverOptions' => [
+                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                    ],
+                ],
+                config: $this->sqliteConfiguration,
+            );
+        } catch (DBException $e) {
+            throw new RuntimeException('failed to open tenant DB: ' . $e->getMessage(), previous: $e);
+        }
+    }
+
+    /**
      * テナントDBを新規に作成する
      */
     private function createTenantDB(int $id): void
@@ -129,30 +153,6 @@ class Handlers
         }
 
         throw $lastErr;
-    }
-
-    /**
-     * テナントDBに接続する
-     *
-     * @throws RuntimeException
-     */
-    private function connectToTenantDB(int $id): Connection
-    {
-        try {
-            return DriverManager::getConnection(
-                params: [
-                    'path' => $this->tenantDBPath($id),
-                    'driver' => 'pdo_sqlite',
-                    'driverOptions' => [
-                        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                    ],
-                ],
-                config: $this->sqliteConfiguration,
-            );
-        } catch (DBException $e) {
-            throw new RuntimeException('failed to open tenant DB: ' . $e->getMessage(), previous: $e);
-        }
     }
 
     /**

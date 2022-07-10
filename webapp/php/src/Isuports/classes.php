@@ -49,6 +49,9 @@ class FailureResult implements JsonSerializable
     }
 }
 
+/**
+ * アクセスしてきた人の情報
+ */
 class Viewer
 {
     public function __construct(
