@@ -981,9 +981,49 @@ def get_me():
     """
     tenant = retrieve_tenant_row_from_header()
     tenant_detail = TenantDetail(name=tenant.name, display_name=tenant.display_name)
-    view = parse_viewer()
 
-    return jsonify(tenant)
+    viewer = parse_viewer()
+    if viewer.role == ROLE_ADMIN or viewer.role == ROLE_ORGANIZER:
+        return jsonify(
+            SuccessResult(
+                status=True,
+                data={
+                    "tenant": tenant_detail,
+                    "me": None,
+                    "role": viewer.role,
+                    "logged_in": True,
+                },
+            )
+        )
+
+    tenant_db = connect_to_tenant_db(viewer.tenant_id)
+    player = retrieve_player(tenant_db, viewer.player_id)
+    if not player:
+        jsonify(
+            SuccessResult(
+                status=True,
+                data={
+                    "tenant": tenant_detail,
+                    "me": None,
+                    "role": ROLE_NONE,
+                    "logged_in": False,
+                },
+            )
+        )
+
+    return jsonify(
+        SuccessResult(
+            status=True,
+            data={
+                "tenant": tenant_detail,
+                "me": PlayerDetail(
+                    id=player.id, display_name=player.display_name, is_disqualified=player.is_disqualified
+                ),
+                "role": viewer.role,
+                "logged_in": True,
+            },
+        )
+    )
 
 
 @dataclass
