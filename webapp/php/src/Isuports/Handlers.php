@@ -535,8 +535,82 @@ final class Handlers
      */
     public function tenantsBillingHandler(Request $request, Response $response): Response
     {
-        // TODO: 実装
-        throw new \LogicException('not implemented');
+        $host = $request->getHeader('Host')[0] ?? '';
+        if ($host !== (getenv('ISUCON_ADMIN_HOSTNAME') ?: 'admin.t.isucon.dev')) {
+            throw new HttpNotFoundException($request, sprintf('invalid hostname %s', $host));
+        }
+
+        $v = $this->parseViewer($request);
+        if ($v->role !== self::ROLE_ADMIN) {
+            throw new HttpForbiddenException($request, 'admin role required');
+        }
+
+        $beforeID = 0;
+        $before = $request->getQueryParams()['before'] ?? '';
+        if ($before !== '') {
+            $beforeID = filter_var($before, FILTER_VALIDATE_INT);
+            if (!is_int($beforeID)) {
+                throw new HttpBadRequestException($request, sprintf('failed to parse query parameter \'before\': %s', $before));
+            }
+        }
+
+        // テナントごとに
+        //   大会ごとに
+        //     scoreに登録されているplayerでアクセスした人 * 100
+        //     scoreに登録されているplayerでアクセスしていない人 * 50
+        //     scoreに登録されていないplayerでアクセスした人 * 10
+        //   を合計したものを
+        // テナントの課金とする
+        try {
+            $ts = $this->adminDB->executeQuery('SELECT * FROM tenant ORDER BY id DESC')
+                ->fetchAllAssociative();
+        } catch (DBException $e) {
+            throw new RuntimeException(sprintf('error Select tenant: %s', $e->getMessage()), previous: $e);
+        }
+
+        /** @var list<TenantWithBilling> $tenantBillings */
+        $tenantBillings = [];
+        foreach ($ts as $t) {
+            if ($beforeID !== 0 && $beforeID <= $t['id']) {
+                continue;
+            }
+
+            $tb = new TenantWithBilling(
+                id: $t['id'],
+                name: $t['name'],
+                displayName: $t['display_name'],
+            );
+
+            $tenantDB = $this->connectToTenantDB((int)$t['id']);
+            try {
+                $cs = $tenantDB->prepare('SELECT * FROM competition WHERE tenant_id=?')
+                    ->executeQuery([$t['id']])
+                    ->fetchAllAssociative();
+            } catch (DBException $e) {
+                $tenantDB->close();
+                throw new RuntimeException(sprintf('failed to Select competition: %s', $e->getMessage()), previous: $e);
+            }
+
+            foreach ($cs as $comp) {
+                $report = $this->billingReportByCompetition($tenantDB, (int)$t['id'], $comp['id']);
+                $tb->billingYen += $report->billingYen;
+            }
+
+            $tenantBillings[] = $tb;
+
+            $tenantDB->close();
+
+            if (count($tenantBillings) >= 10) {
+                break;
+            }
+        }
+
+        return $this->jsonResponse($response, new SuccessResult(
+            success: true,
+            data: new TenantsBillingHandlerResult(
+                tenants: $tenantBillings,
+            ),
+        ));
     }
 
     /**

@@ -247,7 +247,7 @@ final class BillingReport implements JsonSerializable
         private int $visitorCount,
         private int $billingPlayerYen,
         private int $billingVisitorYen,
-        private int $billingYen,
+        public int $billingYen,
     ) {
     }
 
@@ -282,7 +282,7 @@ final class TenantWithBilling implements JsonSerializable
         private string $id,
         private string $name,
         private string $displayName,
-        private int $billingYen,
+        public int $billingYen = 0,
     ) {
     }
 
