@@ -233,7 +233,6 @@ class Handlers
                 ->executeQuery([$id])
                 ->fetchAssociative();
         } catch (DBException $e) {
-            $tenantDB->close();
             throw new RuntimeException(sprintf('error Select player: id=%s', $id), previous: $e);
         }
 
@@ -260,12 +259,10 @@ class Handlers
         $player = $this->retrievePlayer($tenantDB, $id);
 
         if (is_null($player)) {
-            $tenantDB->close();
             throw new HttpUnauthorizedException($request, 'player not found');
         }
 
         if ($player->isDisqualified) {
-            $tenantDB->close();
             throw new HttpForbiddenException($request, 'player is disqualified');
         }
     }
@@ -280,7 +277,6 @@ class Handlers
                 ->executeQuery([$id])
                 ->fetchAssociative();
         } catch (DBException $e) {
-            $tenantDB->close();
             throw new RuntimeException(sprintf('error Select competition: id=%s', $id), previous: $e);
         }
 
@@ -398,7 +394,6 @@ class Handlers
     {
         $comp = $this->retrieveCompetition($tenantDB, $competitionID);
         if (is_null($comp)) {
-            $tenantDB->close();
             throw new RuntimeException('error retrieveCompetition');
         }
 
@@ -408,7 +403,6 @@ class Handlers
                 ->executeQuery([$tenantID, $comp->id])
                 ->fetchAllAssociative();
         } catch (DBException $e) {
-            $tenantDB->close();
             throw new RuntimeException(sprintf('error Select visit_history: tenantID=%d, competitionID=%s', $tenantID, $comp->id), previous: $e);
         }
 
@@ -423,12 +417,7 @@ class Handlers
         }
 
         // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-        try {
-            $fl = $this->flockByTenantID($tenantID);
-        } catch (RuntimeException $e) {
-            $tenantDB->close();
-            throw $e;
-        }
+        $fl = $this->flockByTenantID($tenantID);
 
         // スコアを登録した参加者のIDを取得する
         try {
@@ -436,8 +425,6 @@ class Handlers
                 ->executeQuery([$tenantID, $comp->id])
                 ->fetchFirstColumn();
         } catch (DBException $e) {
-            $tenantDB->close();
-            fclose($fl);
             throw new RuntimeException(sprintf('error Select count player_score: tenantID=%d, competitionID=%s', $tenantID, $comp->id), previous: $e);
         }
         foreach ($scoredPlayerIDs as $pid) {
@@ -527,7 +514,6 @@ class Handlers
                     ->executeQuery([$t['id']])
                     ->fetchAllAssociative();
             } catch (DBException $e) {
-                $tenantDB->close();
                 throw new RuntimeException('failed to Select competition', previous: $e);
             }
 
@@ -582,13 +568,13 @@ class Handlers
             }
         } catch (DBException $e) {
             throw new RuntimeException('error Select player', previous: $e);
-        } finally {
-            $tenantDB->close();
         }
 
         $res = new PlayersListHandlerResult(
             players: $pds,
         );
+
+        $tenantDB->close();
 
         return $this->jsonResponse($response, new SuccessResult(success: true, data: $res));
     }
@@ -618,19 +604,13 @@ class Handlers
         /** @var list<PlayerDetail> $pds */
         $pds = [];
         foreach ($displayNames as $displayName) {
-            try {
-                $id = $this->dispenseID();
-            } catch (RuntimeException $e) {
-                $tenantDB->close();
-                throw $e;
-            }
+            $id = $this->dispenseID();
 
             $now = time();
             try {
                 $tenantDB->prepare('INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
                     ->executeStatement([$id, $v->tenantID, $displayName, false, $now, $now]);
             } catch (DBException $e) {
-                $tenantDB->close();
                 throw new RuntimeException(
                     sprintf('error Insert player at tenantDB: id=%s, displayName=%s, isDisqualified=%s, createdAt=%d, updatedAt=%d', $id, $displayName, false, $now, $now),
                     previous: $e,
@@ -646,9 +626,9 @@ class Handlers
             );
         }
 
-        $tenantDB->close();
-
         $res = new PlayersAddHandlerResult(players: $pds);
+
+        $tenantDB->close();
 
         return $this->jsonResponse($response, new SuccessResult(success: true, data: $res));
     }
@@ -674,18 +654,14 @@ class Handlers
             $tenantDB->prepare('UPDATE player SET is_disqualified = ?, updated_at = ? WHERE id = ?')
                 ->executeStatement([true, $now, $playerID]);
         } catch (DBException $e) {
-            $tenantDB->close();
             throw new RuntimeException(sprintf('error Update player: isDisqualified=%s, updatedAt=%d, id=%s', true, $now, $playerID), previous: $e);
         }
 
         $p = $this->retrievePlayer($tenantDB, $playerID);
         if (is_null($p)) {
-            $tenantDB->close();
             // 存在しないプレイヤー
             throw new HttpNotFoundException($request, 'player not found');
         }
-
-        $tenantDB->close();
 
         $res = new PlayerDisqualifiedHandlerResult(
             player: new PlayerDetail(
@@ -694,6 +670,8 @@ class Handlers
                 isDisqualified: $p->isDisqualified,
             ),
         );
+
+        $tenantDB->close();
 
         return $this->jsonResponse($response, new SuccessResult(success: true, data: $res));
     }
@@ -712,20 +690,13 @@ class Handlers
         $title = $request->getParsedBody()['title'] ?? '';
 
         $now = time();
-        try {
-            $id = $this->dispenseID();
-        } catch (RuntimeException $e) {
-            $tenantDB->close();
-            throw $e;
-        }
+        $id = $this->dispenseID();
 
         try {
             $tenantDB->prepare('INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)')
                 ->executeStatement([$id, $v->tenantID, $title, null, $now, $now]);
         } catch (DBException $e) {
             throw new RuntimeException(sprintf('error Insert competition: id=%s, tenant_id=%d, title=%s, finishedAt=null, createdAt=%d, updatedAt=%d', $id, $v->tenantID, $title, $now, $now,), previous: $e);
-        } finally {
-            $tenantDB->close();
         }
 
         $res = new CompetitionsAddHandlerResult(
@@ -735,6 +706,8 @@ class Handlers
                 isFinished: false,
             ),
         );
+
+        $tenantDB->close();
 
         return $this->jsonResponse($response, new SuccessResult(success: true, data: $res));
     }
@@ -759,7 +732,6 @@ class Handlers
 
         // 存在しない大会
         if (is_null($this->retrieveCompetition($tenantDB, $id))) {
-            $tenantDB->close();
             throw new HttpNotFoundException($request, 'competition not found');
         }
 
@@ -768,7 +740,6 @@ class Handlers
             $tenantDB->prepare('UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?')
                 ->executeStatement([$now, $now, $id]);
         } catch (DBException $e) {
-            $tenantDB->close();
             throw new RuntimeException(sprintf('error Update competition: finishedAt=%d, updatedAt=%d, id=%s', $now, $now, $id), previous: $e);
         }
 
@@ -794,20 +765,17 @@ class Handlers
 
         $competitionID = $params['competition_id'] ?? '';
         if ($competitionID === '') {
-            $tenantDB->close();
             throw new HttpBadRequestException($request, 'competition_id required');
         }
 
         $comp = $this->retrieveCompetition($tenantDB, $competitionID);
 
         if (is_null($comp)) {
-            $tenantDB->close();
             // 存在しない大会
             throw new HttpNotFoundException($request, 'competition not found');
         }
 
         if (!is_null($comp->finishedAt)) {
-            $tenantDB->close();
             $res = new FailureResult(
                 success: false,
                 message: 'competition is finished',
@@ -818,7 +786,6 @@ class Handlers
         /** @var \Psr\Http\Message\UploadedFileInterface|null $uploadedFile */
         $uploadedFile = $request->getUploadedFiles()['scores'] ?? null;
         if (is_null($uploadedFile) || $uploadedFile->getError() !== UPLOAD_ERR_OK) {
-            $tenantDB->close();
             throw new RuntimeException('error getUploadedFiles');
         }
 
@@ -826,98 +793,66 @@ class Handlers
         $uploadedFile->moveTo($tmpFilePath);
         $fh = fopen($tmpFilePath, 'r');
         if ($fh === false) {
-            $tenantDB->close();
             throw new RuntimeException(sprintf('error fopen: %s', $tmpFilePath));
         }
 
-        $headers = fgetcsv($fh);
-        if ($headers === false) {
-            $tenantDB->close();
-            fclose($fh);
-            unlink($tmpFilePath);
-            throw new RuntimeException('error fgetcsv at header');
-        }
-        if ($headers != ['player_id', 'score']) {
-            $tenantDB->close();
-            fclose($fh);
-            unlink($tmpFilePath);
-            throw new HttpBadRequestException($request, 'invalid CSV headers');
-        }
-
-        // / DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
         try {
+            $headers = fgetcsv($fh);
+            if ($headers === false) {
+                throw new RuntimeException('error fgetcsv at header');
+            }
+            if ($headers != ['player_id', 'score']) {
+                throw new HttpBadRequestException($request, 'invalid CSV headers');
+            }
+
+            // / DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
             $fl = $this->flockByTenantID($v->tenantID);
+
+            $rowNum = 0;
+            /** @var list<array<string, mixed>> $playerScoreRows */
+            $playerScoreRows = [];
+            while (($row = fgetcsv($fh)) !== false) {
+                $rowNum++;
+
+                if (count($row) !== 2) {
+                    throw new RuntimeException(sprintf('row must have two columns: %s', var_export($row, true)));
+                }
+
+                [$playerID, $scoreStr] = $row;
+                // 存在しない参加者が含まれている
+                if (is_null($this->retrievePlayer($tenantDB, $playerID))) {
+                    throw new HttpBadRequestException($request, sprintf('player not found: %s', $playerID));
+                }
+
+                $id = $this->dispenseID();
+                $score = filter_var($scoreStr, FILTER_VALIDATE_INT);
+                if (!is_int($score)) {
+                    throw new HttpBadRequestException($request, sprintf('error filter_var: scoreStr=%s', $scoreStr));
+                }
+                $now = time();
+
+                $playerScoreRows[] = [
+                    'id' => $id,
+                    'tenant_id' => $v->tenantID,
+                    'player_id' => $playerID,
+                    'competition_id' => $competitionID,
+                    'score' => $score,
+                    'row_num' => $rowNum,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
         } catch (RuntimeException $e) {
-            $tenantDB->close();
+            throw $e;
+        } finally {
             fclose($fh);
             unlink($tmpFilePath);
-            throw $e;
         }
-
-        $rowNum = 0;
-        /** @var list<array<string, mixed>> $playerScoreRows */
-        $playerScoreRows = [];
-        while (($row = fgetcsv($fh)) !== false) {
-            $rowNum++;
-
-            if (count($row) !== 2) {
-                $tenantDB->close();
-                fclose($fl);
-                fclose($fh);
-                unlink($tmpFilePath);
-                throw new RuntimeException(sprintf('row must have two columns: %s', var_export($row, true)));
-            }
-
-            [$playerID, $scoreStr] = $row;
-            // 存在しない参加者が含まれている
-            if (is_null($this->retrievePlayer($tenantDB, $playerID))) {
-                $tenantDB->close();
-                fclose($fl);
-                fclose($fh);
-                unlink($tmpFilePath);
-                throw new HttpBadRequestException($request, sprintf('player not found: %s', $playerID));
-            }
-
-            try {
-                $id = $this->dispenseID();
-            } catch (RuntimeException $e) {
-                $tenantDB->close();
-                fclose($fl);
-                fclose($fh);
-                unlink($tmpFilePath);
-                throw $e;
-            }
-
-            $score = filter_var($scoreStr, FILTER_VALIDATE_INT);
-            if (!is_int($score)) {
-                $tenantDB->close();
-                fclose($fl);
-                fclose($fh);
-                unlink($tmpFilePath);
-                throw new HttpBadRequestException($request, sprintf('error filter_var: scoreStr=%s', $scoreStr));
-            }
-
-            $now = time();
-            $playerScoreRows[] = [
-                'id' => $id,
-                'tenant_id' => $v->tenantID,
-                'player_id' => $playerID,
-                'competition_id' => $competitionID,
-                'score' => $score,
-                'row_num' => $rowNum,
-                'created_at' => $now,
-                'updated_at' => $now,
-            ];
-        }
-        fclose($fh);
-        unlink($tmpFilePath);
 
         try {
             $tenantDB->prepare('DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?')
                 ->executeStatement([$v->tenantID, $competitionID]);
         } catch (DBException $e) {
-            $tenantDB->close();
-            fclose($fl);
             throw new RuntimeException(sprintf('error Delete player_score: tenantID=%d, competitionID=%s', $v->tenantID, $competitionID), previous: $e);
         }
 
@@ -926,8 +861,6 @@ class Handlers
                 $tenantDB->prepare('INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_num, :created_at, :updated_at)')
                     ->executeStatement($ps);
             } catch (DBException $e) {
-                $tenantDB->close();
-                fclose($fl);
                 throw new RuntimeException(
                     sprintf('error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNum=%d, createdAt=%d, updatedAt=%d', $ps['id'], $ps['tenant_id'], $ps['player_id'], $ps['competition_id'], $ps['score'], $ps['row_num'], $ps['created_at'], $ps['updated_at']),
                     previous: $e,
@@ -963,11 +896,9 @@ class Handlers
                 ->executeQuery([$v->tenantID])
                 ->fetchAllAssociative();
         } catch (DBException $e) {
-            $tenantDB->close();
             throw new RuntimeException('error Select competition', previous: $e);
         }
         if (count($cs) === 0) {
-            $tenantDB->close();
             throw new RuntimeException('error Select competition');
         }
 
@@ -977,14 +908,14 @@ class Handlers
             $tbrs[] = $this->billingReportByCompetition($tenantDB, $v->tenantID, $comp['id']);
         }
 
-        $tenantDB->close();
-
         $res = new SuccessResult(
             success: true,
             data: new BillingHandlerResult(
                 reports: $tbrs,
             ),
         );
+
+        $tenantDB->close();
 
         return $this->jsonResponse($response, $res);
     }
@@ -1007,13 +938,11 @@ class Handlers
 
         $playerID = $params['player_id'] ?? '';
         if ($playerID === '') {
-            $tenantDB->close();
             throw new HttpBadRequestException($request, 'player_id is required');
         }
 
         $p = $this->retrievePlayer($tenantDB, $playerID);
         if (is_null($p)) {
-            $tenantDB->close();
             throw new HttpNotFoundException($request, 'player not found');
         }
 
@@ -1021,17 +950,11 @@ class Handlers
             $cs = $tenantDB->executeQuery('SELECT * FROM competition ORDER BY created_at ASC')
                 ->fetchAllAssociative();
         } catch (DBException $e) {
-            $tenantDB->close();
             throw new RuntimeException('error Select competition', previous: $e);
         }
 
         // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-        try {
-            $fl = $this->flockByTenantID($v->tenantID);
-        } catch (RuntimeException $e) {
-            $tenantDB->close();
-            throw $e;
-        }
+        $fl = $this->flockByTenantID($v->tenantID);
 
         $pss = [];
         foreach ($cs as $c) {
@@ -1040,8 +963,6 @@ class Handlers
                     ->executeQuery([$v->tenantID, $c['id'], $p->id])
                     ->fetchAssociative();
             } catch (DBException $e) {
-                $tenantDB->close();
-                fclose($fl);
                 throw new RuntimeException(sprintf('error Select player_score: tenantID=%d, competitionID=%s, playerID=%s', $v->tenantID, $c['id'], $p->id), previous: $e);
             }
             // 行がない = スコアが記録されてない
@@ -1055,17 +976,11 @@ class Handlers
         /** @var list<PlayerScoreDetail> $psds */
         $psds = [];
         foreach ($pss as $ps) {
-            try {
-                $comp = $this->retrieveCompetition($tenantDB, $ps['competition_id']);
-            } catch (RuntimeException $e) {
-                fclose($fl);
-                throw $e;
-            }
+            $comp = $this->retrieveCompetition($tenantDB, $ps['competition_id']);
             if (is_null($comp)) {
-                $tenantDB->close();
-                fclose($fl);
                 throw new RuntimeException('error retrieveCompetition');
             }
+
             $psds[] = new PlayerScoreDetail(
                 competitionTitle: $comp->title,
                 score: (int)$ps['score'],
@@ -1115,7 +1030,6 @@ class Handlers
         // 大会の存在確認
         $competition = $this->retrieveCompetition($tenantDB, $competitionID);
         if (is_null($competition)) {
-            $tenantDB->close();
             throw new HttpNotFoundException($request, 'competition not found');
         }
 
@@ -1125,11 +1039,9 @@ class Handlers
                 ->executeQuery([$v->tenantID])
                 ->fetchAssociative();
         } catch (DBException $e) {
-            $tenantDB->close();
             throw new RuntimeException(sprintf('error Select tenant: id=%d', $v->tenantID), previous: $e);
         }
         if ($tenant === false) {
-            $tenantDB->close();
             throw new RuntimeException(sprintf('error Select tenant: id=%d', $v->tenantID));
         }
 
@@ -1137,7 +1049,6 @@ class Handlers
             $this->adminDB->prepare('INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
                 ->executeStatement([$v->playerID, $tenant['id'], $competitionID, $now, $now]);
         } catch (DBException $e) {
-            $tenantDB->close();
             throw new RuntimeException(
                 sprintf('error Insert visit_history: playerID=%s, tenantID=%d, competitionID=%s, createdAt=%d, updatedAt=%d', $v->playerID, $tenant['id'], $competitionID, $now, $now),
                 previous: $e,
@@ -1149,26 +1060,18 @@ class Handlers
         if ($rankAfterStr !== '') {
             $rankAfter = filter_var($rankAfterStr, FILTER_VALIDATE_INT);
             if (!is_int($rankAfter)) {
-                $tenantDB->close();
                 throw new RuntimeException(sprintf('error filter_var: rankAfterStr=%s', $rankAfterStr));
             }
         }
 
         // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-        try {
-            $fl = $this->flockByTenantID($v->tenantID);
-        } catch (RuntimeException $e) {
-            $tenantDB->close();
-            throw $e;
-        }
+        $fl = $this->flockByTenantID($v->tenantID);
 
         try {
             $pss = $tenantDB->prepare('SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC')
                 ->executeQuery([$tenant['id'], $competitionID])
                 ->fetchAllAssociative();
         } catch (DBException $e) {
-            $tenantDB->close();
-            fclose($fl);
             throw new RuntimeException(sprintf('error Select player_score: tenantID=%d, competitionID=%s', $tenant['id'], $competitionID), previous: $e);
         }
 
@@ -1183,12 +1086,8 @@ class Handlers
                 continue;
             }
             $scoredPlayerSet[$ps['player_id']] = null;
-            try {
-                $p = $this->retrievePlayer($tenantDB, $ps['player_id']);
-            } catch (RuntimeException $e) {
-                fclose($fl);
-                throw $e;
-            }
+            $p = $this->retrievePlayer($tenantDB, $ps['player_id']);
+
             $ranks[] = new CompetitionRank(
                 score: (int)$ps['score'],
                 playerID: $p->id,
@@ -1221,9 +1120,6 @@ class Handlers
             }
         }
 
-        $tenantDB->close();
-        fclose($fl);
-
         $res = new SuccessResult(
             success: true,
             data: new CompetitionRankingHandlerResult(
@@ -1235,6 +1131,9 @@ class Handlers
                 ranks: $pageRanks,
             ),
         );
+
+        $tenantDB->close();
+        fclose($fl);
 
         return $this->jsonResponse($response, $res);
     }
@@ -1299,7 +1198,6 @@ class Handlers
                 );
             }
         } catch (DBException $e) {
-            $tenantDB->close();
             throw new RuntimeException('error Select competition', previous: $e);
         }
 
@@ -1360,8 +1258,6 @@ class Handlers
 
         $p = $this->retrievePlayer($tenantDB, $v->playerID);
 
-        $tenantDB->close();
-
         if (is_null($p)) {
             return $this->jsonResponse($response, new SuccessResult(
                 success: true,
@@ -1373,6 +1269,8 @@ class Handlers
                 ),
             ));
         }
+
+        $tenantDB->close();
 
         return $this->jsonResponse($response, new SuccessResult(
             success: true,
