@@ -274,7 +274,13 @@ final class Handlers
             return null;
         }
 
-        return TenantRow::fromDB($row);
+        return new TenantRow(
+            id: (int)$row['id'],
+            name: $row['name'],
+            displayName: $row['display_name'],
+            createdAt: (int)$row['created_at'],
+            updatedAt: (int)$row['updated_at'],
+        );
     }
 
     /**
@@ -300,7 +306,14 @@ final class Handlers
             return null;
         }
 
-        return PlayerRow::fromDB($row);
+        return new PlayerRow(
+            tenantID: (int)$row['tenant_id'],
+            id: $row['id'],
+            displayName: $row['display_name'],
+            isDisqualified: (bool)$row['is_disqualified'],
+            createdAt: (int)$row['created_at'],
+            updatedAt: (int)$row['updated_at'],
+        );
     }
 
     /**
@@ -343,7 +356,14 @@ final class Handlers
             return null;
         }
 
-        return CompetitionRow::fromDB($row);
+        return new CompetitionRow(
+            tenantID: (int)$row['tenant_id'],
+            id: $row['id'],
+            title: $row['title'],
+            finishedAt: is_null($row['finished_at']) ? null : (int)$row['finished_at'],
+            createdAt: (int)$row['created_at'],
+            updatedAt: (int)$row['updated_at'],
+        );
     }
 
     /**

@@ -70,26 +70,6 @@ final class TenantRow
         public int $updatedAt = 0,
     ) {
     }
-
-    /**
-     * @param array{
-     *     id: string,
-     *     name: string,
-     *     display_name: string,
-     *     created_at: int,
-     *     updated_at: int,
-     * } $row
-     */
-    public static function fromDB(array $row): self
-    {
-        return new self(
-            id: (int)$row['id'],
-            name: $row['name'],
-            displayName: $row['display_name'],
-            createdAt: (int)$row['created_at'],
-            updatedAt: (int)$row['updated_at'],
-        );
-    }
 }
 
 final class PlayerRow
@@ -103,28 +83,6 @@ final class PlayerRow
         public int $updatedAt,
     ) {
     }
-
-    /**
-     * @param array{
-     *     tenant_id: int,
-     *     id: string,
-     *     display_name: string,
-     *     is_disqualified: bool,
-     *     created_at: int,
-     *     updated_at: int,
-     * } $row
-     */
-    public static function fromDB(array $row): self
-    {
-        return new self(
-            tenantID: (int)$row['tenant_id'],
-            id: $row['id'],
-            displayName: $row['display_name'],
-            isDisqualified: (bool)$row['is_disqualified'],
-            createdAt: (int)$row['created_at'],
-            updatedAt: (int)$row['updated_at'],
-        );
-    }
 }
 
 final class CompetitionRow
@@ -137,28 +95,6 @@ final class CompetitionRow
         public int $createdAt,
         public int $updatedAt,
     ) {
-    }
-
-    /**
-     * @param array{
-     *     tenant_id: int,
-     *     id: string,
-     *     title: string,
-     *     finished_at: ?int,
-     *     created_at: int,
-     *     updated_at: int,
-     * } $row
-     */
-    public static function fromDB(array $row): self
-    {
-        return new self(
-            tenantID: (int)$row['tenant_id'],
-            id: $row['id'],
-            title: $row['title'],
-            finishedAt: isset($row['finished_at']) ? (int)$row['finished_at'] : null,
-            createdAt: (int)$row['created_at'],
-            updatedAt: (int)$row['updated_at'],
-        );
     }
 }
 
