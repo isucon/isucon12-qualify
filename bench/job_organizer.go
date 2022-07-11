@@ -28,7 +28,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 
 	// 大会を1つ作成し、スコアを入稿し、Closeする
 	comp := &CompetitionData{
-		Title: data.RandomString(24),
+		Title: data.FakeCompetitionName(),
 	}
 
 	// player一覧を取る
@@ -58,7 +58,6 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 	}
 
 	{
-		ContestantLogger.Println("大会を作成します")
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, comp.Title, orgAg)
 		msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
 		v := ValidateResponseWithMsg("新規大会追加", step, res, err, msg, WithStatusCode(200),
@@ -73,6 +72,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 			return v
 		}
+		ContestantLogger.Printf("大会「%s」を作成しました", comp.Title)
 	}
 
 	// 大会結果入稿

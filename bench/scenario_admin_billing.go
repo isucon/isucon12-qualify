@@ -92,7 +92,6 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 
 	}
 	// Billingが見終わったら新規テナントを追加する
-	ContestantLogger.Println("テナントを追加します")
 	newTenantWorker, err := sc.NewTenantScenarioWorker(step, 1)
 	if err != nil {
 		return err
