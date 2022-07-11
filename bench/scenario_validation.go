@@ -28,8 +28,8 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	report := timeReporter("validation")
 	defer report()
 
-	ContestantLogger.Println("[ValidationScenario] 整合性チェックを開始します")
-	defer ContestantLogger.Printf("[ValidationScenario] 整合性チェックを終了します")
+	ContestantLogger.Println("整合性チェックを開始します")
+	defer ContestantLogger.Printf("整合性チェックを終了します")
 
 	tenantName := "valid-tenantid"
 	tenantDisplayName := "valid-Tenantname"

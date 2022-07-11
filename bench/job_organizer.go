@@ -58,7 +58,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 	}
 
 	{
-		ContestantLogger.Println("大会を作成します。")
+		ContestantLogger.Println("大会を作成します")
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, comp.Title, orgAg)
 		msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
 		v := ValidateResponseWithMsg("新規大会追加", step, res, err, msg, WithStatusCode(200),
