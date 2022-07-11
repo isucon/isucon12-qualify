@@ -54,7 +54,7 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 		return err
 	}
 
-	tenant := data.CreateTenant(false)
+	tenant := data.CreateTenant(data.TenantTagGeneral)
 	{
 		res, err, txt := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
 		msg := fmt.Sprintf("%s %s", adminAc, txt)
