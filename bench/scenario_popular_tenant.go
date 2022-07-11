@@ -28,7 +28,7 @@ func (sc *Scenario) PopularTenantScenarioWorker(step *isucandar.BenchmarkStep, p
 	},
 		// // 無限回繰り返す
 		worker.WithInfinityLoop(),
-		worker.WithUnlimitedParallelism(),
+		worker.WithMaxParallelism(20),
 	)
 	if err != nil {
 		return nil, err
@@ -52,14 +52,11 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 	if isHeavyTenant {
 		tenantName = "isucon"
 	} else {
-		var data *InitialDataRow
-		for {
-			data = sc.InitialData.Choise()
-			if data.TenantName != "isucon" {
-				break
-			}
-		}
-		tenantName = data.TenantName
+		// 初期データからテナントを選ぶ
+		index := randomRange(ConstPopularTenantScenarioIDRange)
+		tenant := sc.InitialDataTenant[int64(index)]
+
+		tenantName = tenant.TenantName
 	}
 
 	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
@@ -99,6 +96,10 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 				return v
 			}
 		}
+		// TODO もっとリクエストしたい
+		// TODO popularTenantScenarioWorkerは増やして良いかも
+		// ただしHeavyTenantお前はダメ
+
 		orgJobConf.scoreRepeat++
 	}
 

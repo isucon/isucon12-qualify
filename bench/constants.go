@@ -34,7 +34,8 @@ var (
 	//  70 ~ 99: 破壊的操作テナント
 	// 100 ~ : prepare validate tenant
 
-	ConstPopularTenantScenarioIDRange        = []int{0, 39}  // 利用する初期データのテナントID幅
-	ConstAdminBillingValidateScenarioIDRange = []int{40, 69} // 利用する初期データのテナントID幅
-	ConstPeacefulTenantScenarioIDRange       = []int{70, 99} // 利用する初期データのテナントID幅
+	ConstPopularTenantScenarioIDRange        = []int{1, 29}
+	ConstPlayerValidateScenarioIDRange       = []int{30, 49}
+	ConstAdminBillingValidateScenarioIDRange = []int{50, 69}
+	ConstPeacefulTenantScenarioIDRange       = []int{70, 99}
 )

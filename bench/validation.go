@@ -218,6 +218,19 @@ func WithSuccessResponse[T ResponseAPI](validates ...func(res T) error) Response
 	}
 }
 
+func WithContentType(wantContentType string) ResponseValidator {
+	return func(r *Response) error {
+		ct := r.Response.Header.Get("Content-Type")
+		if !strings.Contains(ct, wantContentType) {
+			return failure.NewError(
+				ErrInvalidJSON,
+				fmt.Errorf("Content-Typeが違います (want:%+v got:%+v) %s %s status:%d body:%s", wantContentType, ct, r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode, r.Body),
+			)
+		}
+		return nil
+	}
+}
+
 func WithErrorResponse[T ResponseAPI]() ResponseValidator {
 	return func(r *Response) error {
 		var v T
