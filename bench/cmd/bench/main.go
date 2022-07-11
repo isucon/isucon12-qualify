@@ -13,6 +13,9 @@ import (
 	"github.com/isucon/isucandar/score"
 	"github.com/isucon/isucon12-qualify/bench"
 	"github.com/k0kubun/pp/v3"
+
+	benchrun "github.com/isucon/isucon12-portal/bench-tool.go/benchrun"
+	isuxportalResources "github.com/isucon/isucon12-portal/proto.go/isuxportal/resources"
 )
 
 const (
@@ -121,6 +124,25 @@ func main() {
 	}
 	bench.AdminLogger.Printf("%s", pp.Sprint(AllTagBreakdown(result)))
 
+	// supervisorから起動された場合はreportを送信
+	if os.Getenv("ISUXBENCH_REPORT_FD") != "" {
+		mustReport(&isuxportalResources.BenchmarkResult{
+			Finished: true,
+			Passed:   score > 0,
+			Score:    score,
+			ScoreBreakdown: &isuxportalResources.BenchmarkResult_ScoreBreakdown{
+				Raw:       addition,
+				Deduction: deduction,
+			},
+			Execution: &isuxportalResources.BenchmarkResult_Execution{
+				Reason: "TODO",
+			},
+			SurveyResponse: &isuxportalResources.SurveyResponse{
+				Language: "galaxy", // TODO /initialize で取得した言語を入れる
+			},
+		})
+	}
+
 	// 0点以下(fail)ならエラーで終了
 	if option.ExitErrorOnFail && score <= 0 {
 		os.Exit(1)
@@ -158,4 +180,14 @@ func SumScore(result *isucandar.BenchmarkResult) (int64, int64, int64) {
 	}
 
 	return sum, addition, int64(deduction)
+}
+
+func mustReport(res *isuxportalResources.BenchmarkResult) {
+	r, err := benchrun.NewReporter(true)
+	if err != nil {
+		panic(err)
+	}
+	if err := r.Report(res); err != nil {
+		panic(err)
+	}
 }
