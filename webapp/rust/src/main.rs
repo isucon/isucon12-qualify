@@ -1,3 +1,3 @@
 fn main() {
-    isuports::run();
+    isuports::isuports::run().unwrap();
 }
