@@ -63,6 +63,9 @@ type Scenario struct {
 	WorkerCh        chan Worker
 	ErrorCh         chan struct{}
 	CriticalErrorCh chan struct{}
+
+	CompetitionAddLog *CompactLogger
+	TenantAddLog      *CompactLogger
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -89,6 +92,9 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	sc.WorkerCh = make(chan Worker, 10)
 	sc.CriticalErrorCh = make(chan struct{}, 10)
 	sc.ErrorCh = make(chan struct{}, 10)
+
+	sc.CompetitionAddLog = NewCompactLog(ContestantLogger)
+	sc.TenantAddLog = NewCompactLog(ContestantLogger)
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(sc.Option.TargetURL)
@@ -259,6 +265,9 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 	// 	}
 	// }()
 
+	logTicker := time.NewTicker(time.Second * 5) // 5秒置きに溜まったログを出力する
+	defer logTicker.Stop()
+
 	for {
 		end := false
 		select {
@@ -282,6 +291,9 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		case <-sc.CriticalErrorCh:
 			errorCount++
 			criticalCount++
+		case <-logTicker.C:
+			sc.CompetitionAddLog.Log()
+			sc.TenantAddLog.Log()
 		}
 
 		if ConstMaxError <= errorCount {
