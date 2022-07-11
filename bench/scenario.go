@@ -249,21 +249,6 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 
 	errorCount := 0
 	criticalCount := 0
-	// wg.Add(1)
-	// go func() {
-	// 	defer wg.Done()
-	// 	ticker := time.NewTicker(time.Millisecond * 100)
-	// 	defer ticker.Stop()
-	// 	for {
-	// 		select {
-	// 		case <-ctx.Done():
-	// 			return
-	// 		case <-ticker.C:
-	// 		}
-	// 		sc.AddErrorCount()
-	// 		AdminLogger.Println("debug error +1")
-	// 	}
-	// }()
 
 	logTicker := time.NewTicker(time.Second * 5) // 5秒置きに溜まったログを出力する
 	defer logTicker.Stop()
