@@ -39,16 +39,16 @@ const (
 
 // ScoreTag毎の倍率
 var ResultScoreMap = map[score.ScoreTag]int64{
-	ScorePOSTAdminTenantsAdd:             1,
+	ScorePOSTAdminTenantsAdd:             10,
 	ScoreGETAdminTenantsBilling:          10,
-	ScorePOSTOrganizerPlayersAdd:         1,
-	ScoreGETOrganizerPlayersList:         1,
-	ScorePOSTOrganizerPlayerDisqualified: 1,
-	ScorePOSTOrganizerCompetitionsAdd:    1,
-	ScorePOSTOrganizerCompetitionFinish:  1,
+	ScorePOSTOrganizerPlayersAdd:         10,
+	ScoreGETOrganizerPlayersList:         10,
+	ScorePOSTOrganizerPlayerDisqualified: 10,
+	ScorePOSTOrganizerCompetitionsAdd:    10,
+	ScorePOSTOrganizerCompetitionFinish:  10,
 	ScorePOSTOrganizerCompetitionScore:   10,
 	ScoreGETOrganizerBilling:             10,
-	ScoreGETOrganizerCompetitions:        1,
+	ScoreGETOrganizerCompetitions:        10,
 	ScoreGETPlayerDetails:                1,
 	ScoreGETPlayerRanking:                1,
 	ScoreGETPlayerCompetitions:           1,
