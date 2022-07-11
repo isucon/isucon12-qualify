@@ -4,7 +4,9 @@ services:
   webapp:
     cpus: 1
     mem_limit: 1g
-    build: ./backend-rust
+    build:
+      context: ..
+      dockerfile: ./development/backend-rust/Dockerfile
     environment:
       ISUCON_DB_HOST: mysql
       ISUCON_DB_PORT: 3306

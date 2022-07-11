@@ -14,11 +14,9 @@ RUN curl -sLO https://github.com/cli/cli/releases/download/v2.13.0/gh_2.13.0_lin
     tar xf gh_2.13.0_linux_amd64.tar.gz && \
     install gh_2.13.0_linux_amd64/bin/gh /usr/local/bin
 
-RUN mkdir -p /home/isucon/webapp/rust
 WORKDIR /home/isucon/webapp/rust
-COPY . .
+COPY ./webapp/rust /home/isucon/webapp/rust
 RUN cargo build
-ENV PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 CMD [ "./target/debug/isuports" ]
 
 
