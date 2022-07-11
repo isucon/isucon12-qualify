@@ -17,3 +17,5 @@ tokio = { version = "1.19.2", features = ["fs", "process"] }
 cookie = "0.16"
 jsonwebtoken = {version = "8", features=["use_pem"] }
 actix-form-data = "0.6.2"
+actix-multipart = "0.4.0"
+csv = "1.1.6"

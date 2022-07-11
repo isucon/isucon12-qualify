@@ -13,7 +13,11 @@ use std::path::{Path, PathBuf};
 use std::result::Result;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
- use actix_form_data::Value;
+use actix_multipart::Multipart;
+use std::io::Write;
+use actix_web::{middleware, web, App, Error, HttpResponse, HttpServer};
+use futures_util::TryStreamExt as _;
+use uuid::Uuid;
 
 const TENANT_DB_SCHEMA_FILE_PATH: &str = "../sql/tenant/10_schema.sql";
 const INITIALIZE_SCRIPT: &str = "..sql/init.sh";
@@ -908,7 +912,7 @@ async fn competition_score_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: web::Data<HttpRequest>,
     session: actix_session::Session,
-    uploaded_content: Value<()>,
+    mut payload: Multipart
 ) -> actix_web::Result<HttpResponse> {
     let v = parse_viewer(pool.clone(), request, session).await.unwrap();
     if v.role != ROLE_ORGANIZER {
@@ -929,9 +933,86 @@ async fn competition_score_handler(
         };
         return Ok(HttpResponse::Ok().json(res));
     }
-    let mut file = form.file("file").unwrap();
-    let mut headers = Vec::new();
-    file.read_to_end(&mut headers).await.unwrap()
+    // read csv formfile from payload
+
+
+
+    let mut filepath: String = "".to_string();
+    while let Some(mut field) = payload.next() {
+        // A multipart/form-data stream has to contain `content_disposition`
+        let content_disposition = field.content_disposition();
+
+        let filename = content_disposition
+            .get_filename()
+            .map_or_else(|| Uuid::new_v4().to_string(), sanitize_filename::sanitize);
+        let filepath = format!("./tmp/{filename}");
+
+        // File::create is blocking operation, use threadpool
+        let mut f = web::block(|| std::fs::File::create(filepath)).await??;
+
+        // Field in turn is stream of *Bytes* object
+        while let Some(chunk) = field.try_next().await? {
+            // filesystem operations are blocking, we have to use threadpool
+            f = web::block(move || f.write_all(&chunk).map(|_| f)).await??;
+        }
+    }
+    let mut rdr = csv::Reader::from_path(filepath).unwrap();
+    let header = rdr.records();
+    // check if header is "player_id", "score"
+    if header.next().unwrap().unwrap() != vec!["player_id", "score"] {
+        return Ok(actix_web::HttpResponse::BadRequest().finish());
+    }
+    // DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
+    let fl = flock_by_tenant_id(v.tenant_id.clone()).await.unwrap();
+    let mut row_num: i64 = 0;
+    let player_score_rows = Vec::<PlayerScoreRow>::new();
+    loop{
+        row_num += 1;
+        let row = rdr.records().collect();
+        if row.len() != 2 {
+            return Err(());
+        };
+        let (player_id, score_str) = row[0], row[1];
+        retrieve_player(tenant_db.clone(), player_id.clone())
+            .await
+            .unwrap();
+        let score: i64 = score_str.parse().unwrap();
+        let id = dispense_id(pool.clone());
+        let now: i64 = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        player_score_rows.push(PlayerScoreRow{
+            id: id,
+            tenant_id: v.tenant_id.clone(),
+            player_id: player_id.clone(),
+            competition_id: competition_id.clone(),
+            score: score.clone(),
+            row_num, row_num,
+            created_at, now,
+            updated_at, now,
+        })
+    }
+    sqlx::query::<SqlitePool>("DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?")
+    .bind(v.tenant_id.clone())
+    .bind(competition_id.clone())
+    .execute(tenant_db.clone())
+    .await.unwrap();
+    for ps in player_score_rows{
+        sqlx::query("INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_num, :created_at, :updated_at)")
+        .bind(ps)
+        .execute(tenant_db.clone())
+        .await.unwrap();
+
+    }
+    let res = SuccessResult {
+        success: true,
+        data: Some(ScoreHandlerResult{
+            rows: player_score_rows.len() as i64,
+        }),
+    };
+    Ok(HttpResponse::Ok().json(res))
+
 }
 
 #[derive(Debug, Serialize, Deserialize)]
