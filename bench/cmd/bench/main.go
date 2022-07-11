@@ -106,7 +106,8 @@ func main() {
 	scenario.PrintScenarioScoreMap()
 	scenario.PrintScenarioCount()
 	scenario.PrintWorkerCount()
-	score, addition, deduction := SumScore(result)
+	score, addition, deduction, isPassed := SumScore(result)
+	bench.ContestantLogger.Printf("PASSED: %v", isPassed)
 	bench.ContestantLogger.Printf("SCORE: %d (+%d %d)", score, addition, -deduction)
 	br := AllTagBreakdown(result)
 	tags := make([]string, 0, len(br))
@@ -122,7 +123,7 @@ func main() {
 	bench.AdminLogger.Printf("%s", pp.Sprint(AllTagBreakdown(result)))
 
 	// 0点以下(fail)ならエラーで終了
-	if option.ExitErrorOnFail && score <= 0 {
+	if !isPassed || option.ExitErrorOnFail && score <= 0 {
 		os.Exit(1)
 	}
 }
@@ -138,7 +139,7 @@ func AllTagBreakdown(result *isucandar.BenchmarkResult) score.ScoreTable {
 	return bd
 }
 
-func SumScore(result *isucandar.BenchmarkResult) (int64, int64, int64) {
+func SumScore(result *isucandar.BenchmarkResult) (int64, int64, int64, bool) {
 	score := result.Score
 	// 各タグに倍率を設定
 	for scoreTag, value := range bench.ResultScoreMap {
@@ -157,5 +158,11 @@ func SumScore(result *isucandar.BenchmarkResult) (int64, int64, int64) {
 		sum = 0
 	}
 
-	return sum, addition, int64(deduction)
+	// failure.Code ErrFailedBench があればfail扱いする
+	isPassed := true
+	errsMap := result.Errors.Count()
+	if i, ok := errsMap[string(bench.ErrFailedBench)]; ok && 0 < i {
+		isPassed = false
+	}
+	return sum, addition, int64(deduction), isPassed
 }
