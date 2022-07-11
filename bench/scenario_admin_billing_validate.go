@@ -126,6 +126,7 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 					resultYen += t.BillingYen
 				}
 				if resultYen <= sumYen {
+					ContestantLogger.Println("(CIでこの文章を見た方へ) 初期実装で「全テナントの合計金額が正しくありません」エラーが起きた様子を探しています。benchの不具合の可能性があります。コメントのリンクを #154 へ貼って頂けると嬉しいです") // TODO: 消す
 					return fmt.Errorf("全テナントの合計金額が正しくありません 金額は増えている必要があります (want: >%d, got:%d)", sumYen, resultYen)
 				}
 				return nil
