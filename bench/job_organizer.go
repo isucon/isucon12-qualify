@@ -20,7 +20,6 @@ type OrganizerJobConfig struct {
 }
 
 // 大会を作成, スコアを増やしながら入れる, 確定する
-// TODO: 一つのテナントに対して大会を2,3個くらい同時開催するのを想定してもいいのではないか
 func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkStep, conf *OrganizerJobConfig) error {
 	orgAg, err := conf.orgAc.GetAgent()
 	if err != nil {
@@ -59,6 +58,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 	}
 
 	{
+		ContestantLogger.Println("大会を作成します。")
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, comp.Title, orgAg)
 		msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
 		v := ValidateResponseWithMsg("新規大会追加", step, res, err, msg, WithStatusCode(200),
