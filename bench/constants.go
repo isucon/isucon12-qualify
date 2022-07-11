@@ -7,7 +7,7 @@ const (
 	// TODO: 以下ほぼすべて要調整
 
 	// NewTenantScenario
-	ConstNewTenantScenarioPlayerWorkerNum = 10 // 作成するplayer worker数
+	ConstNewTenantScenarioPlayerWorkerNum = 20 // 作成するplayer worker数
 
 	// PopularTenantScenario
 	ConstPopularTenantScenarioScoreRepeat = 2   // 一周のスコア入稿回数

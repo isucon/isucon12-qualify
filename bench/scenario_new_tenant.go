@@ -65,7 +65,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 			sc.AddErrorCount()
 			return v
 		}
-		ContestantLogger.Printf("テナント「%s」を作成しました", tenant.DisplayName)
+		sc.TenantAddLog.Printf("テナント「%s」を作成しました", tenant.DisplayName)
 	}
 
 	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.Name, "organizer")

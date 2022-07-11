@@ -30,6 +30,7 @@ const (
 	ErrFailedLoadJSON failure.StringCode = "load-json"
 	ErrCannotNewAgent failure.StringCode = "agent"
 	ErrInvalidRequest failure.StringCode = "request"
+	ErrFailedBench    failure.StringCode = "fail"
 )
 
 type TenantData struct {
@@ -62,6 +63,9 @@ type Scenario struct {
 	WorkerCh        chan Worker
 	ErrorCh         chan struct{}
 	CriticalErrorCh chan struct{}
+
+	CompetitionAddLog *CompactLogger
+	TenantAddLog      *CompactLogger
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -88,6 +92,9 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	sc.WorkerCh = make(chan Worker, 10)
 	sc.CriticalErrorCh = make(chan struct{}, 10)
 	sc.ErrorCh = make(chan struct{}, 10)
+
+	sc.CompetitionAddLog = NewCompactLog(ContestantLogger)
+	sc.TenantAddLog = NewCompactLog(ContestantLogger)
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(sc.Option.TargetURL)
@@ -158,9 +165,7 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 // ベンチ本編
 // isucandar.LoadScenario を満たすメソッド
 // isucandar.Benchmark の Load ステップで実行される
-func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error {
-	ctx, cancel := context.WithCancel(c)
-
+func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) error {
 	if sc.Option.PrepareOnly {
 		return nil
 	}
@@ -244,9 +249,12 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 
 	errorCount := 0
 	criticalCount := 0
-	end := false
+
+	logTicker := time.NewTicker(time.Second * 5) // 5秒置きに溜まったログを出力する
+	defer logTicker.Stop()
 
 	for {
+		end := false
 		select {
 		case <-ctx.Done():
 			end = true
@@ -268,17 +276,20 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 		case <-sc.CriticalErrorCh:
 			errorCount++
 			criticalCount++
+		case <-logTicker.C:
+			sc.CompetitionAddLog.Log()
+			sc.TenantAddLog.Log()
 		}
 
 		if ConstMaxError <= errorCount {
 			ContestantLogger.Printf("エラーが%d件を越えたので負荷走行を打ち切ります", ConstMaxError)
-			cancel()
+			step.Result().Errors.Add(ErrFailedBench)
 			end = true
 		}
 
 		if ConstMaxCriticalError <= criticalCount {
 			ContestantLogger.Printf("Criticalなエラーが%d件を越えたので負荷走行を打ち切ります", ConstMaxCriticalError)
-			cancel()
+			step.Result().Errors.Add(ErrFailedBench)
 			end = true
 		}
 
@@ -287,6 +298,7 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 			break
 		}
 	}
+	step.Cancel()
 	wg.Wait()
 
 	return nil
