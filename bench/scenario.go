@@ -164,8 +164,8 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 	if sc.Option.PrepareOnly {
 		return nil
 	}
-	ContestantLogger.Println("負荷テストを開始します")
-	defer ContestantLogger.Println("負荷テストを終了します")
+	ContestantLogger.Println("負荷走行を開始します")
+	defer AdminLogger.Println("負荷走行を終了しました")
 	wg := &sync.WaitGroup{}
 
 	// 最初に起動するシナリオ
@@ -271,18 +271,19 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 		}
 
 		if ConstMaxError <= errorCount {
-			AdminLogger.Printf("エラーが%d件を越えたので負荷テストを打ち切ります", ConstMaxError)
+			ContestantLogger.Printf("エラーが%d件を越えたので負荷走行を打ち切ります", ConstMaxError)
 			cancel()
 			end = true
 		}
 
 		if ConstMaxCriticalError <= criticalCount {
-			AdminLogger.Printf("Criticalなエラーが%d件を越えたので負荷テストを打ち切ります", ConstMaxCriticalError)
+			ContestantLogger.Printf("Criticalなエラーが%d件を越えたので負荷走行を打ち切ります", ConstMaxCriticalError)
 			cancel()
 			end = true
 		}
 
 		if end {
+			ContestantLogger.Printf("負荷走行を終了します")
 			break
 		}
 	}

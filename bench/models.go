@@ -37,7 +37,7 @@ type Account struct {
 }
 
 func (ac *Account) String() string {
-	return fmt.Sprintf("tenant:%s, role:%s, playerID:%s", ac.TenantName, ac.Role, ac.PlayerID)
+	return fmt.Sprintf("tenant:%s role:%s playerID:%s", ac.TenantName, ac.Role, ac.PlayerID)
 }
 
 // {admin,[tenantName]}.t.isucon.dev 的なURLを組み立てる
