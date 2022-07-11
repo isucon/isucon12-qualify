@@ -114,7 +114,7 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 	for {
 		// 大会作成
 		comp := &CompetitionData{
-			Title: FakeCompetitionName(),
+			Title: data.FakeCompetitionName(),
 		}
 		{
 			res, err, txt := PostOrganizerCompetitionsAddAction(ctx, comp.Title, orgAg)
