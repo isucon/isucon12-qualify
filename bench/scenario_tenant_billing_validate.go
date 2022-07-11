@@ -114,7 +114,7 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 	for {
 		// 大会作成
 		comp := &CompetitionData{
-			Title: data.RandomString(24),
+			Title: FakeCompetitionName(),
 		}
 		{
 			res, err, txt := PostOrganizerCompetitionsAddAction(ctx, comp.Title, orgAg)
@@ -131,6 +131,7 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 				sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 				return v
 			}
+			ContestantLogger.Printf("大会「%s」を作成しました", comp.Title)
 		}
 
 		// Billingの内訳を作成
