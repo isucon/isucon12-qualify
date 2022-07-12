@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/rand"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -146,4 +147,33 @@ func SleepWithCtx(ctx context.Context, sleepTime time.Duration) {
 // NOTE: start,endを範囲に含む (start <= n <= end)
 func randomRange(rg []int) int {
 	return rg[0] + rand.Intn(rg[1]-rg[0]+1)
+}
+
+type CompactLogger struct {
+	logger *log.Logger
+	logs   []string
+	mu     sync.Mutex
+}
+
+func NewCompactLog(lgr *log.Logger) *CompactLogger {
+	return &CompactLogger{
+		logger: lgr,
+		logs:   []string{},
+		mu:     sync.Mutex{},
+	}
+}
+
+func (cl *CompactLogger) Printf(format string, args ...any) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	cl.logs = append(cl.logs, fmt.Sprintf(format, args...))
+}
+
+func (cl *CompactLogger) Log() {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	if 0 < len(cl.logs) {
+		cl.logger.Printf("%s (類似のログ計%d件)", cl.logs[0], len(cl.logs))
+	}
+	cl.logs = []string{}
 }
