@@ -95,7 +95,8 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 		scoreInterval: 0,
 		addScoreNum:   0,
 	}
-	if err := sc.OrganizerJob(ctx, step, conf); err != nil {
+	jobResult, err := sc.OrganizerJob(ctx, step, conf)
+	if err != nil {
 		return err
 	}
 
@@ -105,12 +106,13 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	// 反映確認
 
 	// チェック項目
-	// 合計金額が増えていること
-	// TODO: 必要に応じて追加, ただしOrganizerJobによって増えた金額は現状取れない
+	// 合計金額が正しく増えていること
 	sumYen := int64(0)
 	for _, t := range billingResultTenants {
 		sumYen += t.BillingYen
 	}
+	// OrganizerJobによって増えた値段を加算
+	sumYen += int64(jobResult.ScoredPlayerNum * 100)
 
 	{
 		res, err, txt := GetAdminTenantsBillingAction(ctx, billingBeforeTenantID, adminAg)
@@ -121,9 +123,8 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 				for _, t := range r.Data.Tenants {
 					resultYen += t.BillingYen
 				}
-				if resultYen <= sumYen {
-					ContestantLogger.Println("(CIでこの文章を見た方へ) 初期実装で「全テナントの合計金額が正しくありません」エラーが起きた様子を探しています。benchの不具合の可能性があります。コメントのリンクを #154 へ貼って頂けると嬉しいです") // TODO: 消す
-					return fmt.Errorf("全テナントの合計金額が正しくありません 金額は増えている必要があります (want: >%d, got:%d)", sumYen, resultYen)
+				if resultYen != sumYen {
+					return fmt.Errorf("全テナントの合計金額が正しくありません (want: %d, got:%d)", sumYen, resultYen)
 				}
 				return nil
 			}),

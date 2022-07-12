@@ -75,7 +75,7 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 	}
 
 	for {
-		if err := sc.OrganizerJob(ctx, step, orgJobConf); err != nil {
+		if _, err := sc.OrganizerJob(ctx, step, orgJobConf); err != nil {
 			return err
 		}
 
