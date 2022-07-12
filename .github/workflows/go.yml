@@ -50,3 +50,4 @@ jobs:
         if: ${{ always() }}
         run: |
           make down/go
+        working-directory: ./development
