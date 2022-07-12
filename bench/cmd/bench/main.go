@@ -129,7 +129,7 @@ func main() {
 	if os.Getenv("ISUXBENCH_REPORT_FD") != "" {
 		mustReport(&isuxportalResources.BenchmarkResult{
 			Finished: true,
-			Passed:   score > 0,
+			Passed:   isPassed,
 			Score:    score,
 			ScoreBreakdown: &isuxportalResources.BenchmarkResult_ScoreBreakdown{
 				Raw:       addition,
@@ -144,8 +144,8 @@ func main() {
 		})
 	}
 
-	// 0点以下(fail)ならエラーで終了
-	if !isPassed || option.ExitErrorOnFail && score <= 0 {
+	// failならエラーで終了
+	if option.ExitErrorOnFail && !isPassed {
 		os.Exit(1)
 	}
 }
