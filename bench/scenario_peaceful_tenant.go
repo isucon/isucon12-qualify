@@ -77,6 +77,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 			return v
 		}
 	}
+
 	n := rand.Intn(len(playerIDs) - 1)
 	disqualifyPlayerID := playerIDs[n]
 	checkerPlayerID := playerIDs[n+1]
@@ -114,6 +115,66 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 		}
 	}
 
+	// GetPlayer
+	{
+		res, err, txt := GetPlayerAction(ctx, disqualifyPlayerID, disqualifiedPlayerAg)
+		msg := fmt.Sprintf("%s %s", disqualifiedPlayerAc, txt)
+		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得: 失格前", step, res, err, msg, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPIPlayer) error {
+				if disqualifyPlayerID != r.Data.Player.ID {
+					return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", disqualifyPlayerID, r.Data.Player.ID)
+				}
+				if false != r.Data.Player.IsDisqualified {
+					return fmt.Errorf("失格状態が違います (want: %v, got: %v)", false, r.Data.Player.IsDisqualified)
+				}
+
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
+	// GetPlayerCompetitions
+	{
+		res, err, txt := GetPlayerCompetitionsAction(ctx, disqualifiedPlayerAg)
+		msg := fmt.Sprintf("%s %s", disqualifiedPlayerAc, txt)
+		v := ValidateResponseWithMsg("テナント内の大会情報取得: 失格する前のプレイヤー", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPICompetitions) error {
+				_ = r
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
+	// GetPlayerRanking
+	{
+		res, err, txt := GetPlayerCompetitionRankingAction(ctx, tenant.Competitions[0].ID, "", disqualifiedPlayerAg)
+		msg := fmt.Sprintf("%s %s", disqualifiedPlayerAc, txt)
+		v := ValidateResponseWithMsg("大会内のランキング取得: 失格する前のプレイヤー", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				_ = r
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
+
 	// プレイヤーを1人失格にする
 	{
 		res, err, txt := PostOrganizerApiPlayerDisqualifiedAction(ctx, disqualifyPlayerID, orgAg)
@@ -133,12 +194,37 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 	}
 
 	// 失格プレイヤーで情報を見に行く 403
+	// GetPlayer
+	{
+		res, err, txt := GetPlayerAction(ctx, disqualifyPlayerID, disqualifiedPlayerAg)
+		msg := fmt.Sprintf("%s %s", disqualifiedPlayerAc, txt)
+		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得: 失格済みなので403", step, res, err, msg, WithStatusCode(403))
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
+	// GetPlayerCompetitions
 	{
 		res, err, txt := GetPlayerCompetitionsAction(ctx, disqualifiedPlayerAg)
 		msg := fmt.Sprintf("%s %s", disqualifiedPlayerAc, txt)
-		v := ValidateResponseWithMsg("テナント内の大会情報取得:  失格済みプレイヤーは403で弾く", step, res, err, msg, WithStatusCode(403))
+		v := ValidateResponseWithMsg("テナント内の大会情報取得: 失格済みなので403", step, res, err, msg, WithStatusCode(403))
 		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
+	// GetPlayerRanking
+	{
+		res, err, txt := GetPlayerCompetitionRankingAction(ctx, tenant.Competitions[0].ID, "", disqualifiedPlayerAg)
+		msg := fmt.Sprintf("%s %s", disqualifiedPlayerAc, txt)
+		v := ValidateResponseWithMsg("大会内のランキング取得: 失格済みなので403", step, res, err, msg, WithStatusCode(403))
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
 			sc.AddErrorCount()
 			return v

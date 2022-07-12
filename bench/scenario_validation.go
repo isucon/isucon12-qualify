@@ -732,6 +732,7 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 	// playerDetailsを取ってスコアを確認
 	// 別スコアを入稿
 
+	// TODO
 	// 結果を引く
 	// {
 	// 	res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
