@@ -103,7 +103,14 @@ func Run(tenantsNum int) error {
 	benchTenantSrcs := make([]*BenchmarkerTenantSource, 0)
 	for i := 0; i < tenantsNum; i++ {
 		log.Println("create tenant")
-		tenant := CreateTenant(i == 0)
+		tt := TenantTagGeneral
+		switch i {
+		case 0:
+			tt = TenantTagFirst
+		case 1:
+			tt = TenantTagSecond
+		}
+		tenant := CreateTenant(tt)
 		players := CreatePlayers(tenant)
 		competitions := CreateCompetitions(tenant)
 		playerScores, visitHistroies, billing, benchComps, b := CreatePlayerData(tenant, players, competitions)
@@ -312,15 +319,27 @@ func storeTenant(tenant *isuports.TenantRow, players []*isuports.PlayerRow, comp
 	return nil
 }
 
-func CreateTenant(isFirst bool) *isuports.TenantRow {
+type TenantTag int
+
+const (
+	TenantTagGeneral TenantTag = iota
+	TenantTagFirst
+	TenantTagSecond
+)
+
+func CreateTenant(tag TenantTag) *isuports.TenantRow {
 	id := GenTenantID()
 	var created time.Time
 	var name, displayName string
-	if isFirst {
-		// これだけ特別
+	switch tag {
+	// 動作検証のための特別なテナント
+	case TenantTagFirst:
 		created = Epoch
 		name, displayName = "isucon", "ISUコングロマリット"
-	} else {
+	case TenantTagSecond:
+		created = Epoch.Add(time.Minute * 5)
+		name, displayName = "kayac", "KAYAC"
+	case TenantTagGeneral:
 		created = fake.Time().TimeBetween(
 			Epoch.Add(time.Duration(id)*time.Hour*3),
 			Epoch.Add(time.Duration(id+1)*time.Hour*3),
@@ -370,12 +389,17 @@ func CreatePlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 	return &player
 }
 
+var fixedPlayerDisplayName = map[int64]string{
+	1: "ISUコンボイ",
+	2: "fujiwara組",
+}
+
 func CreateFixedPlayer(tenant *isuports.TenantRow) *isuports.PlayerRow {
 	created := tenant.CreatedAt
 	player := isuports.PlayerRow{
 		TenantID:       tenant.ID,
 		ID:             "000" + fmt.Sprintf("%x", tenant.ID),
-		DisplayName:    fake.Person().Name(),
+		DisplayName:    fixedPlayerDisplayName[tenant.ID],
 		IsDisqualified: false,
 		CreatedAt:      created,
 		UpdatedAt:      created,
