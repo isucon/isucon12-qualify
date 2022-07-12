@@ -131,7 +131,7 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 				sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 				return v
 			}
-			ContestantLogger.Printf("大会「%s」を作成しました", comp.Title)
+			sc.CompetitionAddLog.Printf("大会「%s」を作成しました", comp.Title)
 		}
 
 		// Billingの内訳を作成
