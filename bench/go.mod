@@ -49,7 +49,7 @@ require (
 )
 
 replace (
-	github.com/isucon/isucon12-portal => ../../isucon12-portal
+	github.com/isucon/isucon12-portal => ../isucon12-portal
 	github.com/isucon/isucon12-qualify/data => ../data
 	github.com/isucon/isucon12-qualify/webapp/go => ../webapp/go
 )
