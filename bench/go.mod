@@ -5,8 +5,7 @@ go 1.18
 require (
 	github.com/google/go-cmp v0.5.8
 	github.com/isucon/isucandar v0.0.0-20220322062028-6dd56dc57d72
-	github.com/isucon/isucon12-portal/bench-tool.go/benchrun v0.0.0-00010101000000-000000000000
-	github.com/isucon/isucon12-portal/proto.go/isuxportal/resources v0.0.0-00010101000000-000000000000
+	github.com/isucon/isucon12-portal v0.0.0-00010101000000-000000000000
 	github.com/isucon/isucon12-qualify/data v0.0.0-00010101000000-000000000000
 	github.com/isucon/isucon12-qualify/webapp/go v0.0.0-00010101000000-000000000000
 	github.com/k0kubun/pp/v3 v3.1.0
@@ -50,8 +49,7 @@ require (
 )
 
 replace (
-	github.com/isucon/isucon12-portal/bench-tool.go/benchrun => ../../isucon12-portal/bench-tool.go/benchrun
-	github.com/isucon/isucon12-portal/proto.go/isuxportal/resources => ../../isucon12-portal/proto.go/isuxportal/resources
+	github.com/isucon/isucon12-portal => ../../isucon12-portal
 	github.com/isucon/isucon12-qualify/data => ../data
 	github.com/isucon/isucon12-qualify/webapp/go => ../webapp/go
 )
