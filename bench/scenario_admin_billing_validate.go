@@ -3,6 +3,7 @@ package bench
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -51,20 +52,11 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 		return err
 	}
 
-	// 初期データからテナント選ぶ
-	index := randomRange(ConstAdminBillingValidateScenarioIDRange)
-	tenant := sc.InitialDataTenant[int64(index)]
-
-	// indexが含まれる区間がとれるAdminBillingのbefore
-	var billingBeforeTenantID string
-	{
-		rangeEnd := ConstAdminBillingValidateScenarioIDRange[1] + 1
-		n := index + 10
-		if rangeEnd < n {
-			n = rangeEnd
-		}
-		billingBeforeTenantID = fmt.Sprintf("%d", sc.InitialDataTenant[int64(n)].TenantID)
-	}
+	// beforeTenantIDを範囲から決める
+	rangeStart := ConstAdminBillingValidateScenarioIDRange[0] + 10
+	rangeEnd := ConstAdminBillingValidateScenarioIDRange[1] + 1
+	index := randomRange([]int{rangeStart, rangeEnd})
+	billingBeforeTenantID := fmt.Sprintf("%d", sc.InitialDataTenant[int64(index)].TenantID)
 
 	// 最初の状態のBilling
 	var billingResultTenants []isuports.TenantWithBilling
@@ -85,8 +77,12 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 		}
 	}
 
+	// レスポンスの中から対象のテナントを選ぶ
+	targetIndex := rand.Intn(len(billingResultTenants))
+	targetTenant := billingResultTenants[targetIndex].Name
+
 	// 大会を開催、Billing確定まで進める
-	orgAc, _, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")
+	orgAc, _, err := sc.GetAccountAndAgent(AccountRoleOrganizer, targetTenant, "organizer")
 	if err != nil {
 		return err
 	}
@@ -94,7 +90,7 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	conf := &OrganizerJobConfig{
 		orgAc:         orgAc,
 		scTag:         scTag,
-		tenantName:    tenant.TenantName,
+		tenantName:    targetTenant,
 		scoreRepeat:   1,
 		scoreInterval: 0,
 		addScoreNum:   0,
