@@ -58,7 +58,7 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	// indexが含まれる区間がとれるAdminBillingのbefore
 	var billingBeforeTenantID string
 	{
-		rangeEnd := ConstAdminBillingValidateScenarioIDRange[1]
+		rangeEnd := ConstAdminBillingValidateScenarioIDRange[1] + 1
 		n := index + 10
 		if rangeEnd < n {
 			n = rangeEnd
