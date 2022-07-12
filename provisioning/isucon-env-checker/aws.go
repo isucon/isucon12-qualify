@@ -36,6 +36,10 @@ func GetPublicIP(svc *ec2metadata.EC2Metadata) (string, error) {
 	return svc.GetMetadata("public-ipv4")
 }
 
+func GetInstanceID(svc *ec2metadata.EC2Metadata) (string, error) {
+	return svc.GetMetadata("instance-id")
+}
+
 func GetVPC(svc *ec2metadata.EC2Metadata) (string, error) {
 	s, err := net.Interfaces()
 	if err != nil {

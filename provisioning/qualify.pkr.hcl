@@ -4,16 +4,16 @@ variable "revision" {
 }
 
 locals {
-  name = "isucon12-envcheck-${formatdate("YYYYMMDD-hhmm", timestamp())}"
+  name = "isucon12-qualify-${formatdate("YYYYMMDD-hhmm", timestamp())}"
   ami_tags = {
-    Project  = "portal"
-    Family   = "isucon12-envcheck"
+    Project  = "qualify"
+    Family   = "isucon12-qualify"
     Name     = "${local.name}"
     Revision = "${var.revision}"
     Packer   = "1"
   }
   run_tags = {
-    Project = "portal"
+    Project = "qualify"
     Name    = "packer-${local.name}"
     Packer  = "1"
     Ignore  = "1"
@@ -31,7 +31,7 @@ data "amazon-ami" "ubuntu-jammy" {
   region      = "ap-northeast-1"
 }
 
-source "amazon-ebs" "envcheck" {
+source "amazon-ebs" "qualify" {
   ami_name    = "${local.name}"
   ami_regions = ["ap-northeast-1"]
 
@@ -51,7 +51,7 @@ source "amazon-ebs" "envcheck" {
 }
 
 build {
-  sources = ["source.amazon-ebs.envcheck"]
+  sources = ["source.amazon-ebs.qualify"]
 
   provisioner "file" {
     destination = "/dev/shm/isucon-env-checker"
@@ -101,7 +101,7 @@ build {
       "sudo systemctl enable isucon-env-checker.service",
 
       # Create isucon user
-      "sudo useradd -s /usr/local/bin/isucon-env-checker -m -p '*' isucon",
+      "sudo useradd -s /bin/bash -m -p '*' isucon",
       "sudo mkdir -p /home/isucon/.ssh",
       "sudo chmod 700 /home/isucon/.ssh",
       "sudo chown -R isucon:isucon /home/isucon/.ssh",

@@ -19,10 +19,12 @@ type CheckConfig struct {
 }
 
 type checker struct {
-	ExpectedAMI string
-	ExpectedAZ  string
+	ExpectedAMI          string
+	ExpectedAZ           string
+	ExpectedInstanceType string
 
 	InstanceIP    string
+	InstanceID    string
 	InstanceVPCID string
 
 	DescribeInstances         []*ec2.DescribeInstancesOutput
@@ -51,8 +53,9 @@ func Check(cfg CheckConfig) (Result, error) {
 	buf := new(bytes.Buffer)
 	logger := log.New(buf, "", log.LstdFlags)
 	c := &checker{
-		ExpectedAMI: cfg.AMI,
-		ExpectedAZ:  cfg.AZ,
+		ExpectedAMI:          cfg.AMI,
+		ExpectedAZ:           cfg.AZ,
+		ExpectedInstanceType: "c5.large",
 
 		adminLog:    buf,
 		adminLogger: logger,
@@ -73,7 +76,7 @@ func Check(cfg CheckConfig) (Result, error) {
 
 	raw, _ := json.Marshal(c)
 	return Result{
-		Name:         cfg.Name,
+		Name:         c.name(),
 		Passed:       len(c.failures) == 0,
 		IPAddress:    c.InstanceIP,
 		Message:      c.message(),
@@ -97,6 +100,10 @@ func (c *checker) loadAWS() error {
 	c.InstanceVPCID, err = GetVPC(ec2md)
 	if err != nil {
 		return fmt.Errorf("GetVPC: %w", err)
+	}
+	c.InstanceID, err = GetInstanceID(ec2md)
+	if err != nil {
+		return fmt.Errorf("GetInstanceID: %w", err)
 	}
 
 	c.DescribeInstances, err = DescribeInstances(ec2client, c.InstanceVPCID)
@@ -131,4 +138,29 @@ func (c *checker) message() string {
 		return "全てのチェックをパスしました"
 	}
 	return strconv.Itoa(len(c.failures)) + "個の問題があります\n" + strings.Join(c.failures, "\n")
+}
+
+func (c *checker) name() string {
+	for _, o := range c.DescribeInstances {
+		for _, r := range o.Reservations {
+			for _, i := range r.Instances {
+				id := *i.InstanceId
+				if id != c.InstanceID {
+					continue
+				}
+				for _, t := range i.Tags {
+					if *t.Key != "Name" {
+						continue
+					}
+					name := *t.Value
+					if checkName, ok := checkNameByInstanceName[name]; ok {
+						return checkName
+					} else {
+						return "qualify-unknown"
+					}
+				}
+			}
+		}
+	}
+	return "qualify-unknown"
 }

@@ -1,6 +1,6 @@
 .PHONY: build clean
 build: isucon-env-checker/isucon-env-checker isucon-admin.pub
-	packer build envcheck.pkr.hcl
+	packer build qualify.pkr.hcl
 
 isucon-env-checker/isucon-env-checker: isucon-env-checker/*.go isucon-env-checker/go.*
 	cd isucon-env-checker && GOOS=linux GOARCH=amd64 go build .
