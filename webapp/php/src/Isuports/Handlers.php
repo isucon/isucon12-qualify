@@ -91,7 +91,7 @@ class Handlers
     private function dispenseID(): string
     {
         $id = 0;
-        /** @var ?RuntimeException $lastErr */
+        /** @var ?\Exception $lastErr */
         $lastErr = null;
         for ($i = 0; $i < 100; $i++) {
             try {
