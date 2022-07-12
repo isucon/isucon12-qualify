@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
@@ -27,7 +28,7 @@ func (sc *Scenario) PopularTenantScenarioWorker(step *isucandar.BenchmarkStep, p
 	},
 		// // 無限回繰り返す
 		worker.WithInfinityLoop(),
-		worker.WithUnlimitedParallelism(),
+		worker.WithMaxParallelism(20),
 	)
 	if err != nil {
 		return nil, err
@@ -51,24 +52,21 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 	if isHeavyTenant {
 		tenantName = "isucon"
 	} else {
-		var data *InitialDataRow
-		for {
-			data = sc.InitialData.Choise()
-			if data.TenantName != "isucon" {
-				break
-			}
-		}
-		tenantName = data.TenantName
+		// 初期データからテナントを選ぶ
+		index := randomRange(ConstPopularTenantScenarioIDRange)
+		tenant := sc.InitialDataTenant[int64(index)]
+
+		tenantName = tenant.TenantName
 	}
 
-	_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
+	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
 	if err != nil {
 		return err
 	}
 
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
 	orgJobConf := &OrganizerJobConfig{
-		orgAg:         orgAg,
+		orgAc:         orgAc,
 		scTag:         scTag,
 		tenantName:    tenantName,
 		scoreRepeat:   ConstPopularTenantScenarioScoreRepeat,
@@ -83,8 +81,9 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 
 		// テナント請求ダッシュボードの閲覧
 		{
-			res, err := GetOrganizerBillingAction(ctx, orgAg)
-			v := ValidateResponse("テナント内の請求情報", step, res, err, WithStatusCode(200),
+			res, err, txt := GetOrganizerBillingAction(ctx, orgAg)
+			msg := fmt.Sprintf("%s %s", orgAc, txt)
+			v := ValidateResponseWithMsg("テナント内の請求情報", step, res, err, msg, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPIBilling) error {
 					_ = r
 					return nil
@@ -97,6 +96,10 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 				return v
 			}
 		}
+		// TODO もっとリクエストしたい
+		// TODO popularTenantScenarioWorkerは増やして良いかも
+		// ただしHeavyTenantお前はダメ
+
 		orgJobConf.scoreRepeat++
 	}
 
