@@ -51,6 +51,11 @@ func main() {
 	// この時点で各フィールドに値が設定されます
 	flag.Parse()
 
+	// supervisorから起動された場合はベンチ先アドレスをISUXBENCH_TARGETから読む
+	if os.Getenv("ISUXBENCH_TARGET") != "" {
+		option.TargetAddr = fmt.Sprintf("%s:%d", os.Getenv("ISUXBENCH_TARGET"), 443)
+	}
+
 	// 現在の設定を大会運営向けロガーに出力
 	bench.AdminLogger.Print(option)
 	bench.Debug = option.Debug
