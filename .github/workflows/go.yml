@@ -46,3 +46,8 @@ jobs:
         working-directory: ./development
         run: |
           make run-bench-ci
+      - name: "down containers"
+        if: ${{ always() }}
+        run: |
+          make down/go
+        working-directory: ./development

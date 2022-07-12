@@ -12,7 +12,7 @@ on:
 jobs:
   sync:
     name: checkout
-    runs-on: [self-hosted, core16]
+    runs-on: [self-hosted, core16, self-hosted-runner-2]
     steps:
     - name: Check out code
       uses: actions/checkout@v3
