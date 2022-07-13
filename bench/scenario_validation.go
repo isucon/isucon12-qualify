@@ -601,7 +601,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	return nil
 }
 
-// ランキングの結果が最大100件なことを確認
+// ランキングの結果の整合性を確認
 func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
 	tenantName := "rankingcheck-tenantid"
 	tenantDisplayName := "rankingCheck-Tenantname"
@@ -768,8 +768,9 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 		}
 	}
 
-	// 別の順位になるスコアを入稿
+	// 逆の順位になるスコアを入稿
 	// pIDs[n]... 1000-n点、(n+1)位
+	rankingCheckScore = ScoreRows{}
 	for i, playerID := range pIDs {
 		rankingCheckScore = append(rankingCheckScore, &ScoreRow{
 			PlayerID: playerID,
@@ -846,6 +847,69 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 		)
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
+		}
+	}
+
+	// 全員同じスコアを入力（先に出てきたほうが順位が上）
+	// 1人のプレイヤーが複数行ある（後に出てきた行が反映）
+	// pIDs[n]... 1000点、(n+1)位
+	rankingCheckScore = ScoreRows{}
+	for _, playerID := range pIDs {
+		rankingCheckScore = append(rankingCheckScore, &ScoreRow{
+			PlayerID: playerID,
+			Score:    1,
+		})
+		rankingCheckScore = append(rankingCheckScore, &ScoreRow{
+			PlayerID: playerID,
+			Score:    1000,
+		})
+	}
+
+	{
+		csv := rankingCheckScore.CSV()
+		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
+		v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg,
+			WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+				if r.Data.Rows != int64(len(rankingCheckScore)) {
+					return fmt.Errorf("大会結果CSV入稿レスポンスのRowsが異なります (want: %d, got: %d)", len(rankingCheckScore), r.Data.Rows)
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return &v
+		}
+	}
+
+	// 結果を引く
+	{
+		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
+		v := ValidateResponseWithMsg("大会内のランキング取得: ページングなし,上限100件", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				if 100 != len(r.Data.Ranks) {
+					return fmt.Errorf("大会のランキングの結果の最大は100件である必要があります (want: %d, got: %d)", 100, len(r.Data.Ranks))
+				}
+				sort.Slice(r.Data.Ranks, func(i, j int) bool {
+					return r.Data.Ranks[i].Rank < r.Data.Ranks[j].Rank
+				})
+				for i, rank := range r.Data.Ranks {
+					if rank.Rank != int64(i+1) {
+						return fmt.Errorf("大会のランキングの順位が違います Player:%s(%s) (want: %d位, got: %d位)", rank.PlayerDisplayName, rank.PlayerID, 101-(i+1), rank.Rank)
+					}
+					if rank.PlayerID != pIDs[i] {
+						return fmt.Errorf("大会のランキングの%d位のプレイヤーが違います (want: %s, got: %s)", i+1, pIDs[i], rank.PlayerID)
+					}
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return &v
 		}
 	}
 
