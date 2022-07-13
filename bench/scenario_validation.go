@@ -288,7 +288,6 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 							return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", playerIDs[checkPlayerIndex], r.Data.Player.ID)
 						}
 						if 0 != len(r.Data.Scores) {
-							ContestantLogger.Println("NOTE: 参加者のランキング参照と大会スコア入稿でロックが取れていない可能性があります")
 							return fmt.Errorf("参加した大会数が違います (want: %d, got: %d)", 0, len(r.Data.Scores))
 						}
 
@@ -323,7 +322,6 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 							return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", playerIDs[checkPlayerIndex], r.Data.Player.ID)
 						}
 						if 1 != len(r.Data.Scores) {
-							ContestantLogger.Println("NOTE: 参加者のランキング参照と大会スコア入稿でロックが取れていない可能性があります")
 							return fmt.Errorf("参加した大会数が違います (want: %d, got: %d)", 1, len(r.Data.Scores))
 						}
 						if competitionTitle != r.Data.Scores[0].CompetitionTitle {
