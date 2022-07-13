@@ -212,7 +212,6 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 	}
 
 	// 軽いテナント(id!=1)を見るworker
-	// TODO: 現状増やすきっかけが無いので初期から並列数多くてもよいかも
 	{
 		wkr, err := sc.PopularTenantScenarioWorker(step, 1, false)
 		if err != nil {
