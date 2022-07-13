@@ -13,7 +13,7 @@ jobs:
         go:
           - 1.18
     name: Build
-    runs-on: [self-hosted, core16]
+    runs-on: [self-hosted, core16, self-hosted-runner-2]
     services:
       db:
         image: mysql:8.0.29
