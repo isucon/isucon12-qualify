@@ -1,10 +1,8 @@
 package bench
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"mime/multipart"
 	"net/http"
 	"sort"
 	"strconv"
@@ -258,84 +256,46 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	}
 	csv := score.CSV()
 
-	// スコア入稿とPlayerのランキング参照でロックが取れていることを確認する
-	// ref: https://github.com/isucon/isucon12-qualify/pull/157#discussion_r919963056
+	// スコア入稿とPlayerのランキング参照を同時
+	checkPlayerIndex := 10 // < disqualifiedPlayerIndex
 	{
 		eg := errgroup.Group{}
-		playerRequestdCh := make(chan struct{})
-		scoreRequestedCh := make(chan struct{})
+		scoreCh := make(chan struct{})
 
 		eg.Go(func() error {
-			checkPlayerIndex := 10 // < disqualifiedPlayerIndex
-			{
+			beforeScores := 0
+			isDone := false
+			for {
+				select {
+				case <-scoreCh:
+					isDone = true
+				default:
+				}
+
 				// 大会スコア入稿より早く実行する ランキングはまだ反映されていない
 				// 厳密にリクエストの順番を取りたいのでActionの展開
-				msg := fmt.Sprintf("%s %s", playerAc, "playerID:"+playerIDs[checkPlayerIndex])
-				req, err := playerAg.GET("/api/player/player/" + playerIDs[checkPlayerIndex])
-				if err != nil {
-					return err
-				}
-
-				playerRequestdCh <- struct{}{}
-				AdminLogger.Println("request player ranking: 1")
-				res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-					return playerAg.Do(ctx, req)
-				})
-				v := ValidateResponseWithMsg("プレイヤーと戦績情報取得: 入稿前", step, res, err, msg, WithStatusCode(200),
+				res, err, txt := GetPlayerAction(ctx, playerIDs[checkPlayerIndex], playerAg)
+				msg := fmt.Sprintf("%s %s", playerAc, txt)
+				v := ValidateResponseWithMsg("プレイヤーと戦績情報取得: 入稿と同時", step, res, err, msg, WithStatusCode(200),
 					WithContentType("application/json"),
 					WithSuccessResponse(func(r ResponseAPIPlayer) error {
 						if playerIDs[checkPlayerIndex] != r.Data.Player.ID {
 							return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", playerIDs[checkPlayerIndex], r.Data.Player.ID)
 						}
-						if 0 != len(r.Data.Scores) {
-							return fmt.Errorf("参加した大会数が違います (want: %d, got: %d)", 0, len(r.Data.Scores))
-						}
 
+						if len(r.Data.Scores) < beforeScores {
+							return fmt.Errorf("参加した大会数が前回リクエストから減りました (before: %d, got: %d)", beforeScores, len(r.Data.Scores))
+						}
+						beforeScores = len(r.Data.Scores)
 						return nil
 					}),
 				)
 				if !v.IsEmpty() && sc.Option.StrictPrepare {
 					return v
 				}
-			}
-			// ここでスコア入稿が処理を初めてロックを取るので、次のランキング参照は入稿完了まで待たされ、結果は反映されている
-			{
-				msg := fmt.Sprintf("%s %s", playerAc, "playerID:"+playerIDs[checkPlayerIndex])
-				req, err := playerAg.GET("/api/player/player/" + playerIDs[checkPlayerIndex])
-				if err != nil {
-					return err
-				}
 
-				// CSV入稿リクエストが飛んだら実行
-				// 確実に入稿リクエスト後にするためにsleepを入れる
-				<-scoreRequestedCh
-				time.Sleep(time.Millisecond * 1)
-
-				AdminLogger.Println("request player ranking: 2")
-				res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-					return playerAg.Do(ctx, req)
-				})
-				v := ValidateResponseWithMsg("プレイヤーと戦績情報取得: 入校後", step, res, err, msg, WithStatusCode(200),
-					WithContentType("application/json"),
-					WithSuccessResponse(func(r ResponseAPIPlayer) error {
-						if playerIDs[checkPlayerIndex] != r.Data.Player.ID {
-							return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", playerIDs[checkPlayerIndex], r.Data.Player.ID)
-						}
-						if 1 != len(r.Data.Scores) {
-							return fmt.Errorf("参加した大会数が違います (want: %d, got: %d)", 1, len(r.Data.Scores))
-						}
-						if competitionTitle != r.Data.Scores[0].CompetitionTitle {
-							return fmt.Errorf("参加した大会IDが違います (want: %s, got: %s)", competitionTitle, r.Data.Scores[checkPlayerIndex].CompetitionTitle)
-						}
-						if int64(100+checkPlayerIndex) != r.Data.Scores[0].Score {
-							return fmt.Errorf("スコアが違います (want: %d, got: %d)", 100+checkPlayerIndex, r.Data.Scores[0].Score)
-						}
-
-						return nil
-					}),
-				)
-				if !v.IsEmpty() && sc.Option.StrictPrepare {
-					return v
+				if isDone {
+					break
 				}
 			}
 			return nil
@@ -347,35 +307,8 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 			//	失格済みのプレイヤーは含まれていても問題ない
 			// 	最後の一人はスコア未登録+ranking参照済みユーザーとしてbilling検証に利用する
 			// 後ろのプレイヤーはスコア未登録(noScorePlayerIndex以降)
-
-			// 厳密にリクエストの順番を決めたいのでAction展開
-			body := &bytes.Buffer{}
-			mw := multipart.NewWriter(body)
-			fw, err := mw.CreateFormFile("scores", "nandemoii")
-			if err != nil {
-				mw.Close()
-				return err
-			}
-			fw.Write([]byte(csv))
-			mw.Close()
-			req, err := orgAg.POST("/api/organizer/competition/"+competitionID+"/score", body)
-			if err != nil {
-				return err
-			}
-			req.Header.Set("Content-Type", mw.FormDataContentType())
-
-			// 1回目のPlayerリクエストがとんだらリクエストする
-			<-playerRequestdCh
-			// 確実にプレイヤー情報取得リクエスト後にするためにsleepを入れる
-			time.Sleep(time.Millisecond * 1)
-
-			AdminLogger.Println("request score")
-			scoreRequestedCh <- struct{}{}
-			res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-				return orgAg.Do(ctx, req)
-			})
-
-			msg := fmt.Sprintf("%s competitionID:%s  CSV length:%dbytes", orgAc, competitionID, len([]byte(csv)))
+			res, err, txt := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
+			msg := fmt.Sprintf("%s %s", orgAc, txt)
 			v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg, WithStatusCode(200),
 				WithContentType("application/json"),
 				WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
@@ -386,11 +319,39 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 			if !v.IsEmpty() {
 				return v
 			}
+			close(scoreCh)
 			return nil
 		})
 
 		if err := eg.Wait(); err != nil {
 			return nil
+		}
+	}
+
+	{
+		res, err, txt := GetPlayerAction(ctx, playerIDs[checkPlayerIndex], playerAg)
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
+		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得: 入稿後", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPIPlayer) error {
+				if playerIDs[checkPlayerIndex] != r.Data.Player.ID {
+					return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", playerIDs[checkPlayerIndex], r.Data.Player.ID)
+				}
+
+				if 1 != len(r.Data.Scores) {
+					return fmt.Errorf("参加した大会数が違います (want: %d, got: %d)", 1, len(r.Data.Scores))
+				}
+				if competitionTitle != r.Data.Scores[0].CompetitionTitle {
+					return fmt.Errorf("参加した大会IDが違います (want: %s, got: %s)", competitionTitle, r.Data.Scores[checkPlayerIndex].CompetitionTitle)
+				}
+				if int64(100+checkPlayerIndex) != r.Data.Scores[0].Score {
+					return fmt.Errorf("スコアが違います (want: %d, got: %d)", 100+checkPlayerIndex, r.Data.Scores[0].Score)
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
 		}
 	}
 
