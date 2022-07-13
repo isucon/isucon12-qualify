@@ -259,6 +259,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	csv := score.CSV()
 
 	// スコア入稿とPlayerのランキング参照でロックが取れていることを確認する
+	// ref: https://github.com/isucon/isucon12-qualify/pull/157#discussion_r919963056
 	{
 		eg := errgroup.Group{}
 		playerRequestdCh := make(chan struct{})
@@ -307,8 +308,10 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 				}
 
 				// CSV入稿リクエストが飛んだら実行
+				// 確実に入稿リクエスト後にするためにsleepを入れる
 				<-scoreRequestedCh
 				time.Sleep(time.Millisecond * 1)
+
 				AdminLogger.Println("request player ranking: 2")
 				res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
 					return playerAg.Do(ctx, req)
@@ -365,7 +368,9 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 
 			// 1回目のPlayerリクエストがとんだらリクエストする
 			<-playerRequestdCh
+			// 確実にプレイヤー情報取得リクエスト後にするためにsleepを入れる
 			time.Sleep(time.Millisecond * 1)
+
 			AdminLogger.Println("request score")
 			scoreRequestedCh <- struct{}{}
 			res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
