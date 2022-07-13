@@ -62,16 +62,39 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	eg := errgroup.Group{}
 	eg.Go(func() error {
-		return allAPISuccessCheck(ctx, sc, step, tenantName, tenantDisplayName)
+		if err := allAPISuccessCheck(ctx, sc, step, tenantName, tenantDisplayName); err != nil {
+			return err
+		}
+		AdminLogger.Println("allAPISuccessCheck successful")
+		return nil
 	})
 	eg.Go(func() error {
-		return rankingCheck(ctx, sc, step)
+		if err := rankingCheck(ctx, sc, step); err != nil {
+			return err
+		}
+		AdminLogger.Println("rankingCheck successful")
+		return nil
 	})
 	eg.Go(func() error {
-		return badRequestCheck(ctx, sc, step)
+		if err := badRequestCheck(ctx, sc, step); err != nil {
+			return err
+		}
+		AdminLogger.Println("badRequestCheck successful")
+		return nil
 	})
 	eg.Go(func() error {
-		return invalidJWTCheck(ctx, sc, step)
+		if err := invalidJWTCheck(ctx, sc, step); err != nil {
+			return err
+		}
+		AdminLogger.Println("invalidJWTCheck successful")
+		return nil
+	})
+	eg.Go(func() error {
+		if err := billingAPISuccessCheck(ctx, sc, step); err != nil {
+			return err
+		}
+		AdminLogger.Println("billingAPISuccessCheck successful")
+		return nil
 	})
 
 	if err := eg.Wait(); err != nil {
@@ -218,51 +241,103 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		}
 	}
 
-	// 大会結果CSV入稿
-	var score ScoreRows
-	{
-		// NOTE:
-		//	失格済みのプレイヤーは含まれていても問題ない
-		// 	最後の一人はスコア未登録+ranking参照済みユーザーとしてbilling検証に利用する
-		// 後ろのプレイヤーはスコア未登録(noScorePlayerIndex以降)
-		for i, playerID := range playerIDs[:noScorePlayerIndex] {
-			score = append(score, &ScoreRow{
-				PlayerID: playerID,
-				Score:    100 + i,
-			})
-		}
-
-		csv := score.CSV()
-		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
-		msg := fmt.Sprintf("%s %s", orgAc, txt)
-		v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg, WithStatusCode(200),
-			WithContentType("application/json"),
-			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
-				_ = r // responseは空
-				return nil
-			}),
-		)
-		if !v.IsEmpty() {
-			return v
-		}
-
-	}
 	// 大会参加者API
 	playerAc, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenantName, playerIDs[0])
 	if err != nil {
 		return err
 	}
 
+	var score ScoreRows
+	for i, playerID := range playerIDs[:noScorePlayerIndex] {
+		score = append(score, &ScoreRow{
+			PlayerID: playerID,
+			Score:    100 + i,
+		})
+	}
+	csv := score.CSV()
+
+	// スコア入稿とPlayerのランキング参照を同時
+	checkPlayerIndex := 10 // < disqualifiedPlayerIndex
 	{
-		checkPlayerIndex := 10 // < disqualifiedPlayerIndex
+		eg := errgroup.Group{}
+		scoreCh := make(chan struct{})
+
+		eg.Go(func() error {
+			beforeScores := 0
+			isDone := false
+			for {
+				select {
+				case <-scoreCh:
+					isDone = true
+				default:
+				}
+
+				// 大会スコア入稿より早く実行する ランキングはまだ反映されていない
+				// 厳密にリクエストの順番を取りたいのでActionの展開
+				res, err, txt := GetPlayerAction(ctx, playerIDs[checkPlayerIndex], playerAg)
+				msg := fmt.Sprintf("%s %s", playerAc, txt)
+				v := ValidateResponseWithMsg("プレイヤーと戦績情報取得: 入稿と同時", step, res, err, msg, WithStatusCode(200),
+					WithContentType("application/json"),
+					WithSuccessResponse(func(r ResponseAPIPlayer) error {
+						if playerIDs[checkPlayerIndex] != r.Data.Player.ID {
+							return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", playerIDs[checkPlayerIndex], r.Data.Player.ID)
+						}
+
+						if len(r.Data.Scores) < beforeScores {
+							return fmt.Errorf("参加した大会数が前回リクエストから減りました (before: %d, got: %d)", beforeScores, len(r.Data.Scores))
+						}
+						beforeScores = len(r.Data.Scores)
+						return nil
+					}),
+				)
+				if !v.IsEmpty() && sc.Option.StrictPrepare {
+					return v
+				}
+
+				if isDone {
+					break
+				}
+			}
+			return nil
+		})
+
+		// 大会結果CSV入稿
+		eg.Go(func() error {
+			// NOTE:
+			//	失格済みのプレイヤーは含まれていても問題ない
+			// 	最後の一人はスコア未登録+ranking参照済みユーザーとしてbilling検証に利用する
+			// 後ろのプレイヤーはスコア未登録(noScorePlayerIndex以降)
+			res, err, txt := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
+			msg := fmt.Sprintf("%s %s", orgAc, txt)
+			v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg, WithStatusCode(200),
+				WithContentType("application/json"),
+				WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+					_ = r // responseは空
+					return nil
+				}),
+			)
+			if !v.IsEmpty() {
+				return v
+			}
+			close(scoreCh)
+			return nil
+		})
+
+		if err := eg.Wait(); err != nil {
+			return nil
+		}
+	}
+
+	{
 		res, err, txt := GetPlayerAction(ctx, playerIDs[checkPlayerIndex], playerAg)
 		msg := fmt.Sprintf("%s %s", playerAc, txt)
-		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得", step, res, err, msg, WithStatusCode(200),
+		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得: 入稿後", step, res, err, msg, WithStatusCode(200),
 			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				if playerIDs[checkPlayerIndex] != r.Data.Player.ID {
 					return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", playerIDs[checkPlayerIndex], r.Data.Player.ID)
 				}
+
 				if 1 != len(r.Data.Scores) {
 					return fmt.Errorf("参加した大会数が違います (want: %d, got: %d)", 1, len(r.Data.Scores))
 				}
@@ -272,7 +347,6 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 				if int64(100+checkPlayerIndex) != r.Data.Scores[0].Score {
 					return fmt.Errorf("スコアが違います (want: %d, got: %d)", 100+checkPlayerIndex, r.Data.Scores[0].Score)
 				}
-
 				return nil
 			}),
 		)
@@ -292,23 +366,6 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if len(score) != len(r.Data.Ranks) && 100 < len(r.Data.Ranks) {
 					return fmt.Errorf("大会のランキングの結果の数が違います(最大100件) (want: %d, got: %d)", len(score), len(r.Data.Ranks))
-				}
-				return nil
-			}),
-		)
-		if !v.IsEmpty() && sc.Option.StrictPrepare {
-			return v
-		}
-	}
-	{
-		// rank_afterで最後の1件だけを取るように指定する
-		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, strconv.Itoa(len(score)-1), playerAg)
-		msg := fmt.Sprintf("%s %s", playerAc, txt)
-		v := ValidateResponseWithMsg("大会内のランキング取得: ページングあり", step, res, err, msg, WithStatusCode(200),
-			WithContentType("application/json"),
-			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
-				if 1 != len(r.Data.Ranks) {
-					return fmt.Errorf("rank_after指定時の大会のランキングの結果の数が違います (want: %d, got: %d)", 1, len(r.Data.Ranks))
 				}
 				return nil
 			}),
@@ -342,6 +399,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	}
 
 	// 大会の終了(organizer/competition/finish)後は反映まで3sの猶予がある
+	AdminLogger.Println("allAPISuccessCheck sleep 3s")
 	SleepWithCtx(ctx, time.Second*3)
 
 	// 主催者API 大会の終了
@@ -501,49 +559,6 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		}
 	}
 
-	{
-		// ページングで初期データ範囲のBillingが正しいか確認
-		checkTenantCursor := int64(randomRange([]int{20, 99})) // ID=2~99のどれかのテナントでチェック
-		res, err, txt := GetAdminTenantsBillingAction(ctx, fmt.Sprintf("%d", checkTenantCursor), adminAg)
-		msg := fmt.Sprintf("%s %s", adminAc, txt)
-		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード: 初期データチェック", step, res, err, msg, WithStatusCode(200),
-			WithContentType("application/json"),
-			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
-				if 10 != len(r.Data.Tenants) {
-					return fmt.Errorf("請求ダッシュボードの結果の数が違います (want: %d, got: %d)", len(r.Data.Tenants), 10)
-				}
-				tenantIDs := []int64{}
-				for _, tenant := range r.Data.Tenants {
-					// 初期データと照らし合わせてbillingが合っているか確認
-					index, err := strconv.ParseInt(tenant.ID, 10, 64)
-					if err != nil {
-						return fmt.Errorf("TenantIDの形が違います tenantName:%v (got: %v)", tenant.Name, tenant.ID)
-					}
-					tenantIDs = append(tenantIDs, index)
-					initialTenant, ok := sc.InitialDataTenant[index]
-					if !ok {
-						return fmt.Errorf("初期データに存在しないTenantIDです tenantName:%v (got: %v)", tenant.Name, tenant.ID)
-					}
-					if tenant.BillingYen != initialTenant.Billing {
-						return fmt.Errorf("Billingの結果が違います tenantName:%v (want: %v got: %v)", tenant.Name, initialTenant.Billing, tenant.BillingYen)
-					}
-					AdminLogger.Printf("success, %v", tenant)
-				}
-				sort.Slice(tenantIDs, func(i, j int) bool { return tenantIDs[i] < tenantIDs[j] })
-				if tenantIDs[0] != int64(checkTenantCursor-10) || tenantIDs[len(tenantIDs)-1] != int64(checkTenantCursor-1) {
-					return fmt.Errorf("取得したテナントIDの範囲が違います (want: %v~%v got: %v~%v)",
-						checkTenantCursor-10, checkTenantCursor-1, tenantIDs[0], tenantIDs[len(tenantIDs)-1],
-					)
-				}
-
-				return nil
-			}),
-		)
-		if !v.IsEmpty() && sc.Option.StrictPrepare {
-			return v
-		}
-	}
-
 	// テナント内の大会毎のBillingが正しいことを確認
 	{
 		checkTenantCursor := int64(randomRange([]int{2, 99})) // ID=2~99のどれかのテナントでチェック
@@ -569,25 +584,9 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 					if !ok {
 						return fmt.Errorf("対象の大会がありません tenantName:%v (want: %v)", initDataTenant.TenantName, comp.ID)
 					}
-					// TODO: 対応するか悩み中 InitialDataの参加者数がわからない
-					// score登録者 rankingアクセスあり: 100 yen x 1 player
-					// score未登録者 rankingアクセスあり:  10 yen x 1 player
-					// if r.Data.Reports[0].PlayerCount != int64(len(score)) {
-					// 	return fmt.Errorf("大会の参加者数が違います competitionID: %s (want: %d, got: %d)", competitionID, len(score), r.Data.Reports[0].PlayerCount)
-					// }
-					// if r.Data.Reports[0].VisitorCount != 1 {
-					// 	return fmt.Errorf("大会の閲覧者数が違います competitionID: %s (want: %d, got: %d)", competitionID, 1, r.Data.Reports[0].VisitorCount)
-					// }
-					// if r.Data.Reports[0].BillingPlayerYen != int64(len(score)*100) {
-					// 	return fmt.Errorf("大会の請求金額内訳(参加者分)が違います competitionID: %s (want: %d, got: %d)", competitionID, 100, r.Data.Reports[0].BillingPlayerYen)
-					// }
-					// if r.Data.Reports[0].BillingVisitorYen != 10 {
-					// 	return fmt.Errorf("大会の請求金額内訳(閲覧者)が違います competitionID: %s (want: %d, got: %d)", competitionID, 10, r.Data.Reports[0].BillingVisitorYen)
-					// }
 					if comp.Billing != reportComp.BillingYen {
 						return fmt.Errorf("大会の請求金額合計が違います tenantName:%v competitionID: %v (want: %v, got: %v)", initDataTenant.TenantName, comp.ID, comp.Billing, reportComp.BillingYen)
 					}
-					AdminLogger.Printf("success: %v", comp)
 				}
 
 				return nil
@@ -601,7 +600,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	return nil
 }
 
-// ランキングの結果が最大100件なことを確認
+// ランキングの結果の整合性を確認
 func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
 	tenantName := "rankingcheck-tenantid"
 	tenantDisplayName := "rankingCheck-Tenantname"
@@ -685,14 +684,16 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 	}
 
 	// スコアを101人登録
+	// pIDs[n]... 100+n点、101-n位
 	var rankingCheckScore ScoreRows
+	for i, playerID := range pIDs {
+		rankingCheckScore = append(rankingCheckScore, &ScoreRow{
+			PlayerID: playerID,
+			Score:    100 + i,
+		})
+	}
+
 	{
-		for i, playerID := range pIDs {
-			rankingCheckScore = append(rankingCheckScore, &ScoreRow{
-				PlayerID: playerID,
-				Score:    100 + i,
-			})
-		}
 		csv := rankingCheckScore.CSV()
 		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
@@ -721,6 +722,17 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 				if 100 != len(r.Data.Ranks) {
 					return fmt.Errorf("大会のランキングの結果の最大は100件である必要があります (want: %d, got: %d)", 100, len(r.Data.Ranks))
 				}
+				sort.Slice(r.Data.Ranks, func(i, j int) bool {
+					return r.Data.Ranks[i].Rank < r.Data.Ranks[j].Rank
+				})
+				for i, rank := range r.Data.Ranks {
+					if rank.Rank != int64(i+1) {
+						return fmt.Errorf("大会のランキングの順位が違います Player:%s(%s) (want: %d位, got: %d位)", rank.PlayerDisplayName, rank.PlayerID, i+1, rank.Rank)
+					}
+					if rank.PlayerID != pIDs[101-(i+1)] {
+						return fmt.Errorf("大会のランキングの%d位のプレイヤーが違います (want: %s, got: %s)", i, pIDs[101-1], rank.PlayerID)
+					}
+				}
 				return nil
 			}),
 		)
@@ -729,34 +741,194 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 		}
 	}
 
-	// playerDetailsを取ってスコアを確認
-	// 別スコアを入稿
+	// rank_afterで最後の1件だけを取るように指定する
+	{
+		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, strconv.Itoa(len(rankingCheckScore)-1), playerAg)
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
+		v := ValidateResponseWithMsg("大会内のランキング取得: ページングあり", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				if 1 != len(r.Data.Ranks) {
+					return fmt.Errorf("rank_after指定時の大会のランキングの結果の数が違います (want: %d, got: %d)", 1, len(r.Data.Ranks))
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
+		}
+	}
+
+	// プレイヤーページのスコアも正しいことを確認
+	// 現30位のプレイヤーを確認する
+	checkPlayerID := pIDs[30]
+	{
+		res, err, txt := GetPlayerAction(ctx, checkPlayerID, playerAg)
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
+		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPIPlayer) error {
+				if r.Data.Player.ID != checkPlayerID {
+					return fmt.Errorf("PlayerIDが違います (want: %s, got: %s)", checkPlayerID, r.Data.Player.ID)
+				}
+				if len(r.Data.Scores) != 1 {
+					return fmt.Errorf("参加した大会の数が違います (want: %d, got: %d)", 1, len(r.Data.Scores))
+				}
+				if r.Data.Scores[0].Score != int64(100+30) {
+					return fmt.Errorf("参加した大会のスコアが違います (want: %d, got: %d)", 100+30, r.Data.Scores[0].Score)
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
+		}
+	}
+
+	// 逆の順位になるスコアを入稿
+	// pIDs[n]... 1000-n点、(n+1)位
+	rankingCheckScore = ScoreRows{}
+	for i, playerID := range pIDs {
+		rankingCheckScore = append(rankingCheckScore, &ScoreRow{
+			PlayerID: playerID,
+			Score:    1000 - i,
+		})
+	}
+
+	{
+		csv := rankingCheckScore.CSV()
+		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
+		v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg,
+			WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+				if r.Data.Rows != int64(len(rankingCheckScore)) {
+					return fmt.Errorf("大会結果CSV入稿レスポンスのRowsが異なります (want: %d, got: %d)", len(rankingCheckScore), r.Data.Rows)
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return &v
+		}
+	}
 
 	// 結果を引く
-	// {
-	// 	res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
-	// 	msg := fmt.Sprintf("%s %s", playerAc, txt)
-	// 	v := ValidateResponseWithMsg("大会内のランキング取得: 結果が更新されている", step, res, err, fmt.Sprintf("%s %s competitionID:%s", msg, playerAc, competitionID), WithStatusCode(200),
-	// 		WithSuccessResponse(
-	// 			func(r ResponseAPICompetitionRanking) error {
-	// 				if len(r.Data.Ranks) != 0 && len(rankingCheckScore) != len(r.Data.Ranks) {
-	// 					return fmt.Errorf("大会のランキングの結果が違います (want: %d, got: %d)", len(rankingCheckScore), len(r.Data.Ranks))
-	// 				}
-	// 				if r.Data.Ranks[0].PlayerID != rankingCheckScore[0].PlayerID {
-	// 					return fmt.Errorf("大会のランキングのPlayerIDが違います (want: %v, got: %v)", r.Data.Ranks[0].PlayerID, rankingCheckScore[0].PlayerID)
-	// 				}
-	// 				if r.Data.Ranks[0].Score != int64(rankingCheckScore[0].Score) {
-	// 					return fmt.Errorf("大会のランキングのスコアが違います (want: %v, got: %v)", r.Data.Ranks[0].Score, rankingCheckScore[0].Score)
-	// 				}
-	// 				return nil
-	// 			}),
-	// 	)
-	// 	if !v.IsEmpty() {
-	// 		return &v
-	// 	}
-	// }
+	{
+		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
+		v := ValidateResponseWithMsg("大会内のランキング取得: ページングなし,上限100件", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				if 100 != len(r.Data.Ranks) {
+					return fmt.Errorf("大会のランキングの結果の最大は100件である必要があります (want: %d, got: %d)", 100, len(r.Data.Ranks))
+				}
+				sort.Slice(r.Data.Ranks, func(i, j int) bool {
+					return r.Data.Ranks[i].Rank < r.Data.Ranks[j].Rank
+				})
+				for i, rank := range r.Data.Ranks {
+					if rank.Rank != int64(i+1) {
+						return fmt.Errorf("大会のランキングの順位が違います Player:%s(%s) (want: %d位, got: %d位)", rank.PlayerDisplayName, rank.PlayerID, 101-(i+1), rank.Rank)
+					}
+					if rank.PlayerID != pIDs[i] {
+						return fmt.Errorf("大会のランキングの%d位のプレイヤーが違います (want: %s, got: %s)", i+1, pIDs[i], rank.PlayerID)
+					}
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return &v
+		}
+	}
 
-	// playerDetailsを取ってスコアが変わっていることを確認する
+	// 特定のプレイヤーのスコアが正しいことを確認
+	{
+		res, err, txt := GetPlayerAction(ctx, checkPlayerID, playerAg)
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
+		v := ValidateResponseWithMsg("プレイヤーと戦績情報取得", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPIPlayer) error {
+				if r.Data.Player.ID != checkPlayerID {
+					return fmt.Errorf("PlayerIDが違います (want: %s, got: %s)", checkPlayerID, r.Data.Player.ID)
+				}
+				if len(r.Data.Scores) != 1 {
+					return fmt.Errorf("参加した大会の数が違います (want: %d, got: %d)", 1, len(r.Data.Scores))
+				}
+				if r.Data.Scores[0].Score != int64(1000-30) {
+					return fmt.Errorf("参加した大会のスコアが違います (want: %d, got: %d)", 1000-30, r.Data.Scores[0].Score)
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
+		}
+	}
+
+	// 全員同じスコアを入力（先に出てきたほうが順位が上）
+	// 1人のプレイヤーが複数行ある（後に出てきた行が反映）
+	// pIDs[n]... 1000点、(n+1)位
+	rankingCheckScore = ScoreRows{}
+	for _, playerID := range pIDs {
+		rankingCheckScore = append(rankingCheckScore, &ScoreRow{
+			PlayerID: playerID,
+			Score:    1,
+		})
+		rankingCheckScore = append(rankingCheckScore, &ScoreRow{
+			PlayerID: playerID,
+			Score:    1000,
+		})
+	}
+
+	{
+		csv := rankingCheckScore.CSV()
+		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
+		v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg,
+			WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+				if r.Data.Rows != int64(len(rankingCheckScore)) {
+					return fmt.Errorf("大会結果CSV入稿レスポンスのRowsが異なります (want: %d, got: %d)", len(rankingCheckScore), r.Data.Rows)
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return &v
+		}
+	}
+
+	// 結果を引く
+	{
+		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
+		v := ValidateResponseWithMsg("大会内のランキング取得: ページングなし,上限100件", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				if 100 != len(r.Data.Ranks) {
+					return fmt.Errorf("大会のランキングの結果の最大は100件である必要があります (want: %d, got: %d)", 100, len(r.Data.Ranks))
+				}
+				sort.Slice(r.Data.Ranks, func(i, j int) bool {
+					return r.Data.Ranks[i].Rank < r.Data.Ranks[j].Rank
+				})
+				for i, rank := range r.Data.Ranks {
+					if rank.Rank != int64(i+1) {
+						return fmt.Errorf("大会のランキングの順位が違います Player:%s(%s) (want: %d位, got: %d位)", rank.PlayerDisplayName, rank.PlayerID, 101-(i+1), rank.Rank)
+					}
+					if rank.PlayerID != pIDs[i] {
+						return fmt.Errorf("大会のランキングの%d位のプレイヤーが違います (want: %s, got: %s)", i+1, pIDs[i], rank.PlayerID)
+					}
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return &v
+		}
+	}
 
 	return nil
 }
@@ -1102,6 +1274,55 @@ func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		res, err, txt := GetPlayerCompetitionsAction(ctx, invalidPlayerAg)
 		msg := fmt.Sprintf("%s %s", invalidPlayerAc, txt)
 		v := ValidateResponseWithMsg("テナント内の大会情報取得: 不正なリクエスト(存在しないプレイヤー)", step, res, err, msg, WithStatusCode(401), WithContentType("application/json"))
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
+		}
+	}
+	return nil
+}
+
+func billingAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
+	adminAc, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
+	if err != nil {
+		return err
+	}
+	{
+		// ページングで初期データ範囲のBillingが正しいか確認
+		checkTenantCursor := int64(randomRange([]int{20, 99})) // ID=2~99のどれかのテナントでチェック
+		res, err, txt := GetAdminTenantsBillingAction(ctx, fmt.Sprintf("%d", checkTenantCursor), adminAg)
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
+		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード: 初期データチェック", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
+				if 10 != len(r.Data.Tenants) {
+					return fmt.Errorf("請求ダッシュボードの結果の数が違います (want: %d, got: %d)", len(r.Data.Tenants), 10)
+				}
+				tenantIDs := []int64{}
+				for _, tenant := range r.Data.Tenants {
+					// 初期データと照らし合わせてbillingが合っているか確認
+					index, err := strconv.ParseInt(tenant.ID, 10, 64)
+					if err != nil {
+						return fmt.Errorf("TenantIDの形が違います tenantName:%v (got: %v)", tenant.Name, tenant.ID)
+					}
+					tenantIDs = append(tenantIDs, index)
+					initialTenant, ok := sc.InitialDataTenant[index]
+					if !ok {
+						return fmt.Errorf("初期データに存在しないTenantIDです tenantName:%v (got: %v)", tenant.Name, tenant.ID)
+					}
+					if tenant.BillingYen != initialTenant.Billing {
+						return fmt.Errorf("Billingの結果が違います tenantName:%v (want: %v got: %v)", tenant.Name, initialTenant.Billing, tenant.BillingYen)
+					}
+				}
+				sort.Slice(tenantIDs, func(i, j int) bool { return tenantIDs[i] < tenantIDs[j] })
+				if tenantIDs[0] != int64(checkTenantCursor-10) || tenantIDs[len(tenantIDs)-1] != int64(checkTenantCursor-1) {
+					return fmt.Errorf("取得したテナントIDの範囲が違います (want: %v~%v got: %v~%v)",
+						checkTenantCursor-10, checkTenantCursor-1, tenantIDs[0], tenantIDs[len(tenantIDs)-1],
+					)
+				}
+
+				return nil
+			}),
+		)
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}

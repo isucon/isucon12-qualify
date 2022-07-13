@@ -19,11 +19,15 @@ type OrganizerJobConfig struct {
 	addScoreNum   int // 一度の再投稿時に増えるスコアの数
 }
 
+type OrganizerJobResult struct {
+	ScoredPlayerNum int
+}
+
 // 大会を作成, スコアを増やしながら入れる, 確定する
-func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkStep, conf *OrganizerJobConfig) error {
+func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkStep, conf *OrganizerJobConfig) (*OrganizerJobResult, error) {
 	orgAg, err := conf.orgAc.GetAgent()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// 大会を1つ作成し、スコアを入稿し、Closeする
@@ -53,7 +57,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			sc.AddScoreByScenario(step, ScoreGETOrganizerPlayersList, conf.scTag)
 		} else {
 			sc.AddErrorCount()
-			return v
+			return nil, v
 		}
 	}
 
@@ -70,11 +74,12 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionsAdd, conf.scTag)
 		} else {
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
-			return v
+			return nil, v
 		}
 		sc.CompetitionAddLog.Printf("大会「%s」を作成しました", comp.Title)
 	}
 
+	scoredPlayerIDs := []string{}
 	// 大会結果入稿
 	// 全員スコアが1件ある状態がスタート
 	var score ScoreRows
@@ -84,6 +89,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			Score:    rand.Intn(1000),
 		})
 	}
+	scoredPlayerIDs = score.PlayerIDs()
 
 	for count := 0; count < conf.scoreRepeat; count++ {
 		for i := 0; i < conf.addScoreNum; i++ {
@@ -95,6 +101,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			})
 		}
 		csv := score.CSV()
+		scoredPlayerIDs = score.PlayerIDs()
 		AdminLogger.Printf("[%s] [tenant:%s] CSV入稿 %d回目 (rows:%d, len:%d)", conf.scTag, conf.tenantName, count+1, len(score)-1, len(csv))
 
 		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, comp.ID, []byte(csv), orgAg)
@@ -112,10 +119,10 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		} else {
 			if v.Canceled {
 				// context.Doneによって打ち切られた場合はエラーカウントしない
-				return nil
+				return &OrganizerJobResult{}, nil
 			}
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
-			return v
+			return nil, v
 		}
 
 		SleepWithCtx(ctx, time.Millisecond*time.Duration(conf.scoreInterval))
@@ -135,9 +142,11 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionFinish, conf.scTag)
 		} else {
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
-			return v
+			return nil, v
 		}
 	}
 
-	return nil
+	return &OrganizerJobResult{
+		ScoredPlayerNum: len(scoredPlayerIDs),
+	}, nil
 }

@@ -4,8 +4,6 @@ const (
 	ConstMaxError         = 30
 	ConstMaxCriticalError = 10
 
-	// TODO: 以下ほぼすべて要調整
-
 	// NewTenantScenario
 	ConstNewTenantScenarioPlayerWorkerNum = 20 // 作成するplayer worker数
 
