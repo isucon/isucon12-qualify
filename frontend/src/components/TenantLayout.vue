@@ -1,5 +1,5 @@
 <template>
-  <div class="main">
+  <div class="main dark">
     <div class="header">
       <TenantHeaderBar
         :tenant-name="tenantDisplayName"

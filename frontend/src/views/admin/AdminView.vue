@@ -169,11 +169,11 @@ th, td {
 }
 
 .tenant-name {
-  width: 25%;
+  width: 30%;
 }
 
 .tenant-display-name {
-  width: 50%
+  width: 45%
 }
 
 .billing {

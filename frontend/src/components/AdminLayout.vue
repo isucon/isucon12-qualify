@@ -1,5 +1,5 @@
 <template>
-  <div class="main">
+  <div class="main light">
     <div class="header">
       <AdminHeaderBar />
     </div>

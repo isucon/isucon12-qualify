@@ -9,17 +9,22 @@
       </ul>
 
       <h3>登録されたスコア</h3>
-      <p>TBD...</p>
-
+      <TableBase
+        :header="tableHeader"
+        :data="tableData"
+      >
+      </TableBase>
     </template>
   </div>
 </template>
 
 <script lang="ts">
-import { ref, onMounted, defineComponent } from 'vue'
+import { ref, computed, onMounted, defineComponent } from 'vue'
 import { useRoute } from 'vue-router'
 
 import axios from 'axios'
+
+import TableBase, { TableColumn } from '@/components/parts/TableBase.vue'
 
 type Player = {
   display_name: string
@@ -33,6 +38,9 @@ type PlayerScore = {
 }
 
 export default defineComponent({
+  components:{
+    TableBase,
+  },
   setup() {
     const route = useRoute()
     const playerId = route.params.player_id
@@ -51,9 +59,33 @@ export default defineComponent({
       fetchPlayer()
     })
 
+    const tableHeader: TableColumn[] = [
+      {
+        width: '80%',
+        align: 'left',
+        text: '大会名',
+      },
+      {
+        width: '20%',
+        align: 'right',
+        text: 'スコア',
+      },
+    ]
+
+    const tableData = computed<string[][]>(() => 
+      scores.value.map(c => {
+        return [
+          c.competition_title,
+          c.score.toLocaleString(),
+        ]
+      })
+    )
+
     return {
       player,
       scores,
+      tableHeader,
+      tableData,
     }
   },
 })
