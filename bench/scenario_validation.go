@@ -62,16 +62,39 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 
 	eg := errgroup.Group{}
 	eg.Go(func() error {
-		return allAPISuccessCheck(ctx, sc, step, tenantName, tenantDisplayName)
+		if err := allAPISuccessCheck(ctx, sc, step, tenantName, tenantDisplayName); err != nil {
+			return err
+		}
+		AdminLogger.Println("allAPISuccessCheck successful")
+		return nil
 	})
 	eg.Go(func() error {
-		return rankingCheck(ctx, sc, step)
+		if err := rankingCheck(ctx, sc, step); err != nil {
+			return err
+		}
+		AdminLogger.Println("rankingCheck successful")
+		return nil
 	})
 	eg.Go(func() error {
-		return badRequestCheck(ctx, sc, step)
+		if err := badRequestCheck(ctx, sc, step); err != nil {
+			return err
+		}
+		AdminLogger.Println("badRequestCheck successful")
+		return nil
 	})
 	eg.Go(func() error {
-		return invalidJWTCheck(ctx, sc, step)
+		if err := invalidJWTCheck(ctx, sc, step); err != nil {
+			return err
+		}
+		AdminLogger.Println("invalidJWTCheck successful")
+		return nil
+	})
+	eg.Go(func() error {
+		if err := billingAPISuccessCheck(ctx, sc, step); err != nil {
+			return err
+		}
+		AdminLogger.Println("billingAPISuccessCheck successful")
+		return nil
 	})
 
 	if err := eg.Wait(); err != nil {
@@ -300,23 +323,6 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 			return v
 		}
 	}
-	{
-		// rank_afterで最後の1件だけを取るように指定する
-		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, strconv.Itoa(len(score)-1), playerAg)
-		msg := fmt.Sprintf("%s %s", playerAc, txt)
-		v := ValidateResponseWithMsg("大会内のランキング取得: ページングあり", step, res, err, msg, WithStatusCode(200),
-			WithContentType("application/json"),
-			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
-				if 1 != len(r.Data.Ranks) {
-					return fmt.Errorf("rank_after指定時の大会のランキングの結果の数が違います (want: %d, got: %d)", 1, len(r.Data.Ranks))
-				}
-				return nil
-			}),
-		)
-		if !v.IsEmpty() && sc.Option.StrictPrepare {
-			return v
-		}
-	}
 	// スコア未登録プレイヤーがランキングを参照する
 	{
 		idx := noScorePlayerIndex
@@ -342,6 +348,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	}
 
 	// 大会の終了(organizer/competition/finish)後は反映まで3sの猶予がある
+	AdminLogger.Println("allAPISuccessCheck sleep 3s")
 	SleepWithCtx(ctx, time.Second*3)
 
 	// 主催者API 大会の終了
@@ -501,49 +508,6 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		}
 	}
 
-	{
-		// ページングで初期データ範囲のBillingが正しいか確認
-		checkTenantCursor := int64(randomRange([]int{20, 99})) // ID=2~99のどれかのテナントでチェック
-		res, err, txt := GetAdminTenantsBillingAction(ctx, fmt.Sprintf("%d", checkTenantCursor), adminAg)
-		msg := fmt.Sprintf("%s %s", adminAc, txt)
-		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード: 初期データチェック", step, res, err, msg, WithStatusCode(200),
-			WithContentType("application/json"),
-			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
-				if 10 != len(r.Data.Tenants) {
-					return fmt.Errorf("請求ダッシュボードの結果の数が違います (want: %d, got: %d)", len(r.Data.Tenants), 10)
-				}
-				tenantIDs := []int64{}
-				for _, tenant := range r.Data.Tenants {
-					// 初期データと照らし合わせてbillingが合っているか確認
-					index, err := strconv.ParseInt(tenant.ID, 10, 64)
-					if err != nil {
-						return fmt.Errorf("TenantIDの形が違います tenantName:%v (got: %v)", tenant.Name, tenant.ID)
-					}
-					tenantIDs = append(tenantIDs, index)
-					initialTenant, ok := sc.InitialDataTenant[index]
-					if !ok {
-						return fmt.Errorf("初期データに存在しないTenantIDです tenantName:%v (got: %v)", tenant.Name, tenant.ID)
-					}
-					if tenant.BillingYen != initialTenant.Billing {
-						return fmt.Errorf("Billingの結果が違います tenantName:%v (want: %v got: %v)", tenant.Name, initialTenant.Billing, tenant.BillingYen)
-					}
-					AdminLogger.Printf("success, %v", tenant)
-				}
-				sort.Slice(tenantIDs, func(i, j int) bool { return tenantIDs[i] < tenantIDs[j] })
-				if tenantIDs[0] != int64(checkTenantCursor-10) || tenantIDs[len(tenantIDs)-1] != int64(checkTenantCursor-1) {
-					return fmt.Errorf("取得したテナントIDの範囲が違います (want: %v~%v got: %v~%v)",
-						checkTenantCursor-10, checkTenantCursor-1, tenantIDs[0], tenantIDs[len(tenantIDs)-1],
-					)
-				}
-
-				return nil
-			}),
-		)
-		if !v.IsEmpty() && sc.Option.StrictPrepare {
-			return v
-		}
-	}
-
 	// テナント内の大会毎のBillingが正しいことを確認
 	{
 		checkTenantCursor := int64(randomRange([]int{2, 99})) // ID=2~99のどれかのテナントでチェック
@@ -572,7 +536,6 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 					if comp.Billing != reportComp.BillingYen {
 						return fmt.Errorf("大会の請求金額合計が違います tenantName:%v competitionID: %v (want: %v, got: %v)", initDataTenant.TenantName, comp.ID, comp.Billing, reportComp.BillingYen)
 					}
-					AdminLogger.Printf("success: %v", comp)
 				}
 
 				return nil
@@ -724,6 +687,24 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 		)
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return &v
+		}
+	}
+
+	// rank_afterで最後の1件だけを取るように指定する
+	{
+		res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, strconv.Itoa(len(rankingCheckScore)-1), playerAg)
+		msg := fmt.Sprintf("%s %s", playerAc, txt)
+		v := ValidateResponseWithMsg("大会内のランキング取得: ページングあり", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				if 1 != len(r.Data.Ranks) {
+					return fmt.Errorf("rank_after指定時の大会のランキングの結果の数が違います (want: %d, got: %d)", 1, len(r.Data.Ranks))
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
 		}
 	}
 
@@ -1242,6 +1223,55 @@ func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 		res, err, txt := GetPlayerCompetitionsAction(ctx, invalidPlayerAg)
 		msg := fmt.Sprintf("%s %s", invalidPlayerAc, txt)
 		v := ValidateResponseWithMsg("テナント内の大会情報取得: 不正なリクエスト(存在しないプレイヤー)", step, res, err, msg, WithStatusCode(401), WithContentType("application/json"))
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
+		}
+	}
+	return nil
+}
+
+func billingAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
+	adminAc, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
+	if err != nil {
+		return err
+	}
+	{
+		// ページングで初期データ範囲のBillingが正しいか確認
+		checkTenantCursor := int64(randomRange([]int{20, 99})) // ID=2~99のどれかのテナントでチェック
+		res, err, txt := GetAdminTenantsBillingAction(ctx, fmt.Sprintf("%d", checkTenantCursor), adminAg)
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
+		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード: 初期データチェック", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
+				if 10 != len(r.Data.Tenants) {
+					return fmt.Errorf("請求ダッシュボードの結果の数が違います (want: %d, got: %d)", len(r.Data.Tenants), 10)
+				}
+				tenantIDs := []int64{}
+				for _, tenant := range r.Data.Tenants {
+					// 初期データと照らし合わせてbillingが合っているか確認
+					index, err := strconv.ParseInt(tenant.ID, 10, 64)
+					if err != nil {
+						return fmt.Errorf("TenantIDの形が違います tenantName:%v (got: %v)", tenant.Name, tenant.ID)
+					}
+					tenantIDs = append(tenantIDs, index)
+					initialTenant, ok := sc.InitialDataTenant[index]
+					if !ok {
+						return fmt.Errorf("初期データに存在しないTenantIDです tenantName:%v (got: %v)", tenant.Name, tenant.ID)
+					}
+					if tenant.BillingYen != initialTenant.Billing {
+						return fmt.Errorf("Billingの結果が違います tenantName:%v (want: %v got: %v)", tenant.Name, initialTenant.Billing, tenant.BillingYen)
+					}
+				}
+				sort.Slice(tenantIDs, func(i, j int) bool { return tenantIDs[i] < tenantIDs[j] })
+				if tenantIDs[0] != int64(checkTenantCursor-10) || tenantIDs[len(tenantIDs)-1] != int64(checkTenantCursor-1) {
+					return fmt.Errorf("取得したテナントIDの範囲が違います (want: %v~%v got: %v~%v)",
+						checkTenantCursor-10, checkTenantCursor-1, tenantIDs[0], tenantIDs[len(tenantIDs)-1],
+					)
+				}
+
+				return nil
+			}),
+		)
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
