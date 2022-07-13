@@ -70,34 +70,34 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		AdminLogger.Println("allAPISuccessCheck successful")
 		return nil
 	})
-	// eg.Go(func() error {
-	// 	if err := rankingCheck(ctx, sc, step); err != nil {
-	// 		return err
-	// 	}
-	// 	AdminLogger.Println("rankingCheck successful")
-	// 	return nil
-	// })
-	// eg.Go(func() error {
-	// 	if err := badRequestCheck(ctx, sc, step); err != nil {
-	// 		return err
-	// 	}
-	// 	AdminLogger.Println("badRequestCheck successful")
-	// 	return nil
-	// })
-	// eg.Go(func() error {
-	// 	if err := invalidJWTCheck(ctx, sc, step); err != nil {
-	// 		return err
-	// 	}
-	// 	AdminLogger.Println("invalidJWTCheck successful")
-	// 	return nil
-	// })
-	// eg.Go(func() error {
-	// 	if err := billingAPISuccessCheck(ctx, sc, step); err != nil {
-	// 		return err
-	// 	}
-	// 	AdminLogger.Println("billingAPISuccessCheck successful")
-	// 	return nil
-	// })
+	eg.Go(func() error {
+		if err := rankingCheck(ctx, sc, step); err != nil {
+			return err
+		}
+		AdminLogger.Println("rankingCheck successful")
+		return nil
+	})
+	eg.Go(func() error {
+		if err := badRequestCheck(ctx, sc, step); err != nil {
+			return err
+		}
+		AdminLogger.Println("badRequestCheck successful")
+		return nil
+	})
+	eg.Go(func() error {
+		if err := invalidJWTCheck(ctx, sc, step); err != nil {
+			return err
+		}
+		AdminLogger.Println("invalidJWTCheck successful")
+		return nil
+	})
+	eg.Go(func() error {
+		if err := billingAPISuccessCheck(ctx, sc, step); err != nil {
+			return err
+		}
+		AdminLogger.Println("billingAPISuccessCheck successful")
+		return nil
+	})
 
 	if err := eg.Wait(); err != nil {
 		return err
