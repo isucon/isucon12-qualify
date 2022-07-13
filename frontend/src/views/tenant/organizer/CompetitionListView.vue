@@ -3,6 +3,12 @@
     <button class="add-competition" @click="handleAddCompetition">
       大会作成
     </button>
+    <AddCompetitionModal
+      v-show="showAddModal"
+      @close="handleAddCompetitionClose"
+      @competitionAdded="handleCompetitionAdded"
+    />
+
     <h2>
       大会一覧
     </h2>
@@ -41,6 +47,7 @@ import { ref, computed, onMounted, defineComponent } from 'vue'
 import axios from 'axios'
 
 import TableBase, { TableColumn } from '@/components/parts/TableBase.vue'
+import AddCompetitionModal from '@/components/tenant/AddCompetitionModal.vue'
 
 
 type Competition = {
@@ -53,6 +60,7 @@ export default defineComponent({
   name: 'CompetitionListView',
   components: {
     TableBase,
+    AddCompetitionModal,
   },
   setup() {
     const competitions = ref<Competition[]>([])
@@ -79,10 +87,6 @@ export default defineComponent({
     const isLoading = ref(false)
     const noMoreLoad = ref(false)
 
-    const handleAddCompetition = () => {
-      console.log('add competition')
-    }
-
     const handleUploadCSV = (evt: MouseEvent) => {
       const target = evt.target as HTMLButtonElement
       if (!target) return
@@ -106,6 +110,19 @@ export default defineComponent({
       }
       fetchCompetitions() // 画面を更新!
     }
+
+    // AddCompetitionModal関連
+    const showAddModal = ref(false)
+    const handleAddCompetition = () => {
+      showAddModal.value = true
+    }
+    const handleAddCompetitionClose = () => {
+      showAddModal.value = false
+    }
+    const handleCompetitionAdded = () => {
+      fetchCompetitions() // 画面を更新!
+    }
+
 
     const tableHeader: TableColumn[] = [
       {
@@ -149,6 +166,10 @@ export default defineComponent({
       handleAddCompetition,
       handleUploadCSV,
       handleCompleteCompetition,
+
+      showAddModal,
+      handleAddCompetitionClose,
+      handleCompetitionAdded,
 
       tableHeader,
       tableData,

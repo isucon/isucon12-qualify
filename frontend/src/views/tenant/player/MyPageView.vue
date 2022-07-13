@@ -103,20 +103,4 @@ export default defineComponent({
   padding: 0 20px 20px;
 }
 
-@keyframes rotation {
-  0%{ transform:rotate(0);}
-  100%{ transform:rotate(360deg); }
-}
-
-.cycle-loop {
-  display: inline-block;
-  animation: 1s linear infinite rotation;
-}
-
-.loading {
-  text-align: center;
-  height: 40px;
-}
-
-
 </style>

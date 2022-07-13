@@ -131,39 +131,6 @@ export default defineComponent({
   padding: 0 20px 20px;
 }
 
-.billing-list {
-  border: 1px solid lightgray;
-  border-collapse: collapse;
-  width: 100%;
-}
-
-th, td {
-  padding: 4px;
-  border: 1px solid gray;
-}
-
-.competition-id {
-  width: 15%;
-  text-align: center;
-}
-
-.player-count,
-.visitor-count,
-.billing-yen {
-  width: 15%;
-  text-align: right;
-}
-
-.competition-title {
-  width: 40%;
-}
-
-th.player-count,
-th.visitor-count,
-th.billing-yen {
-  text-align: center;
-}
-
 .supplement {
   font-size: 0.75em;
 }

@@ -124,11 +124,6 @@ export default defineComponent({
       tenants.value.unshift(tenant)
     }
 
-          // <th class="tenant-id">ID</th>
-          // <th class="tenant-name">テナント名</th>
-          // <th class="tenant-display-name">表示名</th>
-          // <th class="billing">請求額</th>
-
     const tableHeader: TableColumn[] = [
       {
         width: '10%',
@@ -187,38 +182,6 @@ export default defineComponent({
 
 .add-tenant {
   float: right;
-}
-
-.tenant-list {
-  border: 1px solid gray;
-  border-collapse: collapse;
-  width: 100%;
-}
-
-th, td {
-  padding: 4px;
-  border: 1px solid lightgray;
-}
-
-.tenant-id {
-  width: 10%;
-  text-align: center;
-}
-
-.tenant-name {
-  width: 30%;
-}
-
-.tenant-display-name {
-  width: 45%
-}
-
-.billing {
-  width: 15%;
-}
-
-td.billing {
-  text-align: right;
 }
 
 @keyframes rotation {

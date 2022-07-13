@@ -1,6 +1,9 @@
 <template>
   <div class="single-player">
     <h2>プレイヤー情報</h2>
+    <template v-if="isLoading">
+      読み込み中…
+    </template>
     <template v-if="player">
       <ul >
         <li>プレイヤーID: {{ player.id }}</li>
@@ -45,14 +48,22 @@ export default defineComponent({
     const route = useRoute()
     const playerId = route.params.player_id
 
+    const isLoading = ref(true)
     const player = ref<Player>()
     const scores = ref<PlayerScore[]>([])
     const fetchPlayer = async () => {
-      const res = await axios.get(`/api/player/player/${playerId}`)
-      console.log(res.data)
+      isLoading.value = true
+      try {
+        const res = await axios.get(`/api/player/player/${playerId}`)
+        console.log(res.data)
 
-      player.value = res.data.data.player
-      scores.value = res.data.data.scores
+        player.value = res.data.data.player
+        scores.value = res.data.data.scores
+      } catch (e) {
+        window.alert('failed to fetch player info: ' + e)
+      } finally {
+        isLoading.value = false
+      }
     }
 
     onMounted(() => {
@@ -82,6 +93,7 @@ export default defineComponent({
     )
 
     return {
+      isLoading,
       player,
       scores,
       tableHeader,
@@ -90,3 +102,9 @@ export default defineComponent({
   },
 })
 </script>
+
+<style scoped>
+.single-player {
+  padding: 0 20px 20px;
+}
+</style>
