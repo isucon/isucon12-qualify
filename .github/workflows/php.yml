@@ -35,7 +35,7 @@ jobs:
         run: |
           make initial_data
           make down/php
-          make up/php OPT=-d
+          make up/php OPT='-d --build'
           make install_initial_data
         working-directory: ./development
         env:
