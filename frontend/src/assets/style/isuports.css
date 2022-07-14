@@ -2,6 +2,12 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
+  font-family: 'M PLUS 1', sans-serif;
+}
+
+h1, h2 {
+  font-family: 'M PLUS 1', sans-serif;
+  font-weight: 700;
 }
 
 #app {

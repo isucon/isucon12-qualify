@@ -1,6 +1,8 @@
 <template>
   <div class="header-bar">
-    <h1 class="brand">ISUPORTS</h1>
+    <h1 class="brand">
+      <img src="/img/isuports_light.svg" alt="ISUPORTS" width="250" height="60"/>
+    </h1>
     <h2 class="subtitle">Admin Panel</h2>
   </div>
 </template>
@@ -20,6 +22,7 @@
   line-height: 60px;
   margin: 0;
   padding: 0;
+  vertical-align: middle;
 }
 
 .subtitle {
@@ -27,6 +30,7 @@
   display: inline-block;
   font-size: 20px;
   line-height: 36px;
+  vertical-align: middle;
 }
 
 </style>
