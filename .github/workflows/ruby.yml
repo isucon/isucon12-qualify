@@ -35,7 +35,7 @@ jobs:
         run: |
           make initial_data
           make down/ruby
-          make up/ruby OPT=-d
+          make up/ruby OPT='-d --build'
           make install_initial_data
         working-directory: ./development
         env:
