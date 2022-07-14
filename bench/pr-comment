@@ -9,7 +9,5 @@ exit 0
 fi
 
 cat $1 > comment.txt
-ehco "\n$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> comment.txt
+echo "\n$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> comment.txt
 gh issue comment $PR --body-file comment.txt
-
-# PRがあればPRリンクをactions jobに出す
