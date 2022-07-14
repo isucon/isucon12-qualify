@@ -8,6 +8,7 @@ import (
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucon12-qualify/data"
+	"golang.org/x/sync/errgroup"
 )
 
 type OrganizerJobConfig struct {
@@ -38,6 +39,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 	// player一覧を取る
 	players := make(map[string]*PlayerData)
 	playerIDs := []string{}
+	qualifyPlayerIDs := []string{}
 	{
 		res, err, txt := GetOrganizerPlayersListAction(ctx, orgAg)
 		msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
@@ -45,6 +47,9 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			WithSuccessResponse(func(r ResponseAPIPlayersList) error {
 				for _, player := range r.Data.Players {
 					playerIDs = append(playerIDs, player.ID)
+					if !player.IsDisqualified {
+						qualifyPlayerIDs = append(qualifyPlayerIDs, player.ID)
+					}
 					players[player.ID] = &PlayerData{
 						ID:          player.ID,
 						DisplayName: player.DisplayName,
@@ -91,41 +96,96 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 	}
 	scoredPlayerIDs = score.PlayerIDs()
 
-	for count := 0; count < conf.scoreRepeat; count++ {
-		for i := 0; i < conf.addScoreNum; i++ {
-			index := rand.Intn(len(playerIDs))
-			player := players[playerIDs[index]]
-			score = append(score, &ScoreRow{
-				PlayerID: player.ID,
-				Score:    rand.Intn(1000),
-			})
-		}
-		csv := score.CSV()
-		scoredPlayerIDs = score.PlayerIDs()
-		AdminLogger.Printf("[%s] [tenant:%s] CSV入稿 %d回目 (rows:%d, len:%d)", conf.scTag, conf.tenantName, count+1, len(score)-1, len(csv))
+	eg := errgroup.Group{}
+	doneCh := make(chan struct{})
+	playerWorkerNum := 5 // TODO: 調整
 
-		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, comp.ID, []byte(csv), orgAg)
-		msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
-		v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg, WithStatusCode(200),
-			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
-				_ = r
-				if r.Data.Rows != int64(len(score)) {
-					return fmt.Errorf("入稿したCSVの行数が正しくありません %d != %d", r.Data.Rows, len(score))
-				}
-				return nil
-			}))
-		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionScore, conf.scTag)
-		} else {
-			if v.Canceled {
-				// context.Doneによって打ち切られた場合はエラーカウントしない
-				return &OrganizerJobResult{}, nil
+	for i := 0; i < playerWorkerNum; i++ {
+		eg.Go(func() error {
+			idx := rand.Intn(len(qualifyPlayerIDs))
+			playerID := qualifyPlayerIDs[idx]
+			playerAc, playerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, conf.tenantName, playerID)
+			if err != nil {
+				return err
 			}
-			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
-			return nil, v
-		}
 
-		SleepWithCtx(ctx, time.Millisecond*time.Duration(conf.scoreInterval))
+			isScoreDone := false
+			for {
+				select {
+				case <-doneCh:
+					isScoreDone = true
+				default:
+				}
+
+				res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", playerAg)
+				msg := fmt.Sprintf("%s %s", playerAc, txt)
+				v := ValidateResponseWithMsg("大会内のランキング取得", step, res, err, msg, WithStatusCode(200),
+					WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+						for _, rank := range r.Data.Ranks {
+							playerIDs = append(playerIDs, rank.PlayerID)
+						}
+						return nil
+					}),
+				)
+				if v.IsEmpty() {
+					sc.AddScoreByScenario(step, ScoreGETPlayerRanking, conf.scTag)
+				} else {
+					sc.AddErrorCount()
+					return v
+				}
+
+				if isScoreDone {
+					break
+				}
+				SleepWithCtx(ctx, time.Millisecond*100)
+			}
+			return nil
+		})
+	}
+
+	eg.Go(func() error {
+		defer close(doneCh)
+		for count := 0; count < conf.scoreRepeat; count++ {
+			for i := 0; i < conf.addScoreNum; i++ {
+				index := rand.Intn(len(playerIDs))
+				player := players[playerIDs[index]]
+				score = append(score, &ScoreRow{
+					PlayerID: player.ID,
+					Score:    rand.Intn(1000),
+				})
+			}
+			csv := score.CSV()
+			scoredPlayerIDs = score.PlayerIDs()
+			AdminLogger.Printf("[%s] [tenant:%s] CSV入稿 %d回目 (rows:%d, len:%d)", conf.scTag, conf.tenantName, count+1, len(score)-1, len(csv))
+
+			res, err, txt := PostOrganizerCompetitionScoreAction(ctx, comp.ID, []byte(csv), orgAg)
+			msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
+			v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg, WithStatusCode(200),
+				WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+					_ = r
+					if r.Data.Rows != int64(len(score)) {
+						return fmt.Errorf("入稿したCSVの行数が正しくありません %d != %d", r.Data.Rows, len(score))
+					}
+					return nil
+				}))
+			if v.IsEmpty() {
+				sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionScore, conf.scTag)
+			} else {
+				if v.Canceled {
+					// context.Doneによって打ち切られた場合はエラーカウントしない
+					return nil
+				}
+				sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
+				return v
+			}
+
+			SleepWithCtx(ctx, time.Millisecond*time.Duration(conf.scoreInterval))
+		}
+		return nil
+	})
+
+	if err := eg.Wait(); err != nil {
+		return nil, err
 	}
 
 	// 大会結果確定 x 1
