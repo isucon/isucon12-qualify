@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/google/go-cmp v0.5.8
 	github.com/isucon/isucandar v0.0.0-20220322062028-6dd56dc57d72
+	github.com/isucon/isucon12-portal v0.0.0-00010101000000-000000000000
 	github.com/isucon/isucon12-qualify/data v0.0.0-00010101000000-000000000000
 	github.com/isucon/isucon12-qualify/webapp/go v0.0.0-00010101000000-000000000000
 	github.com/k0kubun/pp/v3 v3.1.0
@@ -19,6 +20,7 @@ require (
 	github.com/goccy/go-json v0.9.7 // indirect
 	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
+	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/jaswdr/faker v1.10.2 // indirect
 	github.com/jmoiron/sqlx v1.3.5 // indirect
 	github.com/labstack/echo/v4 v4.7.2 // indirect
@@ -43,8 +45,11 @@ require (
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858 // indirect
 	golang.org/x/xerrors v0.0.0-20220609144429-65e65417b02f // indirect
+	google.golang.org/protobuf v1.28.0 // indirect
 )
 
-replace github.com/isucon/isucon12-qualify/webapp/go => ../webapp/go
-
-replace github.com/isucon/isucon12-qualify/data => ../data
+replace (
+	github.com/isucon/isucon12-portal => ../isucon12-portal
+	github.com/isucon/isucon12-qualify/data => ../data
+	github.com/isucon/isucon12-qualify/webapp/go => ../webapp/go
+)

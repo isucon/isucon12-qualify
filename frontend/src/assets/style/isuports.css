@@ -1,0 +1,38 @@
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: 'M PLUS 1', sans-serif;
+}
+
+h1, h2 {
+  font-family: 'M PLUS 1', sans-serif;
+  font-weight: 700;
+}
+
+#app {
+  height: 100%;
+}
+  
+button {
+  padding: 8px;
+  border-radius: 8px;
+  background: #38F;
+  color: white;
+  border: 1px solid;
+}
+
+button.slim {
+  height: 24px;
+  padding: 2px 8px;
+}
+
+
+.dark a:link {
+  text-decoration: underline;
+  color: white;
+}
+.dark a:visited {
+  text-decoration: underline;
+  color: #F0F0F0;
+}

@@ -188,7 +188,6 @@ type ResponseAPI interface {
 func WithSuccessResponse[T ResponseAPI](validates ...func(res T) error) ResponseValidator {
 	return func(r *Response) error {
 		var v T
-		// TODO: debug json extract失敗したら生json出す
 		if err := json.NewDecoder(strings.NewReader(r.Body)).Decode(&v); err != nil {
 			if failure.Is(err, context.DeadlineExceeded) || failure.Is(err, context.Canceled) {
 				return nil

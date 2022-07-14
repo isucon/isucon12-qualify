@@ -1,12 +1,12 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
-import LandingPageView from '../views/tenant/LandingPageView.vue'
-import MyPageView from '../views/tenant/MyPageView.vue'
-import SingleCompetitionView from '../views/tenant/SingleCompetitionView.vue'
-import SinglePlayerView from '../views/tenant/SinglePlayerView.vue'
-import OrganizerMainView from '../views/tenant/OrganizerMainView.vue'
-import PlayerListView from '../views/tenant/PlayerListView.vue'
-import CompetitionListView from '../views/tenant/CompetitionListView.vue'
-import TenantBillingView from '../views/tenant/TenantBillingView.vue'
+import LandingPageView from '@/views/tenant/player/LandingPageView.vue'
+import MyPageView from '@/views/tenant/player/MyPageView.vue'
+import SingleCompetitionView from '@/views/tenant/player/SingleCompetitionView.vue'
+import SinglePlayerView from '@/views/tenant/player/SinglePlayerView.vue'
+import OrganizerMainView from '@/views/tenant/organizer/OrganizerMainView.vue'
+import PlayerListView from '@/views/tenant/organizer/PlayerListView.vue'
+import CompetitionListView from '@/views/tenant/organizer/CompetitionListView.vue'
+import TenantBillingView from '@/views/tenant/organizer/TenantBillingView.vue'
 
 const routes: Array<RouteRecordRaw> = [
   {

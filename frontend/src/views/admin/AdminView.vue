@@ -10,45 +10,43 @@
     />
 
     <h2>テナント一覧</h2>
-    <table class="tenant-list">
-      <thead>
-        <tr>
-          <th class="tenant-id">ID</th>
-          <th class="tenant-name">テナント名</th>
-          <th class="tenant-display-name">表示名</th>
-          <th class="billing">請求額</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          v-for="t in tenants"
-          :key="t.id"
-        >
-          <td class="tenant-id">{{ t.id }}</td>
-          <td class="tenant-name">{{ t.name }} <a :href="`https://${t.name}.t.isucon.dev/`">→</a></td>
-          <td class="tenant-display-name">{{ t.display_name }}</td>
-          <td class="billing">{{ t.billing.toLocaleString() }}円</td>
-        </tr>
+    <TableBase
+      :header="tableHeader"
+      :data="tableData"
+      :row-attr="tenants"
+    >
+      <template #cell-name="slotProps">
+        <a :href="`https://${slotProps.row.name}.t.isucon.dev/`">{{ slotProps.row.name }}</a>
+      </template>
+      <template #footer>
         <tr v-if="!noMoreLoad">
           <td colspan="4" class="loading">
             <template v-if="isLoading">
               読み込み中... <span class="cycle-loop">の</span>
             </template>
             <template v-else>
-            <button @click="handleLoading">さらに読み込む</button>
+            <button
+              type="button"
+              class="slim"
+              @click="handleLoading"
+            >さらに読み込む</button>
             </template>
           </td>
         </tr>
-      </tbody>
-    </table>
+      </template>
+    </TableBase>
   </div>
 </template>
 
 <script lang="ts">
-import { ref, onMounted, defineComponent } from 'vue'
+import { ref, computed, onMounted, defineComponent } from 'vue'
 import axios from 'axios'
 
+import TableBase, { TableColumn } from '@/components/parts/TableBase.vue'
 import AddTenantModal from '@/components/admin/AddTenantModal.vue'
+
+import { useLoginStatus } from '@/assets/hooks/useLoginStatus'
+
 
 type Tenant = {
   id: string
@@ -64,9 +62,18 @@ type BillingResponse = {
 
 export default defineComponent({
   components: {
+    TableBase,
     AddTenantModal,
   },
+  props: {
+    isLoggedIn: {
+      type: Boolean,
+      required: true,
+    },
+  },
   setup() {
+    const { isLoggedIn } = useLoginStatus()
+
     const tenants = ref<Tenant[]>([])
     const beforeCursor = ref('')
     const isLoading = ref(false)
@@ -98,7 +105,7 @@ export default defineComponent({
         tenants.value.push(...res.data.tenants)
         beforeCursor.value = res.data.tenants[res.data.tenants.length-1].id
 
-        if (res.data.tenants.length < 20) {
+        if (res.data.tenants.length < 10) {
           noMoreLoad.value = true
         }
       } catch (e: any) {
@@ -109,7 +116,11 @@ export default defineComponent({
     }
 
     onMounted(() => {
-      fetch('')
+      setTimeout(() => {
+        if (isLoggedIn.value) {
+          fetch('')
+        }
+      }, 250)
     })
 
     const handleLoading = () => {
@@ -128,6 +139,40 @@ export default defineComponent({
       tenants.value.unshift(tenant)
     }
 
+    const tableHeader: TableColumn[] = [
+      {
+        width: '10%',
+        align: 'center',
+        text: 'ID',
+      },
+      {
+        width: '20%',
+        align: 'center',
+        text: 'テナント名',
+      },
+      {
+        width: '45%',
+        align: 'left',
+        text: '表示名',
+      },
+      {
+        width: '15%',
+        align: 'right',
+        text: '請求額',
+      },
+    ]
+
+    const tableData = computed<string[][]>(() => 
+      tenants.value.map(t => {
+        return [
+          t.id,
+          '##slot##cell-name',
+          t.display_name,
+          t.billing.toLocaleString() + '円'
+        ]
+      })
+    )
+
     return {
       tenants,
       handleLoading,
@@ -137,6 +182,8 @@ export default defineComponent({
       handleAddTenant,
       handleAddTenantClose,
       handleTenantAdded,
+      tableHeader,
+      tableData,
     }
   },
 })
@@ -150,38 +197,6 @@ export default defineComponent({
 
 .add-tenant {
   float: right;
-}
-
-.tenant-list {
-  border: 1px solid gray;
-  border-collapse: collapse;
-  width: 100%;
-}
-
-th, td {
-  padding: 4px;
-  border: 1px solid lightgray;
-}
-
-.tenant-id {
-  width: 10%;
-  text-align: center;
-}
-
-.tenant-name {
-  width: 25%;
-}
-
-.tenant-display-name {
-  width: 50%
-}
-
-.billing {
-  width: 15%;
-}
-
-td.billing {
-  text-align: right;
 }
 
 @keyframes rotation {
