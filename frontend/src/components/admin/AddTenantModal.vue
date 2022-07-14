@@ -37,10 +37,10 @@ export default defineComponent({
 
       if (res.data.status) {
         context.emit('tenantAdded', {
-          id: res.data.data.tenant.id,
+          id: 'x',
           name: res.data.data.tenant.name,
           display_name: res.data.data.tenant.display_name,
-          billing: res.data.data.tenant.billing,
+          billing: 0
         })
       }
     }
