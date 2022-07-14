@@ -116,9 +116,11 @@ export default defineComponent({
     }
 
     onMounted(() => {
-      if (isLoggedIn.value) {
-        fetch('')
-      }
+      setTimeout(() => {
+        if (isLoggedIn.value) {
+          fetch('')
+        }
+      }, 250)
     })
 
     const handleLoading = () => {
