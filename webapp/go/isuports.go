@@ -432,13 +432,8 @@ func flockByTenantID(tenantID int64) (io.Closer, error) {
 	return fl, nil
 }
 
-type TenantDetail struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
-}
-
 type TenantsAddHandlerResult struct {
-	Tenant TenantDetail `json:"tenant"`
+	Tenant TenantWithBilling `json:"tenant"`
 }
 
 // SasS管理者用API
@@ -492,9 +487,11 @@ func tenantsAddHandler(c echo.Context) error {
 	}
 
 	res := TenantsAddHandlerResult{
-		Tenant: TenantDetail{
+		Tenant: TenantWithBilling{
+			ID:          strconv.FormatInt(id, 10),
 			Name:        name,
 			DisplayName: displayName,
+			BillingYen:  0,
 		},
 	}
 	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
@@ -1504,6 +1501,11 @@ func competitionsHandler(c echo.Context, v *Viewer, tenantDB dbOrTx) error {
 		},
 	}
 	return c.JSON(http.StatusOK, res)
+}
+
+type TenantDetail struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
 }
 
 type MeHandlerResult struct {
