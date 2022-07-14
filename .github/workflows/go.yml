@@ -55,7 +55,8 @@ jobs:
         working-directory: ./development
       - name: "Step Summary"
         run: |
-          echo "::set-output name=pull_request_number::$(gh pr view $(echo ${{ github.ref_name }} | sed -e 's/\/merge//') --json number -q .number || echo "")"
-          echo '### [PR \#${{ steps.pr.outputs.pull_request_number }}](${{ github.server_url }}/${{ github.repository }}/pull/${{ steps.pr.outputs.pull_request_number }})' >> $GITHUB_STEP_SUMMARY
+          PR_NUMBER=$(echo ${{ github.ref_name }} | sed -e 's/\/merge//')
+          PR_LINK=${{ github.server_url }}/${{ github.repository }}/pull/${PR_NUMBER}
+          echo '### [PR \#${PR_NUMBER}](${PR_LINK})' >> $GITHUB_STEP_SUMMARY
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -8,6 +8,9 @@ if [ $PR = "main" ]; then
 exit 0
 fi
 
-cat $1 > comment.txt
+echo '```' > comment.txt
+cat $1 >> comment.txt
+echo '```' >> comment.txt
 echo "\n$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> comment.txt
+
 gh issue comment $PR --body-file comment.txt
