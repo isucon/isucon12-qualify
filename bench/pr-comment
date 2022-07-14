@@ -13,5 +13,3 @@ ehco "\n$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> co
 gh issue comment $PR --body-file comment.txt
 
 # PRがあればPRリンクをactions jobに出す
-PR_URL=$(gh pr view $PR --json url -q '.url') || exit 0
-echo "[### PRLINK]($PR_URL)" >> $GITHUB_STEP_SUMMARY
