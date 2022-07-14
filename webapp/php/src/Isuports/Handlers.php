@@ -348,9 +348,11 @@ class Handlers
         $this->createTenantDB($id);
 
         $res = new TenantsAddHandlerResult(
-            tenant: new TenantDetail(
+            tenant: new TenantWithBilling(
+                id: (string)$id,
                 name: $name,
                 displayName: $displayName,
+                billingYen: 0,
             ),
         );
 

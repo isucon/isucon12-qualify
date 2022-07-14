@@ -101,34 +101,14 @@ class CompetitionRow
     }
 }
 
-class TenantDetail implements JsonSerializable
-{
-    public function __construct(
-        public string $name,
-        public string $displayName,
-    ) {
-    }
-
-    /**
-     * @return array{name: string, display_name: string}
-     */
-    public function jsonSerialize(): array
-    {
-        return [
-            'name' => $this->name,
-            'display_name' => $this->displayName,
-        ];
-    }
-}
-
 class TenantsAddHandlerResult implements JsonSerializable
 {
-    public function __construct(public TenantDetail $tenant)
+    public function __construct(public TenantWithBilling $tenant)
     {
     }
 
     /**
-     * @return array{tenant: TenantDetail}
+     * @return array{tenant: TenantWithBilling}
      */
     public function jsonSerialize(): array
     {
@@ -478,6 +458,26 @@ class CompetitionsHandlerResult implements JsonSerializable
     public function jsonSerialize(): array
     {
         return ['competitions' => $this->competitions];
+    }
+}
+
+class TenantDetail implements JsonSerializable
+{
+    public function __construct(
+        public string $name,
+        public string $displayName,
+    ) {
+    }
+
+    /**
+     * @return array{name: string, display_name: string}
+     */
+    public function jsonSerialize(): array
+    {
+        return [
+            'name' => $this->name,
+            'display_name' => $this->displayName,
+        ];
     }
 }
 
