@@ -54,71 +54,24 @@ build {
   sources = ["source.amazon-ebs.qualify"]
 
   provisioner "file" {
-    destination = "/dev/shm/isucon-env-checker"
-    source      = "./isucon-env-checker/isucon-env-checker"
+    destination = "/dev/shm/mitamae.tar.gz"
+    source      = "./mitamae.tar.gz"
   }
-
-  provisioner "file" {
-    destination = "/dev/shm/run-isucon-env-checker.sh"
-    source      = "./run-isucon-env-checker.sh"
-  }
-
-  provisioner "file" {
-    destination = "/dev/shm/isucon-env-checker.service"
-    source      = "./isucon-env-checker.service"
-  }
-
-  provisioner "file" {
-    destination = "/dev/shm/sshd_config"
-    source      = "./sshd_config"
-  }
-
   provisioner "file" {
     destination = "/dev/shm/isucon-admin.pub"
-    source      = "./isucon-admin.pub"
+    source      = "./mitamae/cookbooks/users/isucon-admin.pub"
   }
 
   provisioner "shell" {
+    env = {
+      DEBIAN_FRONTEND = "noninteractive"
+    }
     inline = [
-      # Write REVISION
-      "sudo sh -c 'echo ${var.revision} > /etc/REVISION'",
-
-      # Install isucon-env-checker
-      "sudo mv /dev/shm/isucon-env-checker /usr/local/bin/isucon-env-checker",
-      "sudo chown root:root /usr/local/bin/isucon-env-checker",
-      "sudo chmod 755 /usr/local/bin/isucon-env-checker",
-
-      # Install run-isucon-env-checker.sh
-      "sudo mkdir /opt/isucon-env-checker",
-      "sudo mv /dev/shm/run-isucon-env-checker.sh /opt/isucon-env-checker/run-isucon-env-checker.sh",
-      "sudo chown root:root /opt/isucon-env-checker/run-isucon-env-checker.sh",
-      "sudo chmod 700 /opt/isucon-env-checker/run-isucon-env-checker.sh",
-
-      # Install isucon-env-checker.service
-      "sudo mv /dev/shm/isucon-env-checker.service /etc/systemd/system/isucon-env-checker.service",
-      "sudo chown root:root /etc/systemd/system/isucon-env-checker.service",
-      "sudo systemctl daemon-reload",
-      "sudo systemctl enable isucon-env-checker.service",
-
-      # Create isucon user
-      "sudo useradd -s /bin/bash -m -p '*' isucon",
-      "sudo mkdir -p /home/isucon/.ssh",
-      "sudo chmod 700 /home/isucon/.ssh",
-      "sudo chown -R isucon:isucon /home/isucon/.ssh",
-
-      # Configure SSH for isucon user
-      "cat /dev/shm/sshd_config | sudo tee -a /etc/ssh/sshd_config",
-      # Disable motd
-      "sudo -u isucon touch /home/isucon/.hushlogin",
-
-      # Create isucon-admin user
-      "sudo useradd -s /bin/bash -m -p '*' isucon-admin",
-      "sudo mkdir -p /home/isucon-admin/.ssh",
-      "sudo mv /dev/shm/isucon-admin.pub /home/isucon-admin/.ssh/authorized_keys",
-      "sudo chmod 700 /home/isucon-admin/.ssh",
-      "sudo chmod 600 /home/isucon-admin/.ssh/authorized_keys",
-      "sudo chown -R isucon-admin:isucon-admin /home/isucon-admin/.ssh",
-      "echo 'isucon-admin ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/isucon-admin",
+      "cd /dev/shm",
+      "tar xf mitamae.tar.gz",
+      "cd mitamae",
+      "sudo ./setup.sh",
+      "sudo ./mitamae local roles/default.rb",
 
       # Remove authorized_keys for packer
       "sudo truncate -s 0 /home/ubuntu/.ssh/authorized_keys",
