@@ -14,6 +14,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 from werkzeug.exceptions import HTTPException
 
+from sqltrace import initialize_sql_logger
+
 INITIALIZE_SCRIPT = "../sql/init.sh"
 COOKIE_NAME = "isuports_session"
 TENANT_DB_SCHEMA_FILE_PATH = "../sql/tenant/10_schema.sql"
@@ -39,7 +41,7 @@ def connect_admin_db():
     password = os.getenv("ISUCON_DB_PASSWORD", "isucon")
     database = os.getenv("ISUCON_DB_NAME", "isuports")
 
-    return create_engine(f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}")
+    return create_engine(f"mysql+mysqlconnector://{user}:{password}@{host}:{port}/{database}", pool_size=10)
 
 
 def tenant_db_path(id: int) -> str:
@@ -51,7 +53,8 @@ def tenant_db_path(id: int) -> str:
 def connect_to_tenant_db(id: int):
     """テナントDBに接続する"""
     path = tenant_db_path(id)
-    return create_engine(f"sqlite:///{path}")
+    engine = create_engine(f"sqlite:///{path}")
+    return initialize_sql_logger(engine)
 
 
 def create_tenant_db(id: int):
@@ -68,7 +71,7 @@ def dispense_id() -> str:
     last_err = None
     for i in range(100):
         try:
-            res = admin_db.execute("REPLACE INTO id_generator (stub) VALUES (%s)", ("a",))
+            res = admin_db.execute("REPLACE INTO id_generator (stub) VALUES (%s)", "a")
             id = res.lastrowid
             if id != 0:
                 return hex(id)[2:]
@@ -173,7 +176,7 @@ def retrieve_tenant_row_from_header():
         )
 
     # テナントの存在確認
-    row = admin_db.execute("SELECT * FROM tenant WHERE name = %s", (tenant_name,)).fetchone()
+    row = admin_db.execute("SELECT * FROM tenant WHERE name = %s", tenant_name).fetchone()
     if not row:
         abort(401, "tenant not found")
 
@@ -201,7 +204,7 @@ class PlayerRow:
 
 def retrieve_player(tenant_db, id: str) -> PlayerRow:
     """参加者を取得する"""
-    row = tenant_db.execute("SELECT * FROM player WHERE id = ?", (id,)).fetchone()
+    row = tenant_db.execute("SELECT * FROM player WHERE id = ?", id).fetchone()
     if not row:
         return None
 
@@ -236,7 +239,7 @@ class CompetitionRow:
 
 def retrieve_competition(tenant_db, id: str) -> Optional[CompetitionRow]:
     """大会を取得する"""
-    row = tenant_db.execute("SELECT * FROM competition WHERE id = ?", (id,)).fetchone()
+    row = tenant_db.execute("SELECT * FROM competition WHERE id = ?", id).fetchone()
     if not row:
         return None
 
@@ -307,7 +310,10 @@ def admin_add_tenants():
     try:
         res = admin_db.execute(
             "INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (%s, %s, %s, %s)",
-            (name, display_name, now, now),
+            name,
+            display_name,
+            now,
+            now,
         )
         id = res.lastrowid
     except IntegrityError:  # duplicate entry
@@ -358,7 +364,8 @@ def billing_report_by_competition(tenant_db, tenant_id: int, competition_id: str
 
     visit_history_summary_rows = admin_db.execute(
         "SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = %s AND competition_id = %s GROUP BY player_id",
-        (tenant_id, competition.id),
+        tenant_id,
+        competition.id,
     ).fetchall()
 
     billing_map = {}
@@ -377,7 +384,8 @@ def billing_report_by_competition(tenant_db, tenant_id: int, competition_id: str
     # スコアを登録した参加者のIDを取得する
     scored_player_id_rows = tenant_db.execute(
         "SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?",
-        (tenant_id, competition.id),
+        tenant_id,
+        competition.id,
     ).fetchall()
 
     for pid in scored_player_id_rows:
@@ -453,7 +461,7 @@ def admin_get_tenants_billing():
             id=str(tenant_row.id), name=tenant_row.name, display_name=tenant_row.display_name, billing=0
         )
         tenant_db = connect_to_tenant_db(int(tenant_row.id))
-        competition_rows = tenant_db.execute("SELECT * FROM competition WHERE tenant_id=?", (tenant_row.id)).fetchall()
+        competition_rows = tenant_db.execute("SELECT * FROM competition WHERE tenant_id=?", tenant_row.id).fetchall()
 
         for competition_row in competition_rows:
             report = billing_report_by_competition(tenant_db, tenant_row.id, competition_row.id)
@@ -480,7 +488,7 @@ def organizer_get_players():
 
     rows = tenant_db.execute(
         "SELECT * FROM player WHERE tenant_id=? ORDER BY created_at DESC",
-        (viewer.tenant_id,),
+        viewer.tenant_id,
     ).fetchall()
 
     player_details = []
@@ -518,7 +526,12 @@ def organizer_add_players():
 
         tenant_db.execute(
             "INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (id, viewer.tenant_id, display_name, False, now, now),
+            id,
+            viewer.tenant_id,
+            display_name,
+            False,
+            now,
+            now,
         )
 
         player = retrieve_player(tenant_db, id)
@@ -549,7 +562,9 @@ def organizer_disqualified_players(player_id: str):
 
     tenant_db.execute(
         "UPDATE player SET is_disqualified = ?, updated_at = ? WHERE id = ?",
-        (True, now, player_id),
+        True,
+        now,
+        player_id,
     )
 
     player = retrieve_player(tenant_db, player_id)
@@ -594,7 +609,12 @@ def organizer_add_competitions():
 
     tenant_db.execute(
         "INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-        (id, viewer.tenant_id, title, None, now, now),
+        id,
+        viewer.tenant_id,
+        title,
+        None,
+        now,
+        now,
     )
 
     return jsonify(
@@ -625,7 +645,9 @@ def organizer_finish_competitions(competition_id: str):
 
     tenant_db.execute(
         "UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?",
-        (now, now, competition_id),
+        now,
+        now,
+        competition_id,
     )
 
     return jsonify({"status": True})
@@ -693,22 +715,21 @@ def organizer_score_competitions(competition_id: str):
 
     tenant_db.execute(
         "DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?",
-        (viewer.tenant_id, competition_id),
+        viewer.tenant_id,
+        competition_id,
     )
 
     for player_score_row in player_score_rows:
         tenant_db.execute(
             "INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                player_score_row.id,
-                player_score_row.tenant_id,
-                player_score_row.player_id,
-                player_score_row.competition_id,
-                player_score_row.score,
-                player_score_row.row_num,
-                player_score_row.created_at,
-                player_score_row.updated_at,
-            ),
+            player_score_row.id,
+            player_score_row.tenant_id,
+            player_score_row.player_id,
+            player_score_row.competition_id,
+            player_score_row.score,
+            player_score_row.row_num,
+            player_score_row.created_at,
+            player_score_row.updated_at,
         )
 
     return jsonify(SuccessResult(status=True, data={"rows": len(player_score_rows)}))
@@ -728,7 +749,7 @@ def organizer_get_billing():
 
     rows = tenant_db.execute(
         "SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC",
-        (viewer.tenant_id,),
+        viewer.tenant_id,
     ).fetchall()
     if not rows:
         raise
@@ -797,7 +818,9 @@ def player_get_detail(player_id: str):
         # 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
         row = tenant_db.execute(
             "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1",
-            (viewer.tenant_id, competition_row.id, player.id),
+            viewer.tenant_id,
+            competition_row.id,
+            player.id,
         ).fetchone()
         if not row:
             # 行がない = スコアが記録されてない
@@ -855,14 +878,18 @@ def player_get_competition_ranking(competition_id):
         abort(404, "competition not found")
 
     now = int(datetime.now().timestamp())
-    row = admin_db.execute("SELECT * FROM tenant WHERE id = %s", (viewer.tenant_id,)).fetchone()
+    row = admin_db.execute("SELECT * FROM tenant WHERE id = %s", viewer.tenant_id).fetchone()
     if not row:
         return
     tenant_row = TenantRow(**row)
 
     admin_db.execute(
         "INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (%s, %s, %s, %s, %s)",
-        (viewer.player_id, tenant_row.id, competition_id, now, now),
+        viewer.player_id,
+        tenant_row.id,
+        competition_id,
+        now,
+        now,
     )
 
     rank_after = 0
@@ -879,7 +906,8 @@ def player_get_competition_ranking(competition_id):
     player_score_rows = []
     rows = tenant_db.execute(
         "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
-        (tenant_row.id, competition_id),
+        tenant_row.id,
+        competition_id,
     ).fetchall()
     for row in rows:
         player_score_rows.append(PlayerScoreRow(**row))
