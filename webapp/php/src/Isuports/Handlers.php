@@ -996,7 +996,7 @@ class Handlers
         }
         usort($ranks, function (CompetitionRank $x, CompetitionRank $y): int {
             if ($x->score === $y->score) {
-                return $y->rowNum <=> $x->rowNum;
+                return $x->rowNum <=> $y->rowNum;
             }
 
             return $y->score <=> $x->score;
