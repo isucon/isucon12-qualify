@@ -43,7 +43,6 @@ export default defineComponent({
         return
       }
 
-      console.log(res.data)
       competitions.value = res.data.data.competitions
     }
 

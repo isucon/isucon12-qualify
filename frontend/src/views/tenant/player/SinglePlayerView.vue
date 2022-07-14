@@ -55,7 +55,6 @@ export default defineComponent({
       isLoading.value = true
       try {
         const res = await axios.get(`/api/player/player/${playerId}`)
-        console.log(res.data)
 
         player.value = res.data.data.player
         scores.value = res.data.data.scores

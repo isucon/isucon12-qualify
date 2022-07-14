@@ -82,7 +82,6 @@ export default defineComponent({
         return
       }
 
-      console.log(res.data)
       competitions.value = res.data.data.competitions
     }
 
@@ -145,7 +144,7 @@ export default defineComponent({
       showUploadModal.value = false
     }
     const handleCSVUploaded = (evt: any) => {
-      console.log(evt)
+      window.alert(evt.uploaded + '件のデータをアップロードしました。')
     }
 
 

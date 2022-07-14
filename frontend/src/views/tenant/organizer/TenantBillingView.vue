@@ -56,7 +56,6 @@ export default defineComponent({
     const fetchBilling = async () => {
       const res = await axios.get('/api/organizer/billing')
 
-      console.log(res)
       billingReports.value = res.data.data.reports
       isLoading.value = false
     }

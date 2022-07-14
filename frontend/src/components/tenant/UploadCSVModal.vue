@@ -70,7 +70,6 @@ export default defineComponent({
       )
 
       if (res.data.status) {
-        console.log(res.data.data)
         context.emit('csvUploaded', {
           uploaded: res.data.data.rows,
         })
@@ -79,11 +78,9 @@ export default defineComponent({
 
     const csvFile = ref<File | undefined>()
     const handleFileChange = (e: Event) => {
-      console.log(e)
       const input = e.target as HTMLInputElement
       const file = input.files ? input.files[0] : undefined
       csvFile.value = file
-      console.log(file)
     }
 
     const inputRef = ref<HTMLInputElement|null>(null)
