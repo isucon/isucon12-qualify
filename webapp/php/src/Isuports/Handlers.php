@@ -209,11 +209,11 @@ class Handlers
         }
 
         return new TenantRow(
-            id: (int)$row['id'],
+            id: $row['id'],
             name: $row['name'],
             displayName: $row['display_name'],
-            createdAt: (int)$row['created_at'],
-            updatedAt: (int)$row['updated_at'],
+            createdAt: $row['created_at'],
+            updatedAt: $row['updated_at'],
         );
     }
 
@@ -231,12 +231,12 @@ class Handlers
         }
 
         return new PlayerRow(
-            tenantID: (int)$row['tenant_id'],
+            tenantID: $row['tenant_id'],
             id: $row['id'],
             displayName: $row['display_name'],
             isDisqualified: (bool)$row['is_disqualified'],
-            createdAt: (int)$row['created_at'],
-            updatedAt: (int)$row['updated_at'],
+            createdAt: $row['created_at'],
+            updatedAt: $row['updated_at'],
         );
     }
 
@@ -271,12 +271,12 @@ class Handlers
         }
 
         return new CompetitionRow(
-            tenantID: (int)$row['tenant_id'],
+            tenantID: $row['tenant_id'],
             id: $row['id'],
             title: $row['title'],
-            finishedAt: is_null($row['finished_at']) ? null : (int)$row['finished_at'],
-            createdAt: (int)$row['created_at'],
-            updatedAt: (int)$row['updated_at'],
+            finishedAt: is_null($row['finished_at']) ? null : $row['finished_at'],
+            createdAt: $row['created_at'],
+            updatedAt: $row['updated_at'],
         );
     }
 
@@ -343,13 +343,14 @@ class Handlers
             throw $e;
         }
 
-        $id = (int)$this->adminDB->lastInsertId();
+        /** @var string $id */
+        $id = $this->adminDB->lastInsertId();
 
-        $this->createTenantDB($id);
+        $this->createTenantDB((int)$id);
 
         $res = new TenantsAddHandlerResult(
             tenant: new TenantWithBilling(
-                id: (string)$id,
+                id: $id,
                 name: $name,
                 displayName: $displayName,
                 billingYen: 0,
@@ -471,18 +472,18 @@ class Handlers
             }
 
             $tb = new TenantWithBilling(
-                id: $t['id'],
+                id: (string)$t['id'],
                 name: $t['name'],
                 displayName: $t['display_name'],
             );
 
-            $tenantDB = $this->connectToTenantDB((int)$t['id']);
+            $tenantDB = $this->connectToTenantDB($t['id']);
             $cs = $tenantDB->prepare('SELECT * FROM competition WHERE tenant_id=?')
                 ->executeQuery([$t['id']])
                 ->fetchAllAssociative();
 
             foreach ($cs as $comp) {
-                $report = $this->billingReportByCompetition($tenantDB, (int)$t['id'], $comp['id']);
+                $report = $this->billingReportByCompetition($tenantDB, $t['id'], $comp['id']);
                 $tb->billingYen += $report->billingYen;
             }
 
@@ -897,7 +898,7 @@ class Handlers
 
             $psds[] = new PlayerScoreDetail(
                 competitionTitle: $comp->title,
-                score: (int)$ps['score'],
+                score: $ps['score'],
             );
         }
 
@@ -988,10 +989,10 @@ class Handlers
             $p = $this->retrievePlayer($tenantDB, $ps['player_id']);
 
             $ranks[] = new CompetitionRank(
-                score: (int)$ps['score'],
+                score: $ps['score'],
                 playerID: $p->id,
                 playerDisplayName: $p->displayName,
-                rowNum: (int)$ps['row_num'],
+                rowNum: $ps['row_num'],
             );
         }
         usort($ranks, function (CompetitionRank $x, CompetitionRank $y): int {
