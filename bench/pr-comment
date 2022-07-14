@@ -7,4 +7,11 @@ if [ $PR = "main" ]; then
 	echo "PR is main, skip post comment"
 exit 0
 fi
-gh issue comment $PR --body-file $1
+
+cat $1 > comment.txt
+ehco "\n$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >> comment.txt
+gh issue comment $PR --body-file comment.txt
+
+# PRがあればPRリンクをactions jobに出す
+PR_URL=$(gh pr view --json url -q '.url') || exit 0
+echo "[### PRLINK]($PR_URL)" >> $GITHUB_STEP_SUMMARY
