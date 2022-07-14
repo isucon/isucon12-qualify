@@ -1216,7 +1216,7 @@ class Handlers
 
         $exitCode = proc_close($process);
 
-        fseek($fp,0);
+        rewind($fp);
         $out = stream_get_contents($fp);
 
         return $exitCode;
