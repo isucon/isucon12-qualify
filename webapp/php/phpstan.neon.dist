@@ -9,3 +9,6 @@ parameters:
     -
       message: '#^If condition is always#'
       path: public/index.php
+    -
+      message: '#Property App\\Isuports\\Handlers::\$logger is never read, only written\.#'
+      path: src/Isuports/Handlers.php
