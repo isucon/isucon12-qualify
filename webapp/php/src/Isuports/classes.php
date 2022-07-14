@@ -512,20 +512,17 @@ class MeHandlerResult implements JsonSerializable
 
 class InitializeHandlerResult implements JsonSerializable
 {
-    public function __construct(
-        public string $lang,
-        public string $appeal,
-    ) {
+    public function __construct(public string $lang)
+    {
     }
 
     /**
-     * @return array{lang: string, appeal: string}
+     * @return array{lang: string}
      */
     public function jsonSerialize(): array
     {
         return [
             'lang' => $this->lang,
-            'appeal' => $this->appeal,
         ];
     }
 }

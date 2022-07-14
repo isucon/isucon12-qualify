@@ -1195,10 +1195,7 @@ class Handlers
         }
 
         $res = new InitializeHandlerResult(
-            lang: 'php',
-            // 頑張ったポイントやこだわりポイントがあれば書いてください
-            // 競技中の最後に計測したものを参照して、講評記事などで使わせていただきます
-            appeal: '',
+            lang: 'php'
         );
 
         return $this->jsonResponse($response, new SuccessResult(success: true, data: $res));
