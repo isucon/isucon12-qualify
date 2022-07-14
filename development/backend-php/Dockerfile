@@ -1,4 +1,4 @@
-FROM php:8.0.20-bullseye
+FROM php:8.1.8-bullseye
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
