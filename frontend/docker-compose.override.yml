@@ -1,0 +1,14 @@
+version: '3.0'
+
+services:
+  frontend:
+    build: ./frontend/
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./frontend:/home/isucon/frontend
+
+  nginx:
+    volumes:
+      - ./frontend/nginx/conf.d:/etc/nginx/conf.d
+

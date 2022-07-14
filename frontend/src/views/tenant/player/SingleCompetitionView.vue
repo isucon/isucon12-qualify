@@ -5,43 +5,40 @@
     </h2>
 
     <h3>スコアランキング</h3>
-    <table class="ranking">
-      <thead>
-        <tr>
-          <th class="rank-number">順位</th>
-          <th class="player-id">プレイヤーID</th>
-          <th class="player-display-name">プレイヤー名</th>
-          <th class="rank-score">スコア</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          v-for="r in ranks"
-          :key="r.rank"
-        >
-          <td class="rank-number">{{ r.rank }}</td>
-          <td class="player-id">{{ r.player_id }} <router-link :to="`/player/${r.player_id}`">→</router-link></td>
-          <td class="player-display-name">{{ r.player_display_name }}</td>
-          <td class="rank-score">{{ r.score }}</td>
-        </tr>
+    <TableBase
+      :header="tableHeader"
+      :data="tableData"
+      :row-attr="ranks"
+    >
+      <template #cell-playername="slotProps">
+        <router-link :to=" `/player/${slotProps.row.player_id}`">{{ slotProps.row.player_display_name }}</router-link>
+      </template>
+      <template #footer>
         <tr v-if="!noMoreLoad">
           <td colspan="4" class="loading">
             <template v-if="isLoading">
               読み込み中... <span class="cycle-loop">め</span>
             </template>
             <template v-else>
-            <button @click="handleLoading">さらに読み込む</button>
+              <button
+                class="slim"
+                @click="handleLoading"
+              >
+                さらに読み込む
+              </button>
             </template>
           </td>
         </tr>
-      </tbody>
-    </table>
+      </template>
+    </TableBase>
   </div>
 </template>
 
 <script lang="ts">
-import { ref, onMounted, defineComponent } from 'vue'
+import { ref, computed, onMounted, defineComponent } from 'vue'
 import { useRoute } from 'vue-router'
+
+import TableBase, { TableColumn } from '@/components/parts/TableBase.vue'
 
 import { usePagerLoader } from '@/assets/hooks/usePagerLoader'
 
@@ -53,6 +50,9 @@ type Rank = {
 }
 
 export default defineComponent({
+  components: {
+    TableBase,
+  },
   setup() {
     const route = useRoute()
     const competitionId = route.params.competition_id
@@ -84,11 +84,48 @@ export default defineComponent({
       fetchRanking()
     }
 
+    const tableHeader: TableColumn[] = [
+      {
+        width: '10%',
+        align: 'center',
+        text: '順位',
+      },
+      {
+        width: '20%',
+        align: 'center',
+        text: 'プレイヤーID',
+      },
+      {
+        width: '45%',
+        align: 'left',
+        text: 'プレイヤー名',
+      },
+      {
+        width: '15%',
+        align: 'right',
+        text: 'スコア',
+      },
+    ]
+
+    const tableData = computed<string[][]>(() => 
+      ranks.value.map(r => {
+        return [
+          r.rank.toString(),
+          r.player_id,
+          '##slot##cell-playername',
+          r.score.toLocaleString()
+        ]
+      })
+    )
+
     return {
       ranks,
       isLoading,
       noMoreLoad,
       handleLoading,
+
+      tableHeader,
+      tableData,
     }
   },
 })
@@ -97,40 +134,6 @@ export default defineComponent({
 <style scoped>
 .competition {
   padding: 0 20px 20px;
-}
-
-
-.ranking {
-  border: 1px solid lightgray;
-  border-collapse: collapse;
-  width: 100%;
-}
-
-th, td {
-  padding: 4px;
-  border: 1px solid gray;
-}
-
-.rank-number {
-  width: 10%;
-  text-align: center;
-}
-.player-id {
-  width: 20%;
-  text-align: center;
-}
-
-.competition-title {
-  width: 45%;
-}
-
-.rank-score {
-  width: 15%;
-  text-align: right;
-}
-
-th.rank-score{
-  text-align: center;
 }
 
 @keyframes rotation {
