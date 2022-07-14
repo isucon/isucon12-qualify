@@ -281,12 +281,6 @@ def flock_by_tenant_id(tenant_id):
     fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
 
 
-@dataclass
-class TenantDetail:
-    name: str
-    display_name: str
-
-
 @app.route("/api/admin/tenants/add", methods=["POST"])
 def admin_add_tenants():
     """
@@ -321,7 +315,19 @@ def admin_add_tenants():
 
     create_tenant_db(id)
 
-    return jsonify(SuccessResult(status=True, data={"tenant": TenantDetail(name, display_name)}))
+    return jsonify(
+        SuccessResult(
+            status=True,
+            data={
+                "tenant": TenantWithBilling(
+                    id=int(id),
+                    name=name,
+                    display_name=display_name,
+                    billing=0,
+                )
+            },
+        )
+    )
 
 
 def validate_tenant_name(name):
@@ -998,6 +1004,12 @@ def competitions_handler(viewer: Viewer, tenant_db):
         )
 
     return jsonify(SuccessResult(status=True, data={"competitions": competition_details}))
+
+
+@dataclass
+class TenantDetail:
+    name: str
+    display_name: str
 
 
 @app.route("/api/me", methods=["GET"])
