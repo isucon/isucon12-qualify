@@ -12,12 +12,13 @@ import (
 )
 
 type OrganizerJobConfig struct {
-	orgAc         *Account
-	scTag         ScenarioTag
-	tenantName    string // 対象テナント
-	scoreRepeat   int
-	scoreInterval int // スコアCSVを入稿するインターバル
-	addScoreNum   int // 一度の再投稿時に増えるスコアの数
+	orgAc           *Account
+	scTag           ScenarioTag
+	tenantName      string // 対象テナント
+	scoreRepeat     int
+	scoreInterval   int // スコアCSVを入稿するインターバル
+	addScoreNum     int // 一度の再投稿時に増えるスコアの数
+	playerWorkerNum int // CSV入稿と同時にrankingを取るplayer worker数
 }
 
 type OrganizerJobResult struct {
@@ -98,9 +99,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 
 	eg := errgroup.Group{}
 	doneCh := make(chan struct{})
-	playerWorkerNum := 5 // TODO: 調整
-
-	for i := 0; i < playerWorkerNum; i++ {
+	for i := 0; i < conf.playerWorkerNum; i++ {
 		eg.Go(func() error {
 			idx := rand.Intn(len(qualifyPlayerIDs))
 			playerID := qualifyPlayerIDs[idx]
