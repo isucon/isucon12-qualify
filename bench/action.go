@@ -185,7 +185,9 @@ func GetPlayerAction(ctx context.Context, playerID string, ag *agent.Agent) (*ht
 	}
 
 	msg := "playerID:" + playerID
-	res, err := ag.Do(ctx, req)
+	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 	return res, err, msg
 }
 

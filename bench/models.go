@@ -182,6 +182,20 @@ func (srs ScoreRows) CSV() string {
 	return csv
 }
 
+func (srs ScoreRows) PlayerIDs() []string {
+	idsMap := map[string]struct{}{}
+	for _, row := range srs {
+		if _, ok := idsMap[row.PlayerID]; !ok {
+			idsMap[row.PlayerID] = struct{}{}
+		}
+	}
+	ids := []string{}
+	for key, _ := range idsMap {
+		ids = append(ids, key)
+	}
+	return ids
+}
+
 type CompetitionData struct {
 	ID    string
 	Title string
