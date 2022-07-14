@@ -1592,8 +1592,7 @@ func meHandler(c echo.Context) error {
 }
 
 type InitializeHandlerResult struct {
-	Lang   string `json:"lang"`
-	Appeal string `json:"appeal"`
+	Lang string `json:"lang"`
 }
 
 // ベンチマーカー向けAPI
@@ -1607,9 +1606,6 @@ func initializeHandler(c echo.Context) error {
 	}
 	res := InitializeHandlerResult{
 		Lang: "go",
-		// 頑張ったポイントやこだわりポイントがあれば書いてください
-		// 競技中の最後に計測したものを参照して、講評記事などで使わせていただきます
-		Appeal: "",
 	}
 	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
 }
