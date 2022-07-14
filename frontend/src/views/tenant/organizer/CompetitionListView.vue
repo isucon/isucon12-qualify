@@ -39,6 +39,14 @@
         </template>
       </template>
     </TableBase>
+    <UploadCSVModal
+      v-show="showUploadModal"
+      :competitionId="selectedCompetitionId"
+      :competitionTitle="selectedCompetitionTitle"
+      @close="handleUploadCSVClose"
+      @csvUploaded="handleCSVUploaded"
+    />
+
   </div>
 </template>
 
@@ -48,6 +56,7 @@ import axios from 'axios'
 
 import TableBase, { TableColumn } from '@/components/parts/TableBase.vue'
 import AddCompetitionModal from '@/components/tenant/AddCompetitionModal.vue'
+import UploadCSVModal from '@/components/tenant/UploadCSVModal.vue'
 
 
 type Competition = {
@@ -61,6 +70,7 @@ export default defineComponent({
   components: {
     TableBase,
     AddCompetitionModal,
+    UploadCSVModal,
   },
   setup() {
     const competitions = ref<Competition[]>([])
@@ -87,13 +97,6 @@ export default defineComponent({
     const isLoading = ref(false)
     const noMoreLoad = ref(false)
 
-    const handleUploadCSV = (evt: MouseEvent) => {
-      const target = evt.target as HTMLButtonElement
-      if (!target) return
-
-      const competitionId = target.value
-
-    }
 
     const handleCompleteCompetition = (evt: MouseEvent) => {
       const target = evt.target as HTMLButtonElement
@@ -121,6 +124,28 @@ export default defineComponent({
     }
     const handleCompetitionAdded = () => {
       fetchCompetitions() // 画面を更新!
+    }
+
+    // UploadCSVModal関連
+    const selectedCompetitionId = ref('')
+    const selectedCompetitionTitle = computed(() => {
+      const c = competitions.value.find(x => x.id === selectedCompetitionId.value)
+      if (!c) return ''
+      return c.title
+    })
+    const showUploadModal = ref(false)
+    const handleUploadCSV = (evt: MouseEvent) => {
+      const target = evt.target as HTMLButtonElement
+      if (!target) return
+
+      selectedCompetitionId.value = target.value
+      showUploadModal.value = true
+    }
+    const handleUploadCSVClose = () => {
+      showUploadModal.value = false
+    }
+    const handleCSVUploaded = (evt: any) => {
+      console.log(evt)
     }
 
 
@@ -163,13 +188,20 @@ export default defineComponent({
       isLoading,
       noMoreLoad,
       handleLoading,
-      handleAddCompetition,
-      handleUploadCSV,
       handleCompleteCompetition,
 
       showAddModal,
+      handleAddCompetition,
       handleAddCompetitionClose,
       handleCompetitionAdded,
+
+      showUploadModal,
+      handleUploadCSV,
+      handleUploadCSVClose,
+      handleCSVUploaded,
+      selectedCompetitionId,
+      selectedCompetitionTitle,
+      
 
       tableHeader,
       tableData,

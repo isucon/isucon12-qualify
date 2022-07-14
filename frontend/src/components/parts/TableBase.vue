@@ -88,7 +88,7 @@ table {
 }
 
 th, td {
-  padding: 4px;
+  padding: 4px 8px;
   border: 1px solid lightgray;
   background: rgba(48,48,64,0.3);
 }
