@@ -137,7 +137,8 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 				if isScoreDone {
 					break
 				}
-				SleepWithCtx(ctx, time.Millisecond*100)
+				duration := 1000 + rand.Intn(1000)
+				SleepWithCtx(ctx, time.Millisecond*time.Duration(randomRange(duration)))
 			}
 			return nil
 		})
