@@ -320,7 +320,7 @@ def admin_add_tenants():
             status=True,
             data={
                 "tenant": TenantWithBilling(
-                    id=int(id),
+                    id=str(id),
                     name=name,
                     display_name=display_name,
                     billing=0,
@@ -395,6 +395,7 @@ def billing_report_by_competition(tenant_db, tenant_id: int, competition_id: str
     ).fetchall()
 
     for pid in scored_player_id_rows:
+        # スコアが登録されている参加者
         billing_map[str(pid.player_id)] = "player"
 
     player_count = 0
@@ -940,7 +941,8 @@ def player_get_competition_ranking(competition_id):
             )
         )
 
-    ranks.sort(key=lambda rank: (rank.score, rank.row_num), reverse=True)
+    ranks.sort(key=lambda rank: rank.row_num)
+    ranks.sort(key=lambda rank: rank.score, reverse=True)
 
     paged_ranks = []
     for i, rank in enumerate(ranks):
@@ -1065,12 +1067,6 @@ def get_me():
     )
 
 
-@dataclass
-class InitializeHandlerResult:
-    lang: str
-    appeal: str
-
-
 @app.route("/initialize", methods=["POST"])
 def bench_initialize():
     """
@@ -1083,13 +1079,7 @@ def bench_initialize():
     except subprocess.CalledProcessError as e:
         return f"error subprocess.run: {e.output} {e.stderr}"
 
-    res = InitializeHandlerResult(
-        lang="python",
-        # 頑張ったポイントやこだわりポイントがあれば書いてください
-        # 競技中の最後に計測したものを参照して、講評記事などで使わせていただきます
-        appeal="",
-    )
-    return jsonify({"success": True, "data": res})
+    return jsonify(SuccessResult(status=True, data={"lang": "python"}))
 
 
 if __name__ == "__main__":
