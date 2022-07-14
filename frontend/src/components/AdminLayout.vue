@@ -1,7 +1,9 @@
 <template>
   <div class="main light">
     <div class="header">
-      <AdminHeaderBar />
+      <AdminHeaderBar
+        :is-logged-in="isLoggedIn"
+      />
     </div>
     <div class="body">
       <router-view />
@@ -11,12 +13,43 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue'
+import { useRouter } from 'vue-router'
+import { useLoginStatus } from '@/assets/hooks/useLoginStatus'
+
 import AdminHeaderBar from '@/components/admin/AdminHeaderBar.vue'
 
 export default defineComponent({
   name: 'AdminLayout',
   components: {
     AdminHeaderBar,
+  },
+  setup() {
+    const { isLoggedIn, refetch } = useLoginStatus()
+
+    const router = useRouter()
+    router.afterEach(async (to, from) => {
+      await refetch()
+
+      // check login status
+      checkAndRedirect(to.fullPath)
+    })
+
+    const checkAndRedirect = (fullPath: string) => {
+      if (isLoggedIn.value) {
+        if (fullPath === '/') {
+          router.push('/admin/')
+        }
+      } else {
+        if (fullPath !== '/') {
+          router.push('/')
+        }
+      }
+    }
+
+
+    return {
+      isLoggedIn,
+    }
   },
 })
 </script>

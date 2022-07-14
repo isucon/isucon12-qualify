@@ -45,6 +45,9 @@ import axios from 'axios'
 import TableBase, { TableColumn } from '@/components/parts/TableBase.vue'
 import AddTenantModal from '@/components/admin/AddTenantModal.vue'
 
+import { useLoginStatus } from '@/assets/hooks/useLoginStatus'
+
+
 type Tenant = {
   id: string
   name: string
@@ -62,7 +65,15 @@ export default defineComponent({
     TableBase,
     AddTenantModal,
   },
+  props: {
+    isLoggedIn: {
+      type: Boolean,
+      required: true,
+    },
+  },
   setup() {
+    const { isLoggedIn } = useLoginStatus()
+
     const tenants = ref<Tenant[]>([])
     const beforeCursor = ref('')
     const isLoading = ref(false)
@@ -105,7 +116,9 @@ export default defineComponent({
     }
 
     onMounted(() => {
-      fetch('')
+      if (isLoggedIn.value) {
+        fetch('')
+      }
     })
 
     const handleLoading = () => {
