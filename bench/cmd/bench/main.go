@@ -76,7 +76,6 @@ func main() {
 
 	// ベンチマークにシナリオを追加
 	benchmark.AddScenario(scenario)
-	// TODO: add...
 
 	// main で最上位の context.Context を生成
 	ctx, cancel := context.WithCancel(context.Background())

@@ -147,10 +147,20 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	}
 
 	// POST /initialize へ初期化リクエスト実行
+	var lang string
 	res, err := PostInitializeAction(ctx, ag)
-	if v := ValidateResponse("初期化", step, res, err, WithStatusCode(200)); !v.IsEmpty() {
+	if v := ValidateResponse("初期化", step, res, err, WithStatusCode(200),
+		WithSuccessResponse(func(r ResponseAPIInitialize) error {
+			if r.Data.Lang == "" {
+				return fmt.Errorf("Initializeのレスポンスには実装言語`lang`を含めてください")
+			}
+			lang = r.Data.Lang
+			return nil
+		}),
+	); !v.IsEmpty() {
 		return fmt.Errorf("初期化リクエストに失敗しました %v", v)
 	}
+	ContestantLogger.Printf("初期化リクエストに成功しました 実装言語:%s", lang)
 
 	// 検証シナリオを1回まわす
 	if err := sc.ValidationScenario(ctx, step); err != nil {
@@ -202,7 +212,6 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 	}
 
 	// 軽いテナント(id!=1)を見るworker
-	// TODO: 現状増やすきっかけが無いので初期から並列数多くてもよいかも
 	{
 		wkr, err := sc.PopularTenantScenarioWorker(step, 1, false)
 		if err != nil {
@@ -260,7 +269,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 			end = true
 		case w := <-sc.WorkerCh: // workerを起動する
 			// debug: 一つのworkerのみを立ち上げる
-			// if w.String() != "PlayerValidateScenarioWorker" {
+			// if w.String() != "AdminBillingValidateWorker" {
 			// 	continue
 			// }
 			wg.Add(1)

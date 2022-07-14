@@ -1,9 +1,10 @@
 <template>
-  <div class="main">
+  <div class="main dark">
     <div class="header">
       <TenantHeaderBar
         :tenant-name="tenantDisplayName"
         :is-logged-in="isLoggedIn"
+        :role="role"
       />
     </div>
     <div class="body">
@@ -14,11 +15,10 @@
 
 <script lang="ts">
 import { defineComponent } from 'vue'
-import TenantHeaderBar from '@/components/tenant/TenantHeaderBar.vue'
-
+import { useRouter } from 'vue-router'
 import { useLoginStatus } from '@/assets/hooks/useLoginStatus'
 
-import axios from 'axios'
+import TenantHeaderBar from '@/components/tenant/TenantHeaderBar.vue'
 
 export default defineComponent({
   name: 'TenantLayout',
@@ -26,11 +26,39 @@ export default defineComponent({
     TenantHeaderBar,
   },
   setup() {
-    const { isLoggedIn, tenantDisplayName } = useLoginStatus()
+    const { isLoggedIn, role, tenantDisplayName, refetch } = useLoginStatus()
+
+    const router = useRouter()
+    router.afterEach(async (to, from) => {
+      await refetch()
+
+      // check login status
+      checkAndRedirect(to.fullPath)
+    })
+
+    const checkAndRedirect = (fullPath: string) => {
+      if (isLoggedIn.value) {
+        if (role.value === 'player') {
+          if (fullPath === '/' || fullPath.startsWith('/organizer')) {
+            router.push('/mypage')
+          }
+        } else if (role.value === 'organizer') {
+          if (fullPath === '/' || !fullPath.startsWith('/organizer') ) {
+            router.push('/organizer/')
+          }
+        }
+      } else {
+        if (role.value === 'none' && fullPath !== '/') {
+          router.push('/')
+        }
+      }
+    }
+
 
     return {
       tenantDisplayName,
       isLoggedIn,
+      role,
     }
   },
 })

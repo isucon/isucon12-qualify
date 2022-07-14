@@ -1,14 +1,18 @@
 <template>
   <div class="header-bar">
-    <h1 class="brand">ISUPORTS</h1>
+    <h1 class="brand">
+      <img src="/img/isuports_light.svg" alt="ISUPORTS" width="250" height="60"/>
+    </h1>
     <h2 class="subtitle">{{ tenantName }}</h2>
 
-    <div class="switch-role">
+    <div class="actions">
       <button
+        v-if="role !== 'organizer'"
         type="button"
         @click="handleAssumeOrganizerRole"
       >主催者モードに切り替える</button>
       <button
+        v-if="isLoggedIn"
         type="button"
         @click="handleLogout"
       >ログアウト</button>
@@ -23,6 +27,8 @@ import axios from 'axios'
 
 type Props = {
   tenantName: string
+  isLoggedIn: boolean
+  role: string
 }
 
 export default defineComponent({
@@ -31,6 +37,14 @@ export default defineComponent({
     tenantName: {
       type: String,
       default: '鎌倉ISUPORTS同好会',
+    },
+    isLoggedIn: {
+      type: Boolean,
+      default: false,
+    },
+    role: {
+      type: String,
+      default: 'none',
     },
   },
   setup() {
@@ -78,16 +92,18 @@ export default defineComponent({
   line-height: 60px;
   margin: 0;
   padding: 0;
+  vertical-align: middle;
 }
 
 .subtitle {
-  margin-left: 2em;
+  margin: 0 0 0 2em;
   display: inline-block;
   font-size: 20px;
-  line-height: 36px;
+  line-height: 60px;
+  vertical-align: middle;
 }
 
-.switch-role {
+.actions {
   float: right;
   margin-top: 12px;
 }

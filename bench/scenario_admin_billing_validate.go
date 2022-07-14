@@ -3,6 +3,7 @@ package bench
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -51,20 +52,11 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 		return err
 	}
 
-	// 初期データからテナント選ぶ
-	index := randomRange(ConstAdminBillingValidateScenarioIDRange)
-	tenant := sc.InitialDataTenant[int64(index)]
-
-	// indexが含まれる区間がとれるAdminBillingのbefore
-	var billingBeforeTenantID string
-	{
-		rangeEnd := ConstAdminBillingValidateScenarioIDRange[1]
-		n := index + 10
-		if rangeEnd < n {
-			n = rangeEnd
-		}
-		billingBeforeTenantID = fmt.Sprintf("%d", sc.InitialDataTenant[int64(n)].TenantID)
-	}
+	// beforeTenantIDを範囲から決める
+	rangeStart := ConstAdminBillingValidateScenarioIDRange[0] + 10
+	rangeEnd := ConstAdminBillingValidateScenarioIDRange[1] + 1
+	index := randomRange([]int{rangeStart, rangeEnd})
+	billingBeforeTenantID := fmt.Sprintf("%d", sc.InitialDataTenant[int64(index)].TenantID)
 
 	// 最初の状態のBilling
 	var billingResultTenants []isuports.TenantWithBilling
@@ -85,8 +77,12 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 		}
 	}
 
+	// レスポンスの中から対象のテナントを選ぶ
+	targetIndex := rand.Intn(len(billingResultTenants))
+	targetTenant := billingResultTenants[targetIndex].Name
+
 	// 大会を開催、Billing確定まで進める
-	orgAc, _, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")
+	orgAc, _, err := sc.GetAccountAndAgent(AccountRoleOrganizer, targetTenant, "organizer")
 	if err != nil {
 		return err
 	}
@@ -94,12 +90,13 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	conf := &OrganizerJobConfig{
 		orgAc:         orgAc,
 		scTag:         scTag,
-		tenantName:    tenant.TenantName,
+		tenantName:    targetTenant,
 		scoreRepeat:   1,
 		scoreInterval: 0,
 		addScoreNum:   0,
 	}
-	if err := sc.OrganizerJob(ctx, step, conf); err != nil {
+	jobResult, err := sc.OrganizerJob(ctx, step, conf)
+	if err != nil {
 		return err
 	}
 
@@ -109,12 +106,13 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	// 反映確認
 
 	// チェック項目
-	// 合計金額が増えていること
-	// TODO: 必要に応じて追加, ただしOrganizerJobによって増えた金額は現状取れない
+	// 合計金額が正しく増えていること
 	sumYen := int64(0)
 	for _, t := range billingResultTenants {
 		sumYen += t.BillingYen
 	}
+	// OrganizerJobによって増えた値段を加算
+	sumYen += int64(jobResult.ScoredPlayerNum * 100)
 
 	{
 		res, err, txt := GetAdminTenantsBillingAction(ctx, billingBeforeTenantID, adminAg)
@@ -125,9 +123,8 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 				for _, t := range r.Data.Tenants {
 					resultYen += t.BillingYen
 				}
-				if resultYen <= sumYen {
-					ContestantLogger.Println("(CIでこの文章を見た方へ) 初期実装で「全テナントの合計金額が正しくありません」エラーが起きた様子を探しています。benchの不具合の可能性があります。コメントのリンクを #154 へ貼って頂けると嬉しいです") // TODO: 消す
-					return fmt.Errorf("全テナントの合計金額が正しくありません 金額は増えている必要があります (want: >%d, got:%d)", sumYen, resultYen)
+				if resultYen != sumYen {
+					return fmt.Errorf("全テナントの合計金額が正しくありません (want: %d, got:%d)", sumYen, resultYen)
 				}
 				return nil
 			}),
