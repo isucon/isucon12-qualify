@@ -6,6 +6,15 @@ public class Viewer {
     private String tenantName;
     private Long tenantId;
 
+
+    public Viewer(String role, String playerId, String tenantName, Long tenantId) {
+        super();
+        this.role = role;
+        this.playerId = playerId;
+        this.tenantName = tenantName;
+        this.tenantId = tenantId;
+    }
+
     public String getRole() {
         return role;
     }
