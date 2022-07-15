@@ -2,8 +2,10 @@ import json
 import os
 from datetime import datetime
 
+from sqlalchemy.engine import Engine
 
-def initialize_sql_logger(engine):
+
+def initialize_sql_logger(engine: Engine) -> Engine:
 
     trace_file_path = os.getenv("ISUCON_SQLITE_TRACE_FILE")
     if not trace_file_path:

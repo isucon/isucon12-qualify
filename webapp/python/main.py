@@ -11,6 +11,7 @@ from typing import Any, Optional
 import jwt
 from flask import Flask, abort, jsonify, request
 from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError, OperationalError
 from werkzeug.exceptions import HTTPException
 
@@ -28,12 +29,12 @@ ROLE_NONE = "none"
 # 正しいテナント名の正規表現
 TENANT_NAME_REGEXP = re.compile(r"^[a-z][a-z0-9-]{0,61}[a-z0-9]$")
 
-admin_db = None
+admin_db: Engine = None
 
 app = Flask(__name__)
 
 
-def connect_admin_db():
+def connect_admin_db() -> Engine:
     """管理用DBに接続する"""
     host = os.getenv("ISUCON_DB_HOST", "127.0.0.1")
     port = os.getenv("ISUCON_DB_PORT", 3306)
@@ -50,7 +51,7 @@ def tenant_db_path(id: int) -> str:
     return tenant_db_dir + f"/{id}.db"
 
 
-def connect_to_tenant_db(id: int):
+def connect_to_tenant_db(id: int) -> Engine:
     """テナントDBに接続する"""
     path = tenant_db_path(id)
     engine = create_engine(f"sqlite:///{path}")
@@ -79,7 +80,7 @@ def dispense_id() -> str:
             last_err = e
             continue
 
-    raise last_err
+    raise RuntimeError from last_err
 
 
 def run():
@@ -89,13 +90,9 @@ def run():
     app.run(host="0.0.0.0", port=3000, debug=True, threaded=True)
 
 
-@app.errorhandler(Exception)
-def error_handler(e):
-    app.logger.error(f"error: {e}")
-    if isinstance(e, HTTPException):
-        return jsonify(FailureResult(status=False, message=e.description)), e.code
-    else:
-        return jsonify(FailureResult(status=False, message="Internal Server Error")), 500
+@app.errorhandler(HTTPException)
+def error_handler(e: HTTPException):
+    return jsonify(FailureResult(status=False, message=e.description)), e.code
 
 
 @dataclass
@@ -113,7 +110,6 @@ class FailureResult:
 @dataclass
 class Viewer:
     """アクセスしたきた人の情報"""
-
     role: str
     player_id: str
     tenant_name: str
@@ -163,7 +159,16 @@ def parse_viewer() -> Viewer:
     )
 
 
-def retrieve_tenant_row_from_header():
+@dataclass
+class TenantRow:
+    name: str
+    display_name: str
+    id: Optional[int] = None
+    created_at: Optional[int] = None
+    updated_at: Optional[int] = None
+
+
+def retrieve_tenant_row_from_header() -> TenantRow:
     """JWTに入っているテナント名とHostヘッダのテナント名が一致しているか確認"""
     base_host = os.getenv("ISUCON_BASE_HOSTNAME", ".t.isucon.dev")
     tenant_name = request.host.removesuffix(base_host)
@@ -184,15 +189,6 @@ def retrieve_tenant_row_from_header():
 
 
 @dataclass
-class TenantRow:
-    name: str
-    display_name: str
-    id: Optional[int] = None
-    created_at: Optional[int] = None
-    updated_at: Optional[int] = None
-
-
-@dataclass
 class PlayerRow:
     tenant_id: int
     id: str
@@ -202,23 +198,23 @@ class PlayerRow:
     updated_at: int
 
 
-def retrieve_player(tenant_db, id: str) -> PlayerRow:
+def retrieve_player(tenant_db: Engine, id: str) -> Optional[PlayerRow]:
     """参加者を取得する"""
     row = tenant_db.execute("SELECT * FROM player WHERE id = ?", id).fetchone()
     if not row:
         return None
 
     return PlayerRow(
-        tenant_id=row["tenant_id"],
-        id=row["id"],
-        display_name=row["display_name"],
-        is_disqualified=bool(row["is_disqualified"]),
-        created_at=row["created_at"],
-        updated_at=row["updated_at"],
+        tenant_id=row.tenant_id,
+        id=row.id,
+        display_name=row.display_name,
+        is_disqualified=bool(row.is_disqualified),
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 
-def authorize_player(tenant_db, id: str):
+def authorize_player(tenant_db: Engine, id: str):
     player = retrieve_player(tenant_db, id)
     if not player:
         abort(401, "player not found")
@@ -237,7 +233,7 @@ class CompetitionRow:
     updated_at: int
 
 
-def retrieve_competition(tenant_db, id: str) -> Optional[CompetitionRow]:
+def retrieve_competition(tenant_db: Engine, id: str) -> Optional[CompetitionRow]:
     """大会を取得する"""
     row = tenant_db.execute("SELECT * FROM competition WHERE id = ?", id).fetchone()
     if not row:
@@ -264,21 +260,21 @@ def lock_file_path(id: int) -> str:
     return os.path.join(tenant_db_dir, f"{id}.lock")
 
 
-def flock_by_tenant_id(tenant_id):
+def flock_by_tenant_id(tenant_id: int):
     """排他ロックする"""
     path = lock_file_path(tenant_id)
-    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_TRUNC)
-    lock_file_fd = None
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except (IOError, OSError):
-        pass
-    else:
-        lock_file_fd = fd
+    with os.open(path, os.O_RDWR | os.O_CREAT | os.O_TRUNC) as fd:
+        lock_file_fd = None
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as e:
+            raise RuntimeError from e
+        else:
+            lock_file_fd = fd
 
-    yield lock_file_fd
+        yield lock_file_fd
 
-    fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
+        fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
 
 
 @app.route("/api/admin/tenants/add", methods=["POST"])
@@ -347,26 +343,11 @@ class BillingReport:
     billing_yen: int  # 合計請求金額
 
 
-@dataclass
-class VisitHistoryRow:
-    player_id: str
-    tenant_id: int
-    competition_id: str
-    created_at: int
-    updated_at: int
-
-
-@dataclass
-class VisitHistorySummaryRow:
-    player_id: str
-    min_created_at: int
-
-
-def billing_report_by_competition(tenant_db, tenant_id: int, competition_id: str):
+def billing_report_by_competition(tenant_db: Engine, tenant_id: int, competition_id: str):
     """大会ごとの課金レポートを計算する"""
     competition = retrieve_competition(tenant_db, competition_id)
     if not competition:
-        raise
+        raise RuntimeError("error retrieveCompetition")
 
     visit_history_summary_rows = admin_db.execute(
         "SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = %s AND competition_id = %s GROUP BY player_id",
@@ -384,8 +365,7 @@ def billing_report_by_competition(tenant_db, tenant_id: int, competition_id: str
     # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
     lock_file_fd = flock_by_tenant_id(tenant_id)
     if not lock_file_fd:
-        app.logger.warning("error flock_by_tenant_id")
-        raise
+        raise RuntimeError("error flock_by_tenant_id")
 
     # スコアを登録した参加者のIDを取得する
     scored_player_id_rows = tenant_db.execute(
@@ -502,9 +482,9 @@ def organizer_get_players():
     for row in rows:
         player_details.append(
             PlayerDetail(
-                id=row["id"],
-                display_name=row["display_name"],
-                is_disqualified=bool(row["is_disqualified"]),
+                id=row.id,
+                display_name=row.display_name,
+                is_disqualified=bool(row.is_disqualified),
             )
         )
 
@@ -677,7 +657,7 @@ def organizer_score_competitions(competition_id: str):
         abort(404, "competition not found")
 
     if competition.finished_at:
-        return jsonify(FailureResult(status=False, message="competition is finished")), 400
+        abort(400, "competition is finished")
 
     form_file = request.files.get("scores")
     csv_reader = csv.reader(codecs.iterdecode(form_file, "utf-8"))
@@ -689,8 +669,7 @@ def organizer_score_competitions(competition_id: str):
     # DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
     lock_file_fd = flock_by_tenant_id(viewer.tenant_id)
     if not lock_file_fd:
-        app.logger.warning("error flock_by_tenant_id")
-        raise
+        raise RuntimeError("error flock_by_tenant_id")
 
     row_num = 0
     player_score_rows = []
@@ -754,15 +733,15 @@ def organizer_get_billing():
 
     tenant_db = connect_to_tenant_db(viewer.tenant_id)
 
-    rows = tenant_db.execute(
+    competition_rows = tenant_db.execute(
         "SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC",
         viewer.tenant_id,
     ).fetchall()
-    if not rows:
-        raise
+    if not competition_rows:
+        raise RuntimeError("error Select competition")
 
     billing_reports = []
-    for competition_row in rows:
+    for competition_row in competition_rows:
         report = billing_report_by_competition(tenant_db, viewer.tenant_id, competition_row.id)
         billing_reports.append(report)
 
@@ -808,31 +787,26 @@ def player_get_detail(player_id: str):
     if not player:
         abort(404, "player not found")
 
-    competition_rows = []
-
-    rows = tenant_db.execute("SELECT * FROM competition ORDER BY created_at ASC").fetchall()
-    for row in rows:
-        competition_rows.append(CompetitionRow(**row))
+    competition_rows = tenant_db.execute("SELECT * FROM competition ORDER BY created_at ASC").fetchall()
 
     # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
     lock_file_fd = flock_by_tenant_id(viewer.tenant_id)
     if not lock_file_fd:
-        app.logger.warning("error flock_by_tenant_id")
-        raise
+        raise RuntimeError("error flock_by_tenant_id")
 
     player_score_rows = []
     for competition_row in competition_rows:
         # 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
-        row = tenant_db.execute(
+        player_score_row = tenant_db.execute(
             "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1",
             viewer.tenant_id,
             competition_row.id,
             player.id,
         ).fetchone()
-        if not row:
+        if not player_score_row:
             # 行がない = スコアが記録されてない
             continue
-        player_score_rows.append(PlayerScoreRow(**row))
+        player_score_rows.append(PlayerScoreRow(**player_score_row))
 
     player_score_details = []
     for player_score_row in player_score_rows:
@@ -885,10 +859,9 @@ def player_get_competition_ranking(competition_id):
         abort(404, "competition not found")
 
     now = int(datetime.now().timestamp())
-    row = admin_db.execute("SELECT * FROM tenant WHERE id = %s", viewer.tenant_id).fetchone()
-    if not row:
-        return
-    tenant_row = TenantRow(**row)
+    tenant_row = admin_db.execute("SELECT * FROM tenant WHERE id = %s", viewer.tenant_id).fetchone()
+    if not tenant_row:
+        raise RuntimeError(f"Error Select tenant: id={viewer.tenant_id}")
 
     admin_db.execute(
         "INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (%s, %s, %s, %s, %s)",
@@ -907,17 +880,13 @@ def player_get_competition_ranking(competition_id):
     # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
     lock_file_fd = flock_by_tenant_id(viewer.tenant_id)
     if not lock_file_fd:
-        app.logger.warning("error flock_by_tenant_id")
-        raise
+        raise RuntimeError("error flock_by_tenant_id")
 
-    player_score_rows = []
-    rows = tenant_db.execute(
+    player_score_rows = tenant_db.execute(
         "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
         tenant_row.id,
         competition_id,
     ).fetchall()
-    for row in rows:
-        player_score_rows.append(PlayerScoreRow(**row))
 
     ranks = []
     scored_player_set = {}
@@ -930,7 +899,7 @@ def player_get_competition_ranking(competition_id):
         scored_player_set[player_score_row.player_id] = {}
         player = retrieve_player(tenant_db, player_score_row.player_id)
         if not player:
-            raise
+            raise RuntimeError("error retrievePlayer")
         ranks.append(
             CompetitionRank(
                 rank=0,
