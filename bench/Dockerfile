@@ -17,6 +17,7 @@ COPY --from=bench-builder /opt/isucon12-qualify/bench/*.pem /opt/isucon12-qualif
 COPY --from=supervisor /usr/local/bin/isuxportal-supervisor /usr/local/bin/isuxportal-supervisor
 WORKDIR /opt/isucon12-qualify/bench
 
+ENV ISUXPORTAL_SUPERVISOR_INSTANCE_NAME=dummy
 ENV ISUXPORTAL_SUPERVISOR_INTERVAL_AFTER_EMPTY_RECEIVE=5
 ENV ISUXPORTAL_SUPERVISOR_ENDPOINT_URL=http://localhost:3000
 ENV ISUXPORTAL_SUPERVISOR_TOKEN=dummy
