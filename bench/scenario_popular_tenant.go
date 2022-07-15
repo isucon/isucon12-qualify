@@ -19,6 +19,9 @@ func (w *popularTenantScenarioWorker) Process(ctx context.Context) { w.worker.Pr
 
 func (sc *Scenario) PopularTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32, isHeavyTenant bool) (Worker, error) {
 	scTag := ScenarioTagOrganizerPopularTenant
+	if isHeavyTenant {
+		scTag = scTag + "HeavyTenant"
+	}
 
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.PopularTenantScenario(ctx, step, scTag, isHeavyTenant); err != nil {
@@ -40,24 +43,19 @@ func (sc *Scenario) PopularTenantScenarioWorker(step *isucandar.BenchmarkStep, p
 }
 
 func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag, isHeavyTenant bool) error {
-	if isHeavyTenant {
-		scTag = scTag + "HeavyTenant"
-	}
-
 	report := timeReporter(string(scTag))
 	defer report()
 	sc.ScenarioStart(scTag)
 
 	var tenantName string
 	if isHeavyTenant {
-		tenantName = "isucon"
+		tenantName = sc.InitialDataTenant[0].TenantName
 	} else {
 		// 初期データからテナントを選ぶ
 		index := randomRange(ConstPopularTenantScenarioIDRange)
-		tenant := sc.InitialDataTenant[int64(index)]
-
-		tenantName = tenant.TenantName
+		tenantName = sc.InitialDataTenant[index].TenantName
 	}
+	AdminLogger.Println(scTag, tenantName)
 
 	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
 	if err != nil {

@@ -46,7 +46,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 	defer report()
 	sc.ScenarioStart(scTag)
 
-	index := int64(randomRange(ConstPeacefulTenantScenarioIDRange))
+	index := randomRange(ConstPeacefulTenantScenarioIDRange)
 	tenant := sc.InitialDataTenant[index]
 
 	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")
