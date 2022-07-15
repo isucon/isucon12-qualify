@@ -27,6 +27,7 @@ jobs:
       - name: cleanup
         run: |
           sudo rm -fr /home/github/work/isucon12-qualify/isucon12-qualify
+          mkdir /home/github/work/isucon12-qualify/isucon12-qualify
 
       - name: Check out code
         uses: actions/checkout@v3
