@@ -1,3 +1,5 @@
+package "sqlite3"
+
 file "/etc/hosts" do
   owner "root"
   group "root"
