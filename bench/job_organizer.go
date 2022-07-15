@@ -19,6 +19,7 @@ type OrganizerJobConfig struct {
 	scoreInterval   int // スコアCSVを入稿するインターバル
 	addScoreNum     int // 一度の再投稿時に増えるスコアの数
 	playerWorkerNum int // CSV入稿と同時にrankingを取るplayer worker数
+	maxScoredPlayer int // id=1等の巨大テナントの場合は全プレイヤーにスコアを与えると重いので上限をつける 0=上限なし
 }
 
 type OrganizerJobResult struct {
@@ -46,7 +47,12 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
 		v := ValidateResponseWithMsg("テナントのプレイヤー一覧取得", step, res, err, msg, WithStatusCode(200),
 			WithSuccessResponse(func(r ResponseAPIPlayersList) error {
-				for _, player := range r.Data.Players {
+				for i, player := range r.Data.Players {
+					// 扱うプレイヤー数の上限
+					if conf.maxScoredPlayer != 0 && conf.maxScoredPlayer <= i {
+						break
+					}
+
 					playerIDs = append(playerIDs, player.ID)
 					if !player.IsDisqualified {
 						qualifyPlayerIDs = append(qualifyPlayerIDs, player.ID)

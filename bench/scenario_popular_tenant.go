@@ -75,6 +75,11 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 		playerWorkerNum: 5,
 	}
 
+	// id=1の巨大テナントのスコア入稿プレイヤー数は500を上限とする
+	if isHeavyTenant {
+		orgJobConf.maxScoredPlayer = 500
+	}
+
 	for {
 		if _, err := sc.OrganizerJob(ctx, step, orgJobConf); err != nil {
 			return err
