@@ -45,6 +45,9 @@ services:
     environment:
       - GH_TOKEN
       - GITHUB_REF_NAME
+      - GITHUB_SERVER_URL
+      - GITHUB_REPOSITORY
+      - GITHUB_RUN_ID
       - ISUCON_JWT_KEY_FILE=./isuports.pem
     volumes:
       - ../:/home/isucon
