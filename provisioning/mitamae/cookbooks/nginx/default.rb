@@ -17,6 +17,6 @@ end
 remote_directory "/etc/nginx/tls" do
   owner "root"
   group "root"
-  mode "0644"
+  mode "0755"
   source "tls"
 end
