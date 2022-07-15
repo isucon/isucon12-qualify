@@ -1529,19 +1529,7 @@ func meHandler(c echo.Context) error {
 	}
 	v, err := parseViewer(c)
 	if err != nil {
-		var he *echo.HTTPError
-		if ok := errors.As(err, &he); ok && he.Code == http.StatusUnauthorized {
-			return c.JSON(http.StatusOK, SuccessResult{
-				Success: true,
-				Data: MeHandlerResult{
-					Tenant:   td,
-					Me:       nil,
-					Role:     RoleNone,
-					LoggedIn: false,
-				},
-			})
-		}
-		return fmt.Errorf("error parseViewer: %w", err)
+		return err
 	}
 	if v.role == RoleAdmin || v.role == RoleOrganizer {
 		return c.JSON(http.StatusOK, SuccessResult{
