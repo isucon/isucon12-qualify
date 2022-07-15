@@ -2,19 +2,21 @@ package Isuports::Web;
 use v5.36;
 use utf8;
 use experimental qw(builtin try isa defer);
-use builtin qw(true false indexed);
+use builtin qw(true false);
 
 use Kossy;
 use HTTP::Status qw(:constants);
-use Log::Minimal qw(warnf critf);
+use Log::Minimal qw(warnf);
 use File::Slurp qw(read_file);
 use Crypt::JWT qw(decode_jwt);
 use Crypt::PK::RSA;
-use Fcntl qw(:flock);
+use Fcntl qw(LOCK_EX LOCK_NB LOCK_UN O_RDWR O_CREAT);
 use Text::CSV_XS;
 use DBIx::Sunny;
 use Cpanel::JSON::XS;
 use Cpanel::JSON::XS::Type;
+
+$Kossy::JSON_SERIALIZER = Cpanel::JSON::XS->new()->ascii(0);
 
 use constant {
     TENANT_DB_SCHEMA_FILEPATH => "../sql/tenant/10_schema.sql",
@@ -58,7 +60,7 @@ sub tenant_db_path($id) {
 sub connect_to_tenant_db($id) {
     my $p = tenant_db_path($id);
 
-    my $dsn = "dbi::SQLite:dbname=$p?mode=rw";
+    my $dsn = "dbi:SQLite:dbname=$p";
     my $dbh = DBIx::Sunny->connect($dsn, "", "", {});
     return $dbh;
 }
@@ -108,13 +110,6 @@ sub dispense_id($self) {
 }
 
 
-use constant Tenant => {
-    id           => JSON_TYPE_INT,
-    name         => JSON_TYPE_STRING,
-    display_name => JSON_TYPE_STRING,
-    billing_yen  => JSON_TYPE_INT,
-};
-
 # SaaS管理者向けAPI
 post '/api/admin/tenants/add'     => \&tenants_add_handler;
 get  '/api/admin/tenants/billing' => \&tenants_billing_handler;
@@ -140,27 +135,40 @@ get  '/api/player/competitions'                          => \&player_competition
 get  '/api/me' => \&me_handler;
 
 # ベンチマーカー向けAPI
-post '/initialize' => \&post_initialize;
+post '/initialize' => \&initialize_handler;
+
 
 sub SuccessResult($json_spec=undef) {
     return {
-        success => JSON_TYPE_BOOL,
+        status => JSON_TYPE_BOOL,
         $json_spec ? (data => $json_spec) : (),
     }
 }
 
 sub FailureResult() {
     return {
-        success => JSON_TYPE_BOOL,
+        status  => JSON_TYPE_BOOL,
         message => JSON_TYPE_STRING,
     }
 }
 
+sub fail($c, $code, $message) {
+    warnf("error at %s: %s", $c->request->uri, $message);
+
+    my $res = $c->render_json({
+        status => false,
+        message => $message,
+    }, FailureResult);
+
+    die Kossy::Exception->new($code, response => $res);
+};
+
+
 # リクエストヘッダをパースしてViewerを返す
 sub parse_viewer($self, $c) {
     my $token_str = $c->req->cookies->{+COOKIE_NAME};
-    if (!$token_str) {
-        $c->halt_text(HTTP_UNAUTHORIZED, sprintf("cookie %s is not found", COOKIE_NAME));
+    unless ($token_str) {
+        fail($c, HTTP_UNAUTHORIZED, sprintf("cookie %s is not found", COOKIE_NAME));
     }
 
     my $key_file_name = $ENV{"ISUCON_JWT_KEY_FILE"} || "./public.pem";
@@ -171,46 +179,36 @@ sub parse_viewer($self, $c) {
         $token = decode_jwt(token => $token_str, key => $key);
     }
     catch ($e) {
-        $c->halt_text(HTTP_UNAUTHORIZED, $e);
+        fail($c, HTTP_UNAUTHORIZED, $e);
     }
 
-    # TODO Errorハンドリング
-    #    if err != nil {
-    #        if jwt.IsValidationError(err) {
-    #            return nil, echo.NewHTTPError(http.StatusUnauthorized, err.Error())
-    #        }
-    #        return nil, fmt.Errorf("failed to parse token: %w", err)
-    #    }
-    #    if token.Subject() == "" {
-    #        return nil, echo.NewHTTPError(
-    #            http.StatusUnauthorized,
-    #            fmt.Sprintf("invalid token: subject is not found in token: %s", tokenStr),
-    #        )
-    #    }
+    unless (exists $token->{sub}) {
+        fail($c, HTTP_UNAUTHORIZED, sprintf("invalid token: subject is not found in token: %s", $token_str));
+    }
 
     unless(exists $token->{role}) {
-        $c->halt_text(HTTP_UNAUTHORIZED, sprintf("invalid token: role is not found: %s", $token_str));
+        fail($c, HTTP_UNAUTHORIZED, sprintf("invalid token: role is not found: %s", $token_str));
     }
 
     my $role = $token->{role};
     unless ($role eq ROLE_ADMIN || $role eq ROLE_ORGANIZER || $role eq ROLE_PLAYER) {
-        $c->halt_text(HTTP_UNAUTHORIZED, sprintf("invalid token: %s is invalid role: %s", $role, $token_str));
+        fail($c, HTTP_UNAUTHORIZED, sprintf("invalid token: %s is invalid role: %s", $role, $token_str));
     }
 
     # aud は1要素でテナント名がはいっている
     my $aud = $token->{aud};
     unless ((ref $aud||'' eq 'ARRAY') && ($aud->@* == 1)) {
-        $c->halt_text(HTTP_UNAUTHORIZED, sprintf("invalid token: aud field is few or too much: %s", $token_str));
+        fail($c, HTTP_UNAUTHORIZED, sprintf("invalid token: aud field is few or too much: %s", $token_str));
     }
 
     my $tenant = $self->retrieve_tenant_row_from_header($c);
 
     if ($tenant->{name} eq 'admin' && $role ne ROLE_ADMIN) {
-        $c->halt_text(HTTP_UNAUTHORIZED, "tenant not found");
+        fail($c, HTTP_UNAUTHORIZED, "tenant not found");
     }
 
     if ($tenant->{name} ne $aud->[0]) {
-        $c->halt_text(HTTP_UNAUTHORIZED, sprintf("invalid token: tenant name is not match with %s: %s", $c->request->hostname, $token_str));
+        fail($c, HTTP_UNAUTHORIZED, sprintf("invalid token: tenant name is not match with %s: %s", $c->request->env->{HTTP_HOST}, $token_str));
     }
 
     return {
@@ -224,7 +222,7 @@ sub parse_viewer($self, $c) {
 sub retrieve_tenant_row_from_header($self, $c) {
     # JWTに入っているテナント名とHostヘッダのテナント名が一致しているか確認
     my $base_host = $ENV{"ISUCON_BASE_HOSTNAME"} || ".t.isucon.dev";
-    my $tenant_name = $c->request->hostname =~ s/$base_host$//r;
+    my $tenant_name = $c->request->env->{HTTP_HOST} =~ s/$base_host$//r;
 
     # SaaS管理者用ドメイン
     if ($tenant_name eq "admin") {
@@ -237,8 +235,8 @@ sub retrieve_tenant_row_from_header($self, $c) {
     # テナントの存在確認
     my $tenant = $self->admin_db->select_row("SELECT * FROM tenant WHERE name = ?", $tenant_name);
     unless ($tenant) {
-        debugf(sprintf("failed to Select tenant: name=%s", $tenant_name));
-        $c->halt_text(HTTP_UNAUTHORIZED, "tenant not found");
+        warnf("failed to Select tenant: name=%s", $tenant_name);
+        fail($c, HTTP_UNAUTHORIZED, "tenant not found");
     }
     return $tenant;
 }
@@ -247,8 +245,8 @@ sub retrieve_tenant_row_from_header($self, $c) {
 sub retrieve_player($self, $c, $tenant_db, $id) {
     my $player = $tenant_db->select_row("SELECT * FROM player WHERE id = ?", $id);
     unless ($player) {
-        debugf("error Select player: id=%s", $id);
-        $c->halt_text(HTTP_UNAUTHORIZED, "player not found");
+        warnf("error Select player: id=%s", $id);
+        fail($c, HTTP_UNAUTHORIZED, "player not found");
     }
     return $player;
 }
@@ -258,7 +256,7 @@ sub retrieve_player($self, $c, $tenant_db, $id) {
 sub authorize_player($self, $c, $tenant_db, $id) {
     my $player = $self->retrieve_player($c, $tenant_db, $id);
     if ($player->{is_disqualified}) {
-        $c->halt_text(HTTP_FORBIDDEN, "player_is disqualified");
+        fail($c, HTTP_FORBIDDEN, "player_is disqualified");
     }
     return;
 }
@@ -268,7 +266,7 @@ sub retrieve_competition($c, $tenant_db, $id) {
     my $competition = $tenant_db->select_row("SELECT * FROM competition WHERE id = ?", $id);
     unless ($competition) {
         warnf("error Select competition: id=%s", $id);
-        $c->halt_text(HTTP_UNAUTHORIZED, "competition not found");
+        fail($c, HTTP_UNAUTHORIZED, "competition not found");
     }
     return $competition;
 }
@@ -284,21 +282,22 @@ sub lock_file_path($id) {
 sub flock_by_tenant_id($tenant_id) {
     my $p = lock_file_path($tenant_id);
 
-    open my $fh, "+<", $p or die sprintf("cannot open lock file: %s", $p);
+    sysopen(my $fh, $p, O_RDWR|O_CREAT) or die sprintf("cannot open lock file: %s, %s", $p, $!);
 
-    flock($fh, LOCK_EX) or die sprintf("error flock lock: path=%s, %s", $p, $!);
+    flock($fh, LOCK_EX|LOCK_NB) or die sprintf("error flock lock: path=%s, %s", $p, $!);
 
     return $fh;
 }
 
-
-use constant TenantDetail => {
+use constant TenantWithBilling => {
+    id           => JSON_TYPE_STRING,
     name         => JSON_TYPE_STRING,
     display_name => JSON_TYPE_STRING,
+    billing_yen  => JSON_TYPE_INT,
 };
 
 use constant TenantsAddHandlerSuccess => SuccessResult({
-    tenant => TenantDetail,
+    tenant => TenantWithBilling,
 });
 
 # SasS管理者用API
@@ -308,17 +307,17 @@ sub tenants_add_handler($self, $c) {
     my $v = $self->parse_viewer($c);
     unless ($v->{tenant_name} eq 'admin') {
         # admin: SaaS管理者用の特別なテナント名
-        $c->halt_text(HTTP_NOT_FOUND, "%s has not this API", $v->{tenant_name});
+        fail($c, HTTP_NOT_FOUND, "%s has not this API", $v->{tenant_name});
     }
     unless ($v->{role} eq ROLE_ADMIN) {
-        $c->halt_text(HTTP_FORBIDDEN, "admin role required");
+        fail($c, HTTP_FORBIDDEN, "admin role required");
     }
 
-    my $display_name = $self->request->body_parameters->{display_name};
-    my $name = $self->request->body_parameters->{name};
+    my $display_name = $c->request->body_parameters->{display_name};
+    my $name = $c->request->body_parameters->{name};
 
     if (my $err = validate_tenant_name($name)) {
-        $c->halt_text(HTTP_BAD_REQUEST, $err);
+        fail($c, HTTP_BAD_REQUEST, $err);
     }
 
     my $now = time;
@@ -329,28 +328,30 @@ sub tenants_add_handler($self, $c) {
         );
     }
     catch ($e) {
-        if ($DBI::err == 1213) { # deadlock
-            $c->halt_text(HTTP_BAD_REQUEST, "duplicate tenant");
+        if ($DBI::err == 1062) { # duplicate entry
+            fail($c, HTTP_BAD_REQUEST, "duplicate tenant");
         }
-        critf(
+        fail($c, HTTP_INTERNAL_SERVER_ERROR, sprintf(
             "error Insert tenant: name=%s, displayName=%s, createdAt=%d, updatedAt=%d, %s",
             $name, $display_name, $now, $now, $e,
-        )
+        ));
     }
 
     my $id = $self->admin_db->last_insert_id;
-    my $err = create_tenant_db($id);
 
+    my $err = create_tenant_db($id);
     if ($err) {
-        critf("error createTenantDB: id=%d name=%s %w", $id, $name, $err)
+        fail($c, HTTP_INTERNAL_SERVER_ERROR, sprintf("error createTenantDB: id=%d name=%s %w", $id, $name, $err));
     }
 
     return $c->render_json({
-        success => true,
+        status => true,
         data => {
             tenant => {
-                name => $name,
-                detail_name => $display_name,
+                id           => $id,
+                name         => $name,
+                display_name => $display_name,
+                billing_yen  => 0,
             }
         }
     }, TenantsAddHandlerSuccess);
@@ -396,7 +397,7 @@ sub billing_report_by_competition($self, $c, $tenant_db, $tenant_id, $competiton
 
     # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
     my $fl = flock_by_tenant_id($tenant_id);
-    defer { undef $fl }
+    defer { close $fl }
 
     # スコアを登録した参加者のIDを取得する
     my $scored_player_ids = $tenant_db->select_all(
@@ -409,9 +410,9 @@ sub billing_report_by_competition($self, $c, $tenant_db, $tenant_id, $competiton
     }
 
     # 大会が終了している場合のみ請求金額が確定するので計算する
-    my ($player_count, $visitor_count);
+    my ($player_count, $visitor_count) = (0,0);
     if ($comp->{finished_at}) {
-        for my $category (values $billing_map->@*) {
+        for my $category (values $billing_map->%*) {
             if ($category eq 'player') {
                 $player_count++
             }
@@ -433,13 +434,6 @@ sub billing_report_by_competition($self, $c, $tenant_db, $tenant_id, $competiton
     }
 }
 
-use constant TenantWithBilling => {
-    id           => JSON_TYPE_STRING,
-    name         => JSON_TYPE_STRING,
-    display_name => JSON_TYPE_STRING,
-    billing_yen  => JSON_TYPE_INT,
-};
-
 use constant TenantsBillingHandlerSuccess => SuccessResult({
     tenants => json_type_arrayof(TenantWithBilling),
 });
@@ -449,17 +443,17 @@ use constant TenantsBillingHandlerSuccess => SuccessResult({
 # GET /api/admin/tenants/billing
 # URL引数beforeを指定した場合、指定した値よりもidが小さいテナントの課金レポートを取得する
 sub tenants_billing_handler($self, $c) {
-    unless ($c->request->hostname eq $ENV{ISUCON_ADMIN_HOSTNAME} || "admin.t.isucon.dev") {
-        $c->halt_text(HTTP_NOT_FOUND, sprintf("invalid hostname %s", $c->request->hostname));
+    unless ($c->request->env->{HTTP_HOST} eq $ENV{ISUCON_ADMIN_HOSTNAME} || "admin.t.isucon.dev") {
+        fail($c, HTTP_NOT_FOUND, sprintf("invalid hostname %s", $c->request->env->{HTTP_HOST}));
     }
 
     my $v = $self->parse_viewer($c);
     unless ($v->{role} eq ROLE_ADMIN) {
-        $c->halt_text(HTTP_FORBIDDEN, "admin role required");
+        fail($c, HTTP_FORBIDDEN, "admin role required");
     }
 
     my $before = $c->request->query_parameters->{"before"};
-    my $before_id = hex($before);
+    my $before_id = $before ? hex($before) : 0;
     # テナントごとに
     #   大会ごとに
     #     scoreに登録されているplayerでアクセスした人 * 100
@@ -478,8 +472,8 @@ sub tenants_billing_handler($self, $c) {
         }
 
         my $tenant_billing = {
-            id => $tenant->{id}, # TODO 必要あれば文字列変換 strconv.FormatInt(tenant.ID, 10)
-            name => $tenant->{name},
+            id           => hex($tenant->{id}),
+            name         => $tenant->{name},
             display_name => $tenant->{display_name},
         };
 
@@ -504,7 +498,7 @@ sub tenants_billing_handler($self, $c) {
     }
 
     return $c->render_json({
-        success => true,
+        status => true,
         data => {
             tenants => $tenant_billings,
         },
@@ -527,8 +521,8 @@ use constant PlayersListHandlerSuccess => SuccessResult({
 # 参加者一覧を返す
 sub players_list_handler($self, $c) {
     my $v = $self->parse_viewer($c);
-    if ($v->{role} eq ROLE_ORGANIZER) {
-        $c->halt_text(HTTP_FORBIDDEN, "role organizer required");
+    unless ($v->{role} eq ROLE_ORGANIZER) {
+        fail($c, HTTP_FORBIDDEN, "role organizer required");
     }
 
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
@@ -561,12 +555,12 @@ use constant PlayerAddHandlerSuccess => SuccessResult({
 });
 
 # テナント管理者向けAPI
-# GET /api/organizer/players/add
+# POST /api/organizer/players/add
 # テナントに参加者を追加する
 sub players_add_handler($self, $c) {
     my $v = $self->parse_viewer($c);
-    if ($v->{role} eq ROLE_ORGANIZER) {
-        $c->halt_text(HTTP_FORBIDDEN, "role organizer required");
+    unless ($v->{role} eq ROLE_ORGANIZER) {
+        fail($c, HTTP_FORBIDDEN, "role organizer required");
     }
 
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
@@ -578,7 +572,7 @@ sub players_add_handler($self, $c) {
     for my $display_name (@display_names) {
         my ($id, $err) = $self->dispense_id();
         if ($err) {
-            $c->halt_text("error dispenseID: %s", $err);
+            fail($c, HTTP_INTERNAL_SERVER_ERROR, "error dispenseID: %s", $err);
         }
 
         my $now = time;
@@ -597,7 +591,7 @@ sub players_add_handler($self, $c) {
     }
 
     return $c->render_json({
-        success => true,
+        status => true,
         data => {
             players => $player_details,
         }
@@ -614,7 +608,7 @@ use constant PlayerDisqualifiedHandlerSuccess => SuccessResult({
 sub player_disqualified_handler($self, $c) {
     my $v = $self->parse_viewer($c);
     if ($v->{role} eq ROLE_ORGANIZER) {
-        $c->halt_text(HTTP_FORBIDDEN, "role organizer required");
+        fail($c, HTTP_FORBIDDEN, "role organizer required");
     }
 
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
@@ -631,7 +625,7 @@ sub player_disqualified_handler($self, $c) {
 
     my $p = $self->retrieve_player($c, $tenant_db, $player_id);
     unless ($p) { # 存在しないプレイヤー
-        $c->halt_text(HTTP_NOT_FOUND, "player not found");
+        fail($c, HTTP_NOT_FOUND, "player not found");
     }
 
     return $c->render_json({
@@ -659,8 +653,8 @@ use constant CompetitionsAddHandlerSuccess => SuccessResult({
 # 大会を追加する
 sub competitions_add_handler($self, $c) {
     my $v = $self->parse_viewer($c);
-    if ($v->{role} eq ROLE_ORGANIZER) {
-        $c->halt_text(HTTP_FORBIDDEN, "role organizer required");
+    unless ($v->{role} eq ROLE_ORGANIZER) {
+        fail($c, HTTP_FORBIDDEN, "role organizer required");
     }
 
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
@@ -671,7 +665,7 @@ sub competitions_add_handler($self, $c) {
 
     my ($id, $err) = $self->dispense_id();
     if ($err) {
-        $c->halt_text("error dispenseID: %s", $err);
+        fail($c, HTTP_INTERNAL_SERVER_ERROR, "error dispenseID: %s", $err);
     }
 
     $tenant_db->query(
@@ -680,7 +674,7 @@ sub competitions_add_handler($self, $c) {
     );
 
     return $c->render_json({
-        success => true,
+        status => true,
         data => {
             competition => {
                 id => $id,
@@ -696,8 +690,8 @@ sub competitions_add_handler($self, $c) {
 # 大会を終了する
 sub competition_finish_handler($self, $c) {
     my $v = $self->parse_viewer($c);
-    if ($v->{role} eq ROLE_ORGANIZER) {
-        $c->halt_text(HTTP_FORBIDDEN, "role organizer required");
+    unless ($v->{role} eq ROLE_ORGANIZER) {
+        fail($c, HTTP_FORBIDDEN, "role organizer required");
     }
 
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
@@ -705,12 +699,12 @@ sub competition_finish_handler($self, $c) {
 
     my $id = $c->request->body_parameters->{competition_id};
     unless ($id) {
-        $c->halt_text(HTTP_BAD_REQUEST, "competition_id required")
+        fail($c, HTTP_BAD_REQUEST, "competition_id required")
     }
 
     my $comp = $self->retrieve_competition($c, $tenant_db, $id);
     unless ($comp) { # 存在しない大会
-        $c->halt_text(HTTP_NOT_FOUND, "competition not found");
+        fail($c, HTTP_NOT_FOUND, "competition not found");
     }
 
     my $now = time;
@@ -720,7 +714,7 @@ sub competition_finish_handler($self, $c) {
         $now, $now, $id,
     );
 
-    return $c->render_json({ success => true }, SuccessResult);
+    return $c->render_json({ status => true }, SuccessResult);
 }
 
 use constant ScoreHandlerSuccess => SuccessResult({
@@ -732,8 +726,8 @@ use constant ScoreHandlerSuccess => SuccessResult({
 # 大会のスコアをCSVでアップロードする
 sub competition_score_handler($self, $c) {
     my $v = $self->parse_viewer($c);
-    if ($v->{role} eq ROLE_ORGANIZER) {
-        $c->halt_text(HTTP_FORBIDDEN, "role organizer required");
+    unless ($v->{role} eq ROLE_ORGANIZER) {
+        fail($c, HTTP_FORBIDDEN, "role organizer required");
     }
 
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
@@ -741,17 +735,17 @@ sub competition_score_handler($self, $c) {
 
     my $competition_id = $c->request->body_parameters->{competition_id};
     unless ($competition_id) {
-        $c->halt_text(HTTP_BAD_REQUEST, "competition_id required")
+        fail($c, HTTP_BAD_REQUEST, "competition_id required")
     }
 
     my $comp = $self->retrieve_competition($c, $tenant_db, $competition_id);
     unless ($comp) { # 存在しない大会
-        $c->halt_text(HTTP_NOT_FOUND, "competition not found");
+        fail($c, HTTP_NOT_FOUND, "competition not found");
     }
 
     if ($comp->{finished_at}) {
         my $res = $c->render_json({
-            success => false,
+            status => false,
             message => "competition is finished",
         }, FailureResult);
         $res->code(HTTP_BAD_REQUEST);
@@ -760,39 +754,38 @@ sub competition_score_handler($self, $c) {
 
     my $file = $c->request->uploads->{scores};
     unless ($file) {
-        # TODO: bad requestで良いのか確認
-        $c->halt_text(HTTP_BAD_REQUEST, "scores required");
+        fail($c, HTTP_INTERNAL_SERVER_ERROR, "error uploads->{scores}");
     }
-    open my $fh, '<', $file->filename or die "cannot open csv file";
+    open my $fh, '<', $file->filename or fail($c, "error open uploads->{scores}");
 
     my $csv = Text::CSV_XS->new();
     my $headers = $csv->getline($fh);
     unless ($headers && $headers->@* == 2 && $headers->[0] eq 'player_id' && $headers->[1] eq 'score') {
-        $c->halt_text(HTTP_BAD_REQUEST, "invalid CSV headers");
+        fail($c, HTTP_BAD_REQUEST, "invalid CSV headers");
     }
 
     # DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
     my $fl = flock_by_tenant_id($v->{tenant_id});
-    defer { undef $fl }
+    defer { close $fl }
 
-    my $row_num;
+    my $row_num = 0;
     my $player_score_rows = [];
     while (my $row = $csv->getline($fh)) {
         $row_num++;
         unless ($row->@* == 2) {
-            $c->halt_text(sprintf("row must have two columns: %s", join ',', $row->@*));
+            fail($c, sprintf("row must have two columns: %s", join ',', $row->@*));
         }
 
         my ($player_id, $score_str) = $row->@*;
         my $player = $self->retrieve_player($c, $tenant_db, $player_id);
         unless ($player) { # 存在しない参加者が含まれている
-            $c->halt_text(HTTP_BAD_REQUEST, sprintf('player not found: %s', $player_id));
+            fail($c, HTTP_BAD_REQUEST, sprintf('player not found: %s', $player_id));
         }
         my $score = $score_str+0;
 
         my ($id, $err) = $self->dispense_id();
         if ($err) {
-            $c->halt_text("error dispenseID: %s", $err);
+            fail($c, HTTP_INTERNAL_SERVER_ERROR, "error dispenseID: %s", $err);
         }
         my $now = time;
         push $player_score_rows->@* => {
@@ -821,7 +814,7 @@ sub competition_score_handler($self, $c) {
     }
 
     return $c->render_json({
-        success => true,
+        status => true,
         data => {
             rows => scalar $player_score_rows->@*,
         }
@@ -838,8 +831,8 @@ use constant BillingHandlerSuccess => SuccessResult({
 # テナント内の課金レポートを取得する
 sub billing_handler($self, $c) {
     my $v = $self->parse_viewer($c);
-    if ($v->{role} eq ROLE_ORGANIZER) {
-        $c->halt_text(HTTP_FORBIDDEN, "role organizer required");
+    unless ($v->{role} eq ROLE_ORGANIZER) {
+        fail($c, HTTP_FORBIDDEN, "role organizer required");
     }
 
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
@@ -858,7 +851,7 @@ sub billing_handler($self, $c) {
     }
 
     return $c->render_json({
-        success => true,
+        status => true,
         data => {
             reports => $tenant_billing_reports,
         }
@@ -880,8 +873,8 @@ use constant PlayerHandlerSuccess => SuccessResult({
 # 参加者の詳細情報を取得する
 sub player_handler($self, $c) {
     my $v = $self->parse_viewer($c);
-    if ($v->{role} eq ROLE_PLAYER) {
-        $c->halt_text(HTTP_FORBIDDEN, "role player required");
+    unless ($v->{role} eq ROLE_PLAYER) {
+        fail($c, HTTP_FORBIDDEN, "role player required");
     }
 
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
@@ -891,12 +884,12 @@ sub player_handler($self, $c) {
 
     my $player_id = $c->request->query_parameters->{player_id};
     unless ($player_id) {
-        $c->halt_text(HTTP_BAD_REQUEST, "player_id is required");
+        fail($c, HTTP_BAD_REQUEST, "player_id is required");
     }
 
     my $player = $self->retrieve_player($c, $tenant_db, $player_id);
     unless ($player) {
-        $c->halt_text(HTTP_NOT_FOUND, "player not found");
+        fail($c, HTTP_NOT_FOUND, "player not found");
     }
 
     my $competitions = $tenant_db->select_all(
@@ -905,7 +898,7 @@ sub player_handler($self, $c) {
 
     # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
     my $fl = flock_by_tenant_id($v->{tenant_id});
-    defer { undef $fl }
+    defer { close $fl }
 
     my $player_scores = [];
     for my $comp ($competitions) {
@@ -932,7 +925,7 @@ sub player_handler($self, $c) {
     }
 
     return $c->render_json({
-        success => true,
+        status => true,
         data => {
             player => {
                 id => $player->{id},
@@ -963,8 +956,8 @@ use constant CompetitionRankingHandlerSuccess => SuccessResult({
 # 大会ごとのランキングを取得する
 sub competition_ranking_handler($self, $c) {
     my $v = $self->parse_viewer($c);
-    if ($v->{role} eq ROLE_PLAYER) {
-        $c->halt_text(HTTP_FORBIDDEN, "role player required");
+    unless ($v->{role} eq ROLE_PLAYER) {
+        fail($c, HTTP_FORBIDDEN, "role player required");
     }
 
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
@@ -974,13 +967,13 @@ sub competition_ranking_handler($self, $c) {
 
     my $competition_id = $c->request->query_parameters->{competition_id};
     unless ($competition_id) {
-        $c->halt_text(HTTP_BAD_REQUEST, "competition_id is required");
+        fail($c, HTTP_BAD_REQUEST, "competition_id is required");
     }
 
     # 大会の存在確認
     my $competition = $self->retrieve_competition($c, $tenant_db, $competition_id);
     unless ($competition) {
-        $c->halt_text(HTTP_NOT_FOUND, "competition not found")
+        fail($c, HTTP_NOT_FOUND, "competition not found")
     }
 
     my $now = time;
@@ -999,7 +992,7 @@ sub competition_ranking_handler($self, $c) {
 
     # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
     my $fl = flock_by_tenant_id($v->{tenant_id});
-    defer { undef $fl }
+    defer { close $fl }
 
     my $player_scores = $tenant_db->select_all(
         "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
@@ -1053,7 +1046,7 @@ sub competition_ranking_handler($self, $c) {
     }
 
     return $c->render_json({
-        success => true,
+        status => true,
         data => {
             competition => {
                 id          => $competition->{id},
@@ -1073,8 +1066,8 @@ use constant CompetitionsHandlerSuccess => SuccessResult({
 # 大会の一覧を取得する
 sub player_competitions_handler($self, $c) {
     my $v = $self->parse_viewer($c);
-    if ($v->{role} eq ROLE_PLAYER) {
-        $c->halt_text(HTTP_FORBIDDEN, "role player required");
+    unless ($v->{role} eq ROLE_PLAYER) {
+        fail($c, HTTP_FORBIDDEN, "role player required");
     }
 
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
@@ -1090,8 +1083,8 @@ sub player_competitions_handler($self, $c) {
 # 大会の一覧を取得する
 sub organizer_competitions_handler($self, $c) {
     my $v = $self->parse_viewer($c);
-    if ($v->{role} eq ROLE_ORGANIZER) {
-        $c->halt_text(HTTP_FORBIDDEN, "role organizer required");
+    unless ($v->{role} eq ROLE_ORGANIZER) {
+        fail($c, HTTP_FORBIDDEN, "role organizer required");
     }
 
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
@@ -1116,12 +1109,17 @@ sub competitions_handler($c, $viewer, $tenant_db) {
     }
 
     return $c->render_json({
-        success => true,
+        status => true,
         data => {
             competitions => $competition_details,
         }
     }, CompetitionsHandlerSuccess);
 }
+
+use constant TenantDetail => {
+    name         => JSON_TYPE_STRING,
+    display_name => JSON_TYPE_STRING,
+};
 
 use constant MeHandlerSuccess => SuccessResult({
     tenant    => TenantDetail,
@@ -1133,7 +1131,7 @@ use constant MeHandlerSuccess => SuccessResult({
 # 共通API
 # GET /api/me
 # JWTで認証した結果、テナントやユーザ情報を返す
-sub meHandler($self, $c) {
+sub me_handler($self, $c) {
     my $tenant = $self->retrieve_tenant_row_from_header($c);
     my $tenant_detail = {
         name         => $tenant->{name},
@@ -1145,9 +1143,9 @@ sub meHandler($self, $c) {
         $v = $self->parse_viewer($c);
     }
     catch ($e) {
-        if ($e isa Kossy::Exception && $e->code == HTTP_UNAUTHORIZED) {
+        if ($e isa Kossy::Exception && $e->{code} == HTTP_UNAUTHORIZED) {
             return $c->render_json({
-                success => true,
+                status => true,
                 data => {
                     tenant    => $tenant_detail,
                     me        => undef,
@@ -1157,12 +1155,12 @@ sub meHandler($self, $c) {
             }, MeHandlerSuccess);
         }
 
-        critf('error parse viewer: %s', $e);
+        fail($c, HTTP_INTERNAL_SERVER_ERROR, sprintf('error parse viewer: %s', $e));
     }
 
     if ($v->{role} eq ROLE_ADMIN || $v->{role} eq ROLE_ORGANIZER) {
         return $c->render_json({
-            success => true,
+            status => true,
             data => {
                 tenant    => $tenant_detail,
                 me        => undef,
@@ -1178,7 +1176,7 @@ sub meHandler($self, $c) {
     my $player = $self->retrieve_player($c, $tenant_db, $v->{player_id});
     unless ($player) {
         return $c->render_json({
-            success => true,
+            status => true,
             data => {
                 tenant    => $tenant_detail,
                 me        => undef,
@@ -1189,7 +1187,7 @@ sub meHandler($self, $c) {
     }
 
     return $c->render_json({
-        success => true,
+        status => true,
         data => {
             tenant => $tenant_detail,
             me => {
@@ -1203,6 +1201,10 @@ sub meHandler($self, $c) {
     }, MeHandlerSuccess);
 }
 
+use constant InitializeHandlerSuccess => SuccessResult({
+    lang => JSON_TYPE_STRING,
+});
+
 # ベンチマーカー向けAPI
 # POST /initialize
 # ベンチマーカーが起動したときに最初に呼ぶ
@@ -1210,15 +1212,15 @@ sub meHandler($self, $c) {
 sub initialize_handler($self, $c) {
     my $e = system(INITIALIZE_SCRIPT);
     if ($e) {
-        $c->halt_text("error exec.Command: %s", $e);
+        fail($c, HTTP_INTERNAL_SERVER_ERROR, "error exec.Command: %s", $e);
     }
 
     return $c->render_json({
-        success => true,
+        status => true,
         data => {
             lang => "perl",
-        },
-    });
+        }
+    }, InitializeHandlerSuccess);
 }
 
 1;
