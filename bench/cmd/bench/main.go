@@ -4,12 +4,14 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"sort"
 	"time"
 
 	"github.com/isucon/isucandar"
+	"github.com/isucon/isucandar/failure"
 	"github.com/isucon/isucandar/score"
 	"github.com/isucon/isucon12-qualify/bench"
 	"github.com/k0kubun/pp/v3"
@@ -39,7 +41,7 @@ func main() {
 	flag.DurationVar(&option.RequestTimeout, "request-timeout", DefaultRequestTimeout, "Default request timeout")
 	flag.DurationVar(&option.InitializeRequestTimeout, "initialize-request-timeout", DefaultInitializeRequestTimeout, "Initialize request timeout")
 	flag.DurationVar(&option.Duration, "duration", DefaultDuration, "Benchmark duration")
-	flag.BoolVar(&option.ExitErrorOnFail, "exit-error-on-fail", true, "Exit error on fail")
+	flag.BoolVar(&option.ExitErrorOnFail, "exit-error-on-fail", false, "Exit error on fail")
 	flag.BoolVar(&option.PrepareOnly, "prepare-only", false, "Prepare only")
 	flag.BoolVar(&option.SkipPrepare, "skip-prepare", false, "Skip prepare")
 	flag.StringVar(&option.DataDir, "data-dir", "data", "Data directory")
@@ -89,8 +91,48 @@ func main() {
 
 	time.Sleep(time.Second) // 結果が揃うまでちょっと待つ
 
+	// エラーの原因を集計する
+	unexpectedErrors := []error{}
+	validateErrors := []error{}
+	existFailLog := false
+
+	errAll := result.Errors.All()
+	for _, err := range errAll {
+		fail := false
+		isValidateError := false
+		for _, errCode := range failure.GetErrorCodes(err) {
+			switch errCode {
+			case string(bench.ErrValidation): // validationErrorで出るもの
+				isValidateError = true
+			case string(bench.ErrFailedLoad), string(bench.ErrFailedPrepare): // portal上はfailを出す
+				fail = true
+			default: // isucandar系など
+			}
+		}
+
+		if isValidateError {
+			validateErrors = append(validateErrors, err)
+			continue
+		}
+		if fail {
+			existFailLog = true
+			continue
+		}
+
+		// 上記のどれでも無い場合は意図しないエラー
+		unexpectedErrors = append(unexpectedErrors, err)
+	}
+
+	// benchの問題でエラーが出た場合はexit 1
+	if len(unexpectedErrors) != 0 {
+		for _, err := range unexpectedErrors {
+			log.Printf("bench unexpected error: %v\n", err)
+		}
+		os.Exit(1)
+	}
+
 	// エラーを表示
-	for i, err := range result.Errors.All() {
+	for i, err := range validateErrors {
 		// 選手向けにエラーメッセージが表示される
 		bench.ContestantLogger.Printf("ERROR[%d] %v", i, err)
 		if i+1 >= bench.MaxErrors {
@@ -113,7 +155,15 @@ func main() {
 	scenario.PrintScenarioScoreMap()
 	scenario.PrintScenarioCount()
 	scenario.PrintWorkerCount()
-	score, addition, deduction, isPassed := SumScore(result)
+	addition := SumScore(result)
+	deduction := int64(len(validateErrors) * 10)
+
+	score := addition - deduction
+	if score < 0 {
+		score = 0
+	}
+
+	isPassed := 0 < score && !existFailLog
 	bench.ContestantLogger.Printf("PASSED: %v", isPassed)
 	bench.ContestantLogger.Printf("SCORE: %d (+%d %d)", score, addition, -deduction)
 	br := AllTagBreakdown(result)
@@ -165,32 +215,14 @@ func AllTagBreakdown(result *isucandar.BenchmarkResult) score.ScoreTable {
 	return bd
 }
 
-func SumScore(result *isucandar.BenchmarkResult) (int64, int64, int64, bool) {
+func SumScore(result *isucandar.BenchmarkResult) int64 {
 	score := result.Score
 	// 各タグに倍率を設定
 	for scoreTag, value := range bench.ResultScoreMap {
 		score.Set(scoreTag, value)
 	}
 
-	// 加点分の合算
-	addition := score.Sum()
-
-	// エラーは1つ10点減点
-	deduction := len(result.Errors.All()) * 10
-
-	// 合計(0を下回ったら0点にする)
-	sum := addition - int64(deduction)
-	if sum < 0 {
-		sum = 0
-	}
-
-	// failure.Code ErrFailedBench があればfail扱いする
-	isPassed := true
-	errsMap := result.Errors.Count()
-	if i, ok := errsMap[string(bench.ErrFailedBench)]; ok && 0 < i {
-		isPassed = false
-	}
-	return sum, addition, int64(deduction), isPassed
+	return score.Sum()
 }
 
 func mustReport(res *isuxportalResources.BenchmarkResult) {

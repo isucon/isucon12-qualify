@@ -26,7 +26,8 @@ jobs:
     steps:
       - name: cleanup
         run: |
-          sudo rm -fr /home/github/work/isucon12-qualify/isucon12-qualify/go
+          sudo rm -fr /home/github/work/isucon12-qualify/isucon12-qualify
+          mkdir /home/github/work/isucon12-qualify/isucon12-qualify
 
       - name: Check out code
         uses: actions/checkout@v3
@@ -35,7 +36,7 @@ jobs:
         run: |
           make initial_data
           make down/go
-          make up/go OPT=-d
+          make up/go OPT='-d --build'
           make install_initial_data
         working-directory: ./development
         env:
