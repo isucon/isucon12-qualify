@@ -178,14 +178,15 @@ func SumScore(result *isucandar.BenchmarkResult) (int64, int64, int64, bool) {
 	// エラーは1つ10点減点
 	deduction := len(result.Errors.All()) * 10
 
-	// 合計(0を下回ったら0点にする)
+	isPassed := true
+	// 合計(0を下回ったら0点にしてfail扱いする)
 	sum := addition - int64(deduction)
-	if sum < 0 {
+	if sum <= 0 {
 		sum = 0
+		isPassed = false
 	}
 
 	// failure.Code ErrFailedBench があればfail扱いする
-	isPassed := true
 	errsMap := result.Errors.Count()
 	if i, ok := errsMap[string(bench.ErrFailedBench)]; ok && 0 < i {
 		isPassed = false
