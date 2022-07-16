@@ -37,7 +37,7 @@ type Account struct {
 }
 
 func (ac *Account) String() string {
-	return fmt.Sprintf("tenant:%s, role:%s, playerID:%s", ac.TenantName, ac.Role, ac.PlayerID)
+	return fmt.Sprintf("tenant:%s role:%s playerID:%s", ac.TenantName, ac.Role, ac.PlayerID)
 }
 
 // {admin,[tenantName]}.t.isucon.dev 的なURLを組み立てる
@@ -180,6 +180,20 @@ func (srs ScoreRows) CSV() string {
 		csv += fmt.Sprintf("\n%s,%d", row.PlayerID, row.Score)
 	}
 	return csv
+}
+
+func (srs ScoreRows) PlayerIDs() []string {
+	idsMap := map[string]struct{}{}
+	for _, row := range srs {
+		if _, ok := idsMap[row.PlayerID]; !ok {
+			idsMap[row.PlayerID] = struct{}{}
+		}
+	}
+	ids := []string{}
+	for key, _ := range idsMap {
+		ids = append(ids, key)
+	}
+	return ids
 }
 
 type CompetitionData struct {

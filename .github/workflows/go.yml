@@ -27,7 +27,9 @@ jobs:
       - name: cleanup
         run: |
           sudo rm -fr /home/github/work/isucon12-qualify/isucon12-qualify
-+         mkdir /home/github/work/isucon12-qualify/isucon12-qualify
+
+          mkdir /home/github/work/isucon12-qualify/isucon12-qualify
+
       - name: Check out code
         uses: actions/checkout@v3
 
@@ -39,10 +41,18 @@ jobs:
           make install_initial_data
         working-directory: ./development
         env:
-          GITHUB_REF_NAME: ${{ github.ref_name }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          GITHUB_REF_NAME: ${{ github.ref_name }}
       - name: "run bench"
         working-directory: ./development
         run: |
           make run-bench-ci
+        env:
+          GITHUB_SERVER_URL: ${{github.server_url}}
+          GITHUB_RUN_ID: ${{github.run_id}}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+      - name: "down containers"
+        if: ${{ always() }}
+        run: |
+          make down/go
+        working-directory: ./development

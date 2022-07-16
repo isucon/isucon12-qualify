@@ -4,10 +4,8 @@ const (
 	ConstMaxError         = 30
 	ConstMaxCriticalError = 10
 
-	// TODO: 以下ほぼすべて要調整
-
 	// NewTenantScenario
-	ConstNewTenantScenarioPlayerWorkerNum = 10 // 作成するplayer worker数
+	ConstNewTenantScenarioPlayerWorkerNum = 20 // 作成するplayer worker数
 
 	// PopularTenantScenario
 	ConstPopularTenantScenarioScoreRepeat = 2   // 一周のスコア入稿回数
@@ -34,7 +32,8 @@ var (
 	//  70 ~ 99: 破壊的操作テナント
 	// 100 ~ : prepare validate tenant
 
-	ConstPopularTenantScenarioIDRange        = []int{0, 39}  // 利用する初期データのテナントID幅
-	ConstAdminBillingValidateScenarioIDRange = []int{40, 69} // 利用する初期データのテナントID幅
-	ConstPeacefulTenantScenarioIDRange       = []int{70, 99} // 利用する初期データのテナントID幅
+	ConstPopularTenantScenarioIDRange        = []int{1, 29}
+	ConstPlayerValidateScenarioIDRange       = []int{30, 49}
+	ConstAdminBillingValidateScenarioIDRange = []int{50, 69}
+	ConstPeacefulTenantScenarioIDRange       = []int{70, 99}
 )

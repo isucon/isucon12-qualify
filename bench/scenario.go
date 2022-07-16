@@ -27,9 +27,8 @@ var (
 )
 
 const (
-	ErrFailedLoadJSON failure.StringCode = "load-json"
-	ErrCannotNewAgent failure.StringCode = "agent"
-	ErrInvalidRequest failure.StringCode = "request"
+	ErrFailedPrepare failure.StringCode = "fail-prepare"
+	ErrFailedLoad    failure.StringCode = "fail-load"
 )
 
 type TenantData struct {
@@ -62,6 +61,9 @@ type Scenario struct {
 	WorkerCh        chan Worker
 	ErrorCh         chan struct{}
 	CriticalErrorCh chan struct{}
+
+	CompetitionAddLog *CompactLogger
+	TenantAddLog      *CompactLogger
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -89,14 +91,17 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	sc.CriticalErrorCh = make(chan struct{}, 10)
 	sc.ErrorCh = make(chan struct{}, 10)
 
+	sc.CompetitionAddLog = NewCompactLog(ContestantLogger)
+	sc.TenantAddLog = NewCompactLog(ContestantLogger)
+
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(sc.Option.TargetURL)
 	if err != nil {
-		return failure.NewError(ErrCannotNewAgent, err)
+		return err
 	}
 	ag, err := sc.Option.NewAgent(b.Scheme+"://admin."+b.Host, true)
 	if err != nil {
-		return failure.NewError(ErrCannotNewAgent, err)
+		return err
 	}
 
 	if sc.Option.SkipPrepare {
@@ -140,15 +145,26 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	}
 
 	// POST /initialize へ初期化リクエスト実行
+	var lang string
 	res, err := PostInitializeAction(ctx, ag)
-	if v := ValidateResponse("初期化", step, res, err, WithStatusCode(200)); !v.IsEmpty() {
-		return fmt.Errorf("初期化リクエストに失敗しました %v", v)
+	if v := ValidateResponse("初期化", step, res, err, WithStatusCode(200),
+		WithSuccessResponse(func(r ResponseAPIInitialize) error {
+			if r.Data.Lang == "" {
+				return fmt.Errorf("Initializeのレスポンスには実装言語`lang`を含めてください")
+			}
+			lang = r.Data.Lang
+			return nil
+		}),
+	); !v.IsEmpty() {
+		ContestantLogger.Printf("初期化リクエストに失敗しました")
+		return failure.NewError(ErrFailedPrepare, v)
 	}
+	ContestantLogger.Printf("初期化リクエストに成功しました 実装言語:%s", lang)
 
 	// 検証シナリオを1回まわす
 	if err := sc.ValidationScenario(ctx, step); err != nil {
-		fmt.Println(err)
-		return fmt.Errorf("整合性チェックに失敗しました")
+		ContestantLogger.Printf("整合性チェックに失敗しました")
+		return failure.NewError(ErrFailedPrepare, err)
 	}
 
 	ContestantLogger.Printf("整合性チェックに成功しました")
@@ -158,14 +174,12 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 // ベンチ本編
 // isucandar.LoadScenario を満たすメソッド
 // isucandar.Benchmark の Load ステップで実行される
-func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error {
-	ctx, cancel := context.WithCancel(c)
-
+func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) error {
 	if sc.Option.PrepareOnly {
 		return nil
 	}
-	ContestantLogger.Println("負荷テストを開始します")
-	defer ContestantLogger.Println("負荷テストを終了します")
+	ContestantLogger.Println("負荷走行を開始します")
+	defer AdminLogger.Println("負荷走行を終了しました")
 	wg := &sync.WaitGroup{}
 
 	// 最初に起動するシナリオ
@@ -197,7 +211,6 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 	}
 
 	// 軽いテナント(id!=1)を見るworker
-	// TODO: 現状増やすきっかけが無いので初期から並列数多くてもよいかも
 	{
 		wkr, err := sc.PopularTenantScenarioWorker(step, 1, false)
 		if err != nil {
@@ -207,7 +220,6 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 	}
 
 	// 破壊的な変更を許容するシナリオ
-	// TODO: 未完成
 	{
 		wkr, err := sc.PeacefulTenantScenarioWorker(step, 1)
 		if err != nil {
@@ -234,11 +246,23 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 		sc.WorkerCh <- wkr
 	}
 
+	// PlayerHandlerの整合性をチェックするシナリオ
+	{
+		wkr, err := sc.PlayerValidateScenarioWorker(step, 1)
+		if err != nil {
+			return err
+		}
+		sc.WorkerCh <- wkr
+	}
+
 	errorCount := 0
 	criticalCount := 0
-	end := false
+
+	logTicker := time.NewTicker(time.Second * 5) // 5秒置きに溜まったログを出力する
+	defer logTicker.Stop()
 
 	for {
+		end := false
 		select {
 		case <-ctx.Done():
 			end = true
@@ -260,24 +284,29 @@ func (sc *Scenario) Load(c context.Context, step *isucandar.BenchmarkStep) error
 		case <-sc.CriticalErrorCh:
 			errorCount++
 			criticalCount++
+		case <-logTicker.C:
+			sc.CompetitionAddLog.Log()
+			sc.TenantAddLog.Log()
 		}
 
 		if ConstMaxError <= errorCount {
-			AdminLogger.Printf("エラーが%d件を越えたので負荷テストを打ち切ります", ConstMaxError)
-			cancel()
+			ContestantLogger.Printf("エラーが%d件を越えたので負荷走行を打ち切ります", ConstMaxError)
+			step.AddError(ErrFailedLoad)
 			end = true
 		}
 
 		if ConstMaxCriticalError <= criticalCount {
-			AdminLogger.Printf("Criticalなエラーが%d件を越えたので負荷テストを打ち切ります", ConstMaxCriticalError)
-			cancel()
+			ContestantLogger.Printf("Criticalなエラーが%d件を越えたので負荷走行を打ち切ります", ConstMaxCriticalError)
+			step.AddError(ErrFailedLoad)
 			end = true
 		}
 
 		if end {
+			ContestantLogger.Printf("負荷走行を終了します")
 			break
 		}
 	}
+	step.Cancel()
 	wg.Wait()
 
 	return nil

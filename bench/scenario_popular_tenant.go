@@ -28,7 +28,7 @@ func (sc *Scenario) PopularTenantScenarioWorker(step *isucandar.BenchmarkStep, p
 	},
 		// // 無限回繰り返す
 		worker.WithInfinityLoop(),
-		worker.WithUnlimitedParallelism(),
+		worker.WithMaxParallelism(20),
 	)
 	if err != nil {
 		return nil, err
@@ -52,14 +52,11 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 	if isHeavyTenant {
 		tenantName = "isucon"
 	} else {
-		var data *InitialDataRow
-		for {
-			data = sc.InitialData.Choise()
-			if data.TenantName != "isucon" {
-				break
-			}
-		}
-		tenantName = data.TenantName
+		// 初期データからテナントを選ぶ
+		index := randomRange(ConstPopularTenantScenarioIDRange)
+		tenant := sc.InitialDataTenant[int64(index)]
+
+		tenantName = tenant.TenantName
 	}
 
 	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
@@ -69,16 +66,22 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
 	orgJobConf := &OrganizerJobConfig{
-		orgAc:         orgAc,
-		scTag:         scTag,
-		tenantName:    tenantName,
-		scoreRepeat:   ConstPopularTenantScenarioScoreRepeat,
-		addScoreNum:   ConstPopularTenantScenarioAddScoreNum,
-		scoreInterval: 1000, // 結果の検証時には3s、負荷かける用は1s
+		orgAc:           orgAc,
+		scTag:           scTag,
+		tenantName:      tenantName,
+		scoreRepeat:     ConstPopularTenantScenarioScoreRepeat,
+		addScoreNum:     ConstPopularTenantScenarioAddScoreNum,
+		scoreInterval:   1000, // 結果の検証時には3s、負荷かける用は1s
+		playerWorkerNum: 5,
+	}
+
+	// id=1の巨大テナントのスコア入稿プレイヤー数は500を上限とする
+	if isHeavyTenant {
+		orgJobConf.maxScoredPlayer = 500
 	}
 
 	for {
-		if err := sc.OrganizerJob(ctx, step, orgJobConf); err != nil {
+		if _, err := sc.OrganizerJob(ctx, step, orgJobConf); err != nil {
 			return err
 		}
 
@@ -99,6 +102,10 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 				return v
 			}
 		}
+		// TODO もっとリクエストしたい
+		// TODO Player数を増やしてpopularTenantScenarioWorkerは増やして良いかも
+		// ただしHeavyTenantお前はダメ
+
 		orgJobConf.scoreRepeat++
 	}
 

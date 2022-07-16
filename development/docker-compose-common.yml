@@ -4,12 +4,11 @@ services:
   nginx:
     image: nginx:1.22
     volumes:
-      - ../nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/conf.d:/etc/nginx/conf.d
       - ../nginx/tls:/etc/nginx/tls
-      #- ./public:/public
+      - ../public:/public
     ports:
       - "443:443"
-    network_mode: host
     restart: always
 
   mysql:
@@ -46,13 +45,15 @@ services:
     environment:
       - GH_TOKEN
       - GITHUB_REF_NAME
+      - GITHUB_SERVER_URL
+      - GITHUB_REPOSITORY
+      - GITHUB_RUN_ID
       - ISUCON_JWT_KEY_FILE=./isuports.pem
     volumes:
       - ../:/home/isucon
       - tenant_db:/home/isucon/webapp/tenant_db
       - initial_data:/home/isucon/initial_data
       - gopkg:/home/isucon/go/pkg
-    network_mode: host
     working_dir: /home/isucon/bench
     command:
       - "bash"
