@@ -100,7 +100,7 @@ pub async fn main() -> std::io::Result<()> {
         .username(&get_env("ISUCON_DB_USER", "isucon"))
         .password(&get_env("ISUCON_DB_PASSWORD", "isucon"))
         .database(&get_env("ISUCON_DB_NAME", "isuports"))
-        .port(get_env("ISUCON_DB_PORT", "3306").parse::<u16>().unwrap());
+        .port(get_env("ISUCON_DB_PORT", "3306").parse::<u16>().expect("failed to parse port number"));
 
     let pool = sqlx::mysql::MySqlPoolOptions::new()
         .max_connections(10)
@@ -159,7 +159,7 @@ pub async fn main() -> std::io::Result<()> {
                 .ok()
                 .and_then(|port_str| port_str.parse().ok())
                 .unwrap_or(3000),
-        ))?
+        )).expect("failed to start server")
         .run()
         .await
 }
