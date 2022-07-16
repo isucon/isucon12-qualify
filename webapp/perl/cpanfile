@@ -10,8 +10,9 @@ requires 'Starlet', '0.31';
 requires 'DBD::mysql', '4.050';
 requires 'DBD::SQLite', '1.70';
 requires 'DBIx::Sunny', '0.9992';
+requires 'DBIx::Tracer', '0.03';
 
 requires 'Crypt::JWT', '0.034';
 requires 'Furl', '3.14';
 requires 'File::Slurp', '9999.32';
-requires 'Text::CSV_XS';
+requires 'Text::CSV_XS', '1.48';

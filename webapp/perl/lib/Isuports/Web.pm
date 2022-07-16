@@ -15,6 +15,16 @@ use DBIx::Sunny;
 use Cpanel::JSON::XS;
 use Cpanel::JSON::XS::Type;
 
+# sqliteのクエリログを出力する設定
+# 環境変数 ISUCON_SQLITE_TRACE_FILE を設定すると、そのファイルにクエリログをJSON形式で出力する
+# 未設定なら出力しない
+if ($ENV{ISUCON_SQLITE_TRACE_FILE}) {
+    require Isuports::SQLiteTracer;
+    our $tracer = Isuports::SQLiteTracer->new(
+        file => $ENV{ISUCON_SQLITE_TRACE_FILE},
+    );
+}
+
 $Kossy::JSON_SERIALIZER = Cpanel::JSON::XS->new()->ascii(0);
 
 use constant {
@@ -59,7 +69,7 @@ sub tenant_db_path($id) {
 sub connect_to_tenant_db($id) {
     my $p = tenant_db_path($id);
 
-    my $dsn = "dbi:SQLite:dbname=$p";
+    my $dsn = "dbi:SQLite:$p";
     my $dbh = DBIx::Sunny->connect($dsn, "", "", {});
     return $dbh;
 }
