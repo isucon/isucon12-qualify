@@ -386,15 +386,10 @@ fn flock_by_tenant_id(tenant_id: i64) -> Result<i32, ()> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct TenantDetail {
-    name: String,
-    display_name: String,
-}
 
 #[derive(Serialize)]
 struct TenantsAddHandlerResult {
-    tenant: TenantDetail,
+    tenant: TenantWithBilling,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -441,9 +436,11 @@ async fn tenants_add_handler(
     let id = insert_res.last_insert_id();
     create_tenant_db(id.try_into().unwrap()).await;
     let res = TenantsAddHandlerResult {
-        tenant: TenantDetail {
-            name: name.to_string(),
+        tenant: TenantWithBilling {
+            id: id.to_string(),
+            name: ToString::to_string(&name),
             display_name: display_name.to_string(),
+            billing_yen: 0,
         },
     };
     Ok(HttpResponse::Ok().json(res))
@@ -1314,6 +1311,12 @@ async fn competitions_handler(
         data: Some(CompetitionsHandlerResult { competitions: cds }),
     };
     Ok(HttpResponse::Ok().json(res))
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, )]
+struct TenantDetail {
+    name: String,
+    display_name: String
 }
 
 #[derive(Debug, Serialize, Deserialize)]
