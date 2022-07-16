@@ -27,7 +27,7 @@ const ROLE_PLAYER: &str = "player";
 
 lazy_static! {
     // 正しいテナント名の正規表現
-    static ref TENANT_NAME_REGEXP: Regex = Regex::new("^[a-z][a-z0-9-]{0,61}[a-z0-9]$").unwrap();
+    static ref TENANT_NAME_REGEXP: Regex = Regex::new(r"^[a-z][a-z0-9-]{0,61}[a-z0-9]$").unwrap();
     // TODO: static ref ADMIN_DB:
 
     static ref SQLITE_DRIBER_NAME: String = "sqlite3".to_string();
