@@ -1,0 +1,32 @@
+{
+  "name": "isuports",
+  "version": "1.0.0",
+  "description": "ISUPORTS is not e-Sports",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "serve": "ts-node src/main.ts"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^0.27.2",
+    "cookie-parser": "^1.4.6",
+    "express": "^4.18.1",
+    "fs-ext": "^2.0.0",
+    "jsonwebtoken": "^8.5.1",
+    "mysql2": "^2.3.3",
+    "sqlite": "^4.1.1",
+    "sqlite3": "^5.0.9"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.3",
+    "@types/express": "^4.17.13",
+    "@types/fs-ext": "^2.0.0",
+    "@types/jsonwebtoken": "^8.5.8",
+    "@types/sqlite3": "^3.1.8",
+    "nodemon": "^2.0.19",
+    "ts-node": "^10.9.1",
+    "typescript": "^4.7.4"
+  }
+}
