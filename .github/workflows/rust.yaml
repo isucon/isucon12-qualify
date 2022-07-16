@@ -35,7 +35,7 @@ jobs:
         run: |
           make initial_data
           make down/rust
-          make up/rust OPT=-d
+          make up/rust OPT='-d --build'
           make install_initial_data
         working-directory: ./development
         env:
