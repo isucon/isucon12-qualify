@@ -54,7 +54,7 @@ type Scenario struct {
 	WorkerCountMutex   sync.Mutex
 
 	InitialData        InitialDataRows
-	InitialDataTenant  InitialDataTenantMap
+	InitialDataTenant  InitialDataTenantRows
 	DisqualifiedPlayer map[string]struct{}
 	RawKey             *rsa.PrivateKey
 

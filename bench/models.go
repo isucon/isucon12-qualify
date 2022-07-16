@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -152,19 +153,21 @@ func (idrs InitialDataRows) Choise() *InitialDataRow {
 }
 
 type InitialDataTenantRow data.BenchmarkerTenantSource
-type InitialDataTenantMap map[int64]*InitialDataTenantRow
+type InitialDataTenantRows []*InitialDataTenantRow
 
-func GetInitialDataTenant() (InitialDataTenantMap, error) {
+func GetInitialDataTenant() (InitialDataTenantRows, error) {
 	data, err := LoadFromJSONFile[InitialDataTenantRow]("./benchmarker_tenant.json")
 	if err != nil {
 		return nil, err
 	}
-	dataMap := InitialDataTenantMap{}
-	for _, data := range data {
-		dataMap[data.TenantID] = data
+	if len(data) < 100 {
+		return nil, fmt.Errorf("初期テナントデータの量が足りません (want:%d got:%d)", 100, len(data))
 	}
 
-	return dataMap, nil
+	sort.Slice(data, func(i, j int) bool {
+		return data[i].TenantID < data[j].TenantID
+	})
+	return data, nil
 }
 
 type ScoreRow struct {

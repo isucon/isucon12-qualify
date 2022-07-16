@@ -1300,14 +1300,14 @@ func billingAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.B
 	}
 	{
 		// ページングで初期データ範囲のBillingが正しいか確認
-		checkTenantCursor := int64(randomRange([]int{20, 99})) // ID=2~99のどれかのテナントでチェック
+		checkTenantCursor := int64(randomRange([]int{12, 99})) // 初期データに当たらない範囲で調べる
 		res, err, txt := GetAdminTenantsBillingAction(ctx, fmt.Sprintf("%d", checkTenantCursor), adminAg)
 		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード: 初期データチェック", step, res, err, msg, WithStatusCode(200),
 			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 				if 10 != len(r.Data.Tenants) {
-					return fmt.Errorf("請求ダッシュボードの結果の数が違います (want: %d, got: %d)", len(r.Data.Tenants), 10)
+					return fmt.Errorf("請求ダッシュボードの結果の数が違います (want: %d, got: %d)", 10, len(r.Data.Tenants))
 				}
 				tenantIDs := []int64{}
 				for _, tenant := range r.Data.Tenants {
@@ -1317,7 +1317,15 @@ func billingAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.B
 						return fmt.Errorf("TenantIDの形が違います tenantName:%v (got: %v)", tenant.Name, tenant.ID)
 					}
 					tenantIDs = append(tenantIDs, index)
-					initialTenant, ok := sc.InitialDataTenant[index]
+					// 初期データからテナントIDで検索
+					tenantIDMap := map[int64]*InitialDataTenantRow{}
+					for _, tenant := range sc.InitialDataTenant {
+						tenantIDMap[tenant.TenantID] = tenant
+					}
+					initialTenant, ok := tenantIDMap[index]
+					if !ok {
+						return fmt.Errorf("初期データに存在しないTenantIDです tenantName:%v (got: %v)", tenant.Name, tenant.ID)
+					}
 					if !ok {
 						return fmt.Errorf("初期データに存在しないTenantIDです tenantName:%v (got: %v)", tenant.Name, tenant.ID)
 					}
