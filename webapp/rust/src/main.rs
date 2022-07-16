@@ -405,7 +405,7 @@ async fn tenants_add_handler(
     request: web::Data<actix_web::HttpRequest>,
     form: web::Form<FormInfo>,
 ) -> actix_web::Result<HttpResponse> {
-    let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request).await.expect("error parseViewer");
     if v.tenant_name != *"admin" {
         // admin: SaaS管理者用の特別なテナント名
         return Err(actix_web::error::ErrorUnauthorized(
@@ -420,7 +420,7 @@ async fn tenants_add_handler(
     validate_tenant_name(name.to_string()).unwrap();
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .expect("error now()")
         .as_secs() as i64;
 
     let insert_res = sqlx::query(
@@ -432,9 +432,9 @@ async fn tenants_add_handler(
     .bind(now)
     .execute(pool.as_ref())
     .await
-    .unwrap();
+    .expect("error: insert tenants");
     let id = insert_res.last_insert_id();
-    create_tenant_db(id.try_into().unwrap()).await;
+    create_tenant_db(id.try_into().expect("error: try_into()")).await;
     let res = TenantsAddHandlerResult {
         tenant: TenantWithBilling {
             id: id.to_string(),
@@ -443,7 +443,10 @@ async fn tenants_add_handler(
             billing_yen: 0,
         },
     };
-    Ok(HttpResponse::Ok().json(res))
+    Ok(HttpResponse::Ok().json(SuccessResult{
+        status: true,
+        data: Some(res)
+    }))
 }
 
 // テナント名が規則に従っているかチェックする
@@ -631,8 +634,11 @@ async fn tenants_billing_handler(
             break;
         }
     }
-    Ok(HttpResponse::Ok().json(TenantsBillingHandlerResult {
+    Ok(HttpResponse::Ok().json(SuccessResult{
+        status: true,
+        data: Some(TenantsBillingHandlerResult {
         tenants: tenant_billings,
+        }),
     }))
 }
 
@@ -675,7 +681,10 @@ async fn players_list_handler(
         });
     }
     let res = PlayersListHandlerResult { players: pds };
-    Ok(HttpResponse::Ok().json(res))
+    Ok(HttpResponse::Ok().json(SuccessResult{
+        status: true,
+        data: Some(res)
+    }))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -774,7 +783,10 @@ async fn player_disqualified_handler(
             is_disqualified: p.is_disqualified,
         },
     };
-    Ok(HttpResponse::Ok().json(res))
+    Ok(HttpResponse::Ok().json(
+        SuccessResult{
+            status: true,
+            data: Some(res)}))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -828,7 +840,10 @@ async fn competitions_add_handler(
             is_finished: false,
         },
     };
-    Ok(HttpResponse::Ok().json(res))
+    Ok(HttpResponse::Ok().json(SuccessResult{
+        status: true,
+        data: Some(res)
+}))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
