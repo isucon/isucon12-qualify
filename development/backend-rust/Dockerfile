@@ -21,6 +21,7 @@ COPY ./webapp/rust/Cargo.toml ./Cargo.toml
 RUN cargo build --release
 RUN rm -rf src
 COPY ./webapp/rust/src /home/isucon/webapp/rust/src
-CMD [ "cargo", "run" ]
+RUN cargo build
+CMD [ "./target/debug/isuports" ]
 
 
