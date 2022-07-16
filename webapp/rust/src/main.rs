@@ -62,7 +62,7 @@ async fn create_tenant_db(id: i64) {
         .arg("-c")
         .arg(format!(
             "sqlite3 {} < {}",
-            p.to_str().unwrap(),
+            p.to_str().expect("error: to_str()"),
             TENANT_DB_SCHEMA_FILE_PATH
         ))
         .output()
@@ -409,7 +409,7 @@ async fn tenants_add_handler(
     if v.tenant_name != *"admin" {
         // admin: SaaS管理者用の特別なテナント名
         return Err(actix_web::error::ErrorUnauthorized(
-            "you dont have this API",
+            "you don't have this API",
         ));
     }
     if v.role != ROLE_ADMIN {
@@ -417,7 +417,7 @@ async fn tenants_add_handler(
     }
     let display_name = &form.display_name;
     let name = &form.name;
-    validate_tenant_name(name.to_string()).unwrap();
+    validate_tenant_name(name.to_string()).expect("error: validating tenant_name");
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("error now()")
