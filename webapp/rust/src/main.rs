@@ -1383,12 +1383,15 @@ struct InitializeHandlerResult {
 // ベンチマーカーが起動した時に最初に呼ぶ
 // データベースの初期化などが実行されるため, スキーマを変更した場合などは適宜改変すること
 async fn initialize_handler() -> actix_web::Result<HttpResponse> {
-    let output = tokio::process::Command::new(INITIALIZE_SCRIPT)
+    let _output = tokio::process::Command::new(INITIALIZE_SCRIPT)
         .output()
         .await.expect("error execute initialize script");
     let res = InitializeHandlerResult {
         lang: "rust".to_string(),
     };
 
-    Ok(HttpResponse::Ok().json(res))
+    Ok(HttpResponse::Ok().json(SuccessResult{
+        success: true,
+        data: Some(res),
+    }))
 }
