@@ -1373,7 +1373,6 @@ async fn me_handler(
 #[derive(Debug, Serialize, Deserialize)]
 struct InitializeHandlerResult {
     lang: String,
-    appeal: String,
 }
 
 // ベンチマーカー向けAPI
@@ -1390,9 +1389,6 @@ async fn initialize_handler() -> actix_web::Result<HttpResponse> {
     }
     let res = InitializeHandlerResult {
         lang: "rust".to_string(),
-        // 頑張ったポイントやこだわりポイントがあれば書いてください
-        // 競技中の最後に計測したものを参照して, 講評記事などで使わせていただきます
-        appeal: "".to_string(),
     };
 
     Ok(HttpResponse::Ok().json(res))
