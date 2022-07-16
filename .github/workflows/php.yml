@@ -37,6 +37,8 @@ jobs:
           make initial_data
           make down/php
           make up/php OPT='-d --build'
+          # ホスト側の webapp/php をマウントすることで webapp/php/vendor/ がない状態で上書きされてしまうので、ここで composer install を行う
+          docker compose -f docker-compose-php.yml -f docker-compose-common.yml exec webapp ./composer.phar install
           make install_initial_data
         working-directory: ./development
         env:

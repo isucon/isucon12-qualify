@@ -19,6 +19,7 @@ services:
     links:
       - mysql
     volumes:
+      - ../webapp:/home/isucon/webapp
       - tenant_db:/home/isucon/webapp/tenant_db
       - initial_data:/home/isucon/initial_data
     init: true
