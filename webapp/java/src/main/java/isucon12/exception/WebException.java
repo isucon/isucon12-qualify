@@ -3,7 +3,7 @@ package isucon12.exception;
 import org.springframework.http.HttpStatus;
 
 public class WebException extends RuntimeException {
-    private static final long serialVersionUID = -8393550601988146162L;
+    private static final long serialVersionUID = -8335566825747001661L;
     private final HttpStatus httpStatus;
     private final String errorMessage;
 
@@ -24,6 +24,7 @@ public class WebException extends RuntimeException {
     public HttpStatus getHttpStatus() {
         return httpStatus;
     }
+
     public String getErrorMessage() {
         return errorMessage;
     }
