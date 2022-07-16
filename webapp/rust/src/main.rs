@@ -18,7 +18,7 @@ use actix_multipart::Multipart;
 use futures_util::stream::StreamExt as _;
 
 const TENANT_DB_SCHEMA_FILE_PATH: &str = "../sql/tenant/10_schema.sql";
-const INITIALIZE_SCRIPT: &str = "..sql/init.sh";
+const INITIALIZE_SCRIPT: &str = "../sql/init.sh";
 const COOKIE_NAME: &str = "isuports_session";
 
 const ROLE_ADMIN: &str = "admin";
