@@ -1,12 +1,21 @@
 package isucon12.json;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 public class BillingReport {
+    @JsonProperty("competition_id")
     private String competitionId;
+    @JsonProperty("competition_title")
     private String competitionTitle;
+    @JsonProperty("player_count")
     private Long playerCount; // スコアを登録した参加者数
+    @JsonProperty("visitor_count")
     private Long visitorCount; // ランキングを閲覧だけした(スコアを登録していない)参加者数
-    private Long billingPlayerYenjson; // 請求金額 スコアを登録した参加者分
+    @JsonProperty("billing_player_yen")
+    private Long billingPlayerYen; // 請求金額 スコアを登録した参加者分
+    @JsonProperty("billing_visitor_yen")
     private Long billingVisitorYen; // 請求金額 ランキングを閲覧だけした(スコアを登録していない)参加者分
+    @JsonProperty("billing_yen")
     private Long billingYen; // 合計請求金額
 
     public String getCompetitionId() {
@@ -41,12 +50,12 @@ public class BillingReport {
         this.visitorCount = visitorCount;
     }
 
-    public Long getBillingPlayerYenjson() {
-        return billingPlayerYenjson;
+    public Long getBillingPlayerYen() {
+        return billingPlayerYen;
     }
 
-    public void setBillingPlayerYenjson(Long billingPlayerYenjson) {
-        this.billingPlayerYenjson = billingPlayerYenjson;
+    public void setBillingPlayerYen(Long billingPlayerYen) {
+        this.billingPlayerYen = billingPlayerYen;
     }
 
     public Long getBillingVisitorYen() {

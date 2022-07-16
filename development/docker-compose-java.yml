@@ -13,7 +13,7 @@ services:
       ISUCON_DB_NAME: isuports
       ISUCON_ADMIN_HOSTNAME: admin.t.isucon.dev
     ports:
-      - "8080:8080"
+      - "3000:3000"
     links:
       - mysql
     volumes:

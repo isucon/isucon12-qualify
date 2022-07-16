@@ -1,7 +1,12 @@
 package isucon12.json;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 public class SuccessResult {
+    @JsonProperty("status")
     private Boolean success;
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
     private Object data;
 
     public SuccessResult(Boolean success, Object data) {

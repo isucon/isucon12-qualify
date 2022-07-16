@@ -14,7 +14,7 @@ import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.InvalidKeySpecException;
-import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -22,6 +22,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
@@ -46,6 +47,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -73,6 +75,7 @@ import isucon12.exception.DispenseIdException;
 import isucon12.exception.FileLockException;
 import isucon12.exception.RetrieveCompetitionException;
 import isucon12.exception.RetrievePlayerException;
+import isucon12.exception.RetrieveTenantRowFromHeaderException;
 import isucon12.exception.WebException;
 import isucon12.json.BillingHandlerResult;
 import isucon12.json.BillingReport;
@@ -111,7 +114,7 @@ public class Application {
     Logger logger = LoggerFactory.getLogger(Application.class);
 
     private static final String TENANT_DB_SCHEMA_FILE_PATH = "../sql/tenant/10_schema.sql";
-    private static final String INITIALIZE_SCRIPT = "/isucon/webapp/sql/init.sh";
+    private static final String INITIALIZE_SCRIPT = "../sql/init.sh";
     private static final String COOKIE_NAME = "isuports_session";
 
     private static final String ROLE_ADMIN = "admin";
@@ -258,7 +261,12 @@ public class Application {
             throw new WebException(HttpStatus.UNAUTHORIZED, String.format("invalid token: aud field is few or too much: %s", token));
         }
 
-        TenantRow tenant = retrieveTenantRowFromHeader(req);
+        TenantRow tenant;
+        try {
+            tenant = retrieveTenantRowFromHeader(req);
+        } catch (RetrieveTenantRowFromHeaderException e) {
+            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrieveTenantRowFromHeader at parseViewer: ", e);
+        }
         if (tenant == null) {
             throw new WebException(HttpStatus.UNAUTHORIZED, "tenant not found");
         }
@@ -268,7 +276,7 @@ public class Application {
         }
 
         if (!tenant.getName().equals(audiences.get(0))) {
-            throw new WebException(HttpStatus.UNAUTHORIZED, String.format("invalid token: tenant name is not match with %s: %s", req.getRemoteHost(), token));
+            throw new WebException(HttpStatus.UNAUTHORIZED, String.format("invalid token: tenant name is not match with %s: %s", this.getHost(req), token));
         }
 
         return new Viewer(role, decodedJwt.getSubject(), tenant.getName(), tenant.getId());
@@ -276,8 +284,11 @@ public class Application {
 
     private RSAPublicKey readPublicKeyFromFile(String filePath) {
         try {
-            byte[] keyBytes = Files.readAllBytes(Paths.get(filePath));
-            PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(keyBytes);
+            String pem = Files.readAllLines(Paths.get(filePath)).stream()
+                    .filter(r -> !r.startsWith("-----BEGIN PUBLIC KEY-----"))
+                    .filter(r -> !r.startsWith("-----END PUBLIC KEY-----"))
+                    .collect(Collectors.joining());
+            X509EncodedKeySpec spec = new X509EncodedKeySpec(Base64.getDecoder().decode(pem));
             return (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(spec);
         } catch (IOException e) {
             throw new RuntimeException(String.format("error Files.readAllBytes: keyFilename=%s: ", filePath), e);
@@ -298,10 +309,10 @@ public class Application {
         }
     }
 
-    private TenantRow retrieveTenantRowFromHeader(HttpServletRequest req) {
+    private TenantRow retrieveTenantRowFromHeader(HttpServletRequest req) throws RetrieveTenantRowFromHeaderException {
         // JWTに入っているテナント名とHostヘッダのテナント名が一致しているか確認
         String baseHost = ISUCON_BASE_HOSTNAME;
-        String tenantName = StringUtils.removeEnd(req.getRemoteHost(), baseHost);
+        String tenantName = StringUtils.removeEnd(this.getHost(req), baseHost);
 
         // SaaS管理者用ドメイン
         if (tenantName.equals("admin")) {
@@ -312,16 +323,28 @@ public class Application {
         SqlParameterSource source = new MapSqlParameterSource().addValue("name", tenantName);
         RowMapper<TenantRow> mapper = (rs, i) -> {
             TenantRow row = new TenantRow();
+            row.setId(rs.getLong("id"));
             row.setName(rs.getString("name"));
             row.setDisplayName(rs.getString("display_name"));
+            row.setCreatedAt(new Date(rs.getLong("created_at")));
+            row.setUpdatedAt(new Date(rs.getLong("updated_at")));
             return row;
         };
 
         try {
             return adminDb.queryForObject("SELECT * FROM tenant WHERE name = :name", source, mapper);
-        } catch (Exception e) {
-            throw new RuntimeException(String.format("failed to Select tenant: name=%s, ", tenantName), e);
+        } catch (EmptyResultDataAccessException e) {
+            return null;
+        } catch (DataAccessException e) {
+            throw new RetrieveTenantRowFromHeaderException(String.format("failed to Select tenant: name=%s, ", tenantName), e);
         }
+    }
+
+    private String getHost(HttpServletRequest req) {
+        // return req.getRemoteHost();
+        String host = req.getHeader("host");
+//        logger.info("hostName: " + host);
+        return host;
     }
 
     // 参加者を取得する
@@ -338,8 +361,8 @@ public class Application {
                     rs.getString("id"),
                     rs.getString("display_name"),
                     rs.getBoolean("is_disqualified"),
-                    rs.getDate("created_at"),
-                    rs.getDate("updated_at"));
+                    new Date(rs.getLong("created_at")),
+                    new Date(rs.getLong("updated_at")));
         } catch (SQLException e) {
             throw new RetrievePlayerException(String.format("error Select Player: id=%s, ", id), e);
         }
@@ -376,9 +399,9 @@ public class Application {
                     rs.getLong("tenant_id"),
                     rs.getString("id"),
                     rs.getString("title"),
-                    rs.getDate("finished_at"),
-                    rs.getDate("created_at"),
-                    rs.getDate("updated_at"));
+                    new Date(rs.getLong("finished_at")),
+                    new Date(rs.getLong("created_at")),
+                    new Date(rs.getLong("updated_at")));
         } catch (SQLException e) {
             throw new RetrieveCompetitionException(String.format("error Select competition: id=%s, ", id), e);
         }
@@ -416,7 +439,7 @@ public class Application {
     }
 
     @PostMapping("/api/admin/tenants/add")
-    public SuccessResult tenantsAddHandle(HttpServletRequest req, @ModelAttribute(name = "name") String name, @ModelAttribute(name = "display_name") String displayName) {
+    public SuccessResult tenantsAddHandler(HttpServletRequest req, @RequestParam(name = "name") String name, @RequestParam(name = "display_name") String displayName) {
         Viewer v = this.parseViewer(req);
 
         if (!v.getTenantName().equals("admin")) {
@@ -433,8 +456,8 @@ public class Application {
         SqlParameterSource source = new MapSqlParameterSource()
                 .addValue("name", name)
                 .addValue("display_name", displayName)
-                .addValue("created_at", now)
-                .addValue("updated_at", now);
+                .addValue("created_at", now.getTime())
+                .addValue("updated_at", now.getTime());
         GeneratedKeyHolder holder = new GeneratedKeyHolder();
         try {
             this.adminDb.update("INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (:name, :display_name, :created_at, :updated_at)", source, holder);
@@ -466,7 +489,7 @@ public class Application {
 
     // テナント名が規則に沿っているかチェックする
     private void validateTenantName(String name) {
-        Pattern p = Pattern.compile(TENANT_NAME_REG_PATTERN); // 電話番号
+        Pattern p = Pattern.compile(TENANT_NAME_REG_PATTERN);
         Matcher m = p.matcher(name);
         if (!m.find()) {
             throw new WebException(HttpStatus.BAD_REQUEST, String.format("invalid tenant name: %s", name));
@@ -490,7 +513,7 @@ public class Application {
         RowMapper<VisitHistorySummaryRow> mapper = (rs, i) -> {
             VisitHistorySummaryRow row = new VisitHistorySummaryRow();
             row.setPlayerId(rs.getString("player_id"));
-            row.setMinCreatedAt(rs.getDate("min_created_at"));
+            row.setMinCreatedAt(new Date(rs.getLong("min_created_at")));
             return row;
         };
 
@@ -550,7 +573,7 @@ public class Application {
             br.setCompetitionTitle(comp.getTitle());
             br.setPlayerCount(playerCount);
             br.setVisitorCount(visitorCount);
-            br.setBillingPlayerYenjson(100 * playerCount); // スコアを登録した参加者は100円
+            br.setBillingPlayerYen(100 * playerCount); // スコアを登録した参加者は100円
             br.setBillingVisitorYen(10 * visitorCount); // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
             br.setBillingYen(100 * playerCount + 10 * visitorCount);
             return br;
@@ -563,13 +586,12 @@ public class Application {
         }
     }
 
-    /*
-     * SaaS管理者用API テナントごとの課金レポートを最大10件、テナントのid降順で取得する GET /api/admin/tenants/billing
-     * URL引数beforeを指定した場合、指定した値よりもidが小さいテナントの課金レポートを取得する
-     */
+    // SaaS管理者用API テナントごとの課金レポートを最大10件、テナントのid降順で取得する
+    // GET /api/admin/tenants/billing
+    // URL引数beforeを指定した場合、指定した値よりもidが小さいテナントの課金レポートを取得する
     @GetMapping("/api/admin/tenants/billing")
     public SuccessResult tenantsBillingHandler(HttpServletRequest req, @RequestParam(name = "before", required = false) Long beforeId) {
-        String host = req.getRemoteHost();
+        String host = this.getHost(req);
         if (!host.equals(ISUCON_ADMIN_HOSTNAME)) {
             throw new WebException(HttpStatus.NOT_FOUND, String.format("invalid hostname %s", host));
         }
@@ -591,8 +613,8 @@ public class Application {
             row.setId(rs.getLong("id"));
             row.setName(rs.getString("name"));
             row.setDisplayName(rs.getString("display_name"));
-            row.setCreatedAt(rs.getDate("created_at"));
-            row.setUpdatedAt(rs.getDate("updated_at"));
+            row.setCreatedAt(new Date(rs.getLong("created_at")));
+            row.setUpdatedAt(new Date(rs.getLong("updated_at")));
             return row;
         };
 
@@ -626,14 +648,14 @@ public class Application {
                             rs.getLong("tenant_id"),
                             rs.getString("id"),
                             rs.getString("title"),
-                            rs.getDate("finished_at"),
-                            rs.getDate("created_at"),
-                            rs.getDate("updated_at")));
+                            new Date(rs.getLong("finished_at")),
+                            new Date(rs.getLong("created_at")),
+                            new Date(rs.getLong("updated_at"))));
                 }
 
                 for (CompetitionRow comp : cs) {
                     BillingReport report = this.billingReportByCompetition(tenantDb, t.getId(), comp.getId());
-                    Long billingYen = tb.getBillingYen();
+                    Long billingYen = tb.getBillingYen() == null ? 0L : tb.getBillingYen();
                     billingYen += report.getBillingYen();
                     tb.setBillingYen(billingYen);
                 }
@@ -648,7 +670,7 @@ public class Application {
                 this.closeTenantDbConnection(tenantDb);
             }
 
-            if (tenantBillings.size() > 10) {
+            if (tenantBillings.size() >= 10) {
                 break;
             }
         }
@@ -679,8 +701,8 @@ public class Application {
                         rs.getString("id"),
                         rs.getString("display_name"),
                         rs.getBoolean("is_disqualified"),
-                        rs.getDate("created_at"),
-                        rs.getDate("updated_at")));
+                        new Date(rs.getLong("created_at")),
+                        new Date(rs.getLong("updated_at"))));
             }
 
             List<PlayerDetail> pds = new ArrayList<>();
@@ -702,7 +724,7 @@ public class Application {
     // GET /api/organizer/players/add
     // テナントに参加者を追加する
     @PostMapping("/api/organizer/players/add")
-    public SuccessResult playersAddHandler(HttpServletRequest req, @ModelAttribute(name = "display_name[]") List<String> displayNames) {
+    public SuccessResult playersAddHandler(HttpServletRequest req, @RequestParam(name = "display_name[]") List<String> displayNames) {
         Viewer v = this.parseViewer(req);
         if (!v.getRole().equals(ROLE_ORGANIZER)) {
             throw new WebException(HttpStatus.FORBIDDEN, "role organizer required");
@@ -984,9 +1006,9 @@ public class Application {
                         rs.getLong("tenant_id"),
                         rs.getString("id"),
                         rs.getString("title"),
-                        rs.getDate("finished_at"),
-                        rs.getDate("created_at"),
-                        rs.getDate("updated_at")));
+                        new Date(rs.getLong("finished_at")),
+                        new Date(rs.getLong("created_at")),
+                        new Date(rs.getLong("updated_at"))));
             }
 
             List<BillingReport> tbrs = new ArrayList<>();
@@ -1016,8 +1038,8 @@ public class Application {
     @GetMapping("/api/player/player/{playerId}")
     public SuccessResult playerHandler(HttpServletRequest req, @PathVariable("playerId") String playerId) {
         Viewer v = this.parseViewer(req);
-        if (!v.getRole().equals(ROLE_ORGANIZER)) {
-            throw new WebException(HttpStatus.FORBIDDEN, "role organizer required");
+        if (!v.getRole().equals(ROLE_PLAYER)) {
+            throw new WebException(HttpStatus.FORBIDDEN, "role player required");
         }
 
         Connection tenantDb = null;
@@ -1028,7 +1050,7 @@ public class Application {
 
             PlayerRow p = this.retrievePlayer(tenantDb, playerId);
             if (p == null) {
-                throw new WebException(HttpStatus.BAD_REQUEST, String.format("player not found: %s", playerId));
+                throw new WebException(HttpStatus.NOT_FOUND, String.format("player not found: %s", playerId));
             }
 
             ResultSet resultSet = tenantDb.prepareStatement("SELECT * FROM competition ORDER BY created_at ASC").executeQuery();
@@ -1039,9 +1061,9 @@ public class Application {
                         resultSet.getLong("tenant_id"),
                         resultSet.getString("id"),
                         resultSet.getString("title"),
-                        resultSet.getDate("finished_at"),
-                        resultSet.getDate("created_at"),
-                        resultSet.getDate("updated_at")));
+                        new Date(resultSet.getLong("finished_at")),
+                        new Date(resultSet.getLong("created_at")),
+                        new Date(resultSet.getLong("updated_at"))));
             }
 
             // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
@@ -1066,8 +1088,8 @@ public class Application {
                         rs.getString("competition_id"),
                         rs.getLong("score"),
                         rs.getLong("row_num"),
-                        rs.getDate("created_at"),
-                        rs.getDate("updated_at")));
+                        new Date(rs.getLong("created_at")),
+                        new Date(rs.getLong("updated_at"))));
             }
 
             List<PlayerScoreDetail> psds = new ArrayList<>();
@@ -1131,8 +1153,8 @@ public class Application {
                     row.setId(rs.getLong("id"));
                     row.setName(rs.getString("name"));
                     row.setDisplayName(rs.getString("display_name"));
-                    row.setCreatedAt(rs.getDate("created_at"));
-                    row.setUpdatedAt(rs.getDate("updated_at"));
+                    row.setCreatedAt(new Date(rs.getLong("created_at")));
+                    row.setUpdatedAt(new Date(rs.getLong("updated_at")));
                     return row;
                 };
                 tenant = this.adminDb.queryForObject("SELECT * FROM tenant WHERE id = :tenant_id", source, mapper);
@@ -1143,8 +1165,8 @@ public class Application {
                         .addValue("player_id", v.getPlayerId())
                         .addValue("tenant_id", tenant.getId())
                         .addValue("competition_id", competitionId)
-                        .addValue("created_at", now)
-                        .addValue("updated_at", now);
+                        .addValue("created_at", now.getTime())
+                        .addValue("updated_at", now.getTime());
                 String sql = "INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (:player_id, :tenant_id, :competition_id, :created_at, :updated_at)";
                 this.adminDb.update(sql, source);
             }
@@ -1164,8 +1186,8 @@ public class Application {
                         rs.getString("competition_id"),
                         rs.getLong("score"),
                         rs.getLong("row_num"),
-                        rs.getDate("created_at"),
-                        rs.getDate("updated_at")));
+                        new Date(rs.getLong("created_at")),
+                        new Date(rs.getLong("updated_at"))));
             }
 
             List<CompetitionRank> ranks = new ArrayList<>();
@@ -1250,6 +1272,7 @@ public class Application {
         if (!v.getRole().equals(ROLE_PLAYER)) {
             throw new WebException(HttpStatus.FORBIDDEN, "role player required");
         }
+        logger.info("viewer: " + v.toString());
 
         Connection tenantDb = null;
         try {
@@ -1298,9 +1321,9 @@ public class Application {
                         rs.getLong("tenant_id"),
                         rs.getString("id"),
                         rs.getString("title"),
-                        rs.getDate("finished_at"),
-                        rs.getDate("created_at"),
-                        rs.getDate("updated_at")));
+                        new Date(rs.getLong("finished_at")),
+                        new Date(rs.getLong("created_at")),
+                        new Date(rs.getLong("updated_at"))));
             }
 
             List<CompetitionDetail> cds = new ArrayList<>();
@@ -1316,7 +1339,16 @@ public class Application {
     // 全ロール及び未認証でも使えるhandler
     @GetMapping("/api/me")
     public SuccessResult meHandler(HttpServletRequest req) {
-        TenantRow tenant = this.retrieveTenantRowFromHeader(req);
+        TenantRow tenant;
+        try {
+            tenant = this.retrieveTenantRowFromHeader(req);
+        } catch (RetrieveTenantRowFromHeaderException e1) {
+            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "retrieveTenantRowFromHeader", e1);
+        }
+        if (tenant == null) {
+            throw new WebException(HttpStatus.UNAUTHORIZED, "tenant not found");
+        }
+
         TenantDetail td = new TenantDetail(tenant.getName(), tenant.getDisplayName());
 
         Viewer v = null;

@@ -19,14 +19,14 @@ import isucon12.json.FailureResult;
 /**
  * エラー処理
  */
-@ControllerAdvice(annotations = {RestController.class})
+@ControllerAdvice(annotations = { RestController.class })
 public class RestControllerAdvice extends ResponseEntityExceptionHandler {
     Logger logger = LoggerFactory.getLogger(RestControllerAdvice.class);
 
     @ExceptionHandler(WebException.class)
     @ResponseBody
     public FailureResult handlerWebException(HttpServletRequest req, HttpServletResponse res, WebException e) {
-        logger.error("error at {}: status={}: {}", req.getRequestURI(), e.getHttpStatus().value(), e.getErrorMessage());
+        logger.error("error at {}: status={}: message={}, errorMessage={}", req.getRequestURI(), e.getHttpStatus().value(), e.getMessage(), e.getErrorMessage());
         res.setStatus(e.getHttpStatus().value());
         return new FailureResult(false, e.getErrorMessage());
     }
