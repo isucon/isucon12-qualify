@@ -169,14 +169,14 @@ pub async fn main() -> std::io::Result<()> {
 
 #[derive(Debug, Serialize)]
 struct SuccessResult<T> {
-    success: bool,
+    status: bool,
     #[serde(bound(serialize = "T: Serialize",))]
     data: Option<T>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct FailureResult {
-    success: bool,
+    status: bool,
     message: String,
 }
 
@@ -727,7 +727,7 @@ async fn players_add_handler(
     }
     let res = PlayersAddHandlerResult { players: pds };
     Ok(HttpResponse::Ok().json(SuccessResult {
-        success: true,
+        status: true,
         data: Some(res),
     }))
 }
@@ -867,7 +867,7 @@ async fn competition_finish_handler(
         .unwrap();
 
     let res = SuccessResult {
-        success: true,
+        status: true,
         data: Option::<CompetitionFinishFormQuery>::None, // TODO: Option::<!>::None を使いたいが..
     };
     Ok(HttpResponse::Ok().json(res))
@@ -905,7 +905,7 @@ async fn competition_score_handler(
         .unwrap();
     if comp.finished_at.is_some() {
         let res = FailureResult {
-            success: false,
+            status: false,
             message: "competition is finished".to_string(),
         };
         return Ok(HttpResponse::Ok().json(res));
@@ -991,7 +991,7 @@ async fn competition_score_handler(
 
     }
     let res = SuccessResult {
-        success: true,
+        status: true,
         data: Some(ScoreHandlerResult{
             rows: player_score_rows.len() as i64,
         }),
@@ -1033,7 +1033,7 @@ async fn billing_handler(
         tbrs.push(report);
     }
     let res = SuccessResult {
-        success: true,
+        status: true,
         data: Some(BillingHandlerResult { reports: tbrs }),
     };
     Ok(HttpResponse::Ok().json(res))
@@ -1107,7 +1107,7 @@ async fn player_handler(
     }
 
     let res = SuccessResult {
-        success: true,
+        status: true,
         data: Some(PlayerHandlerResult {
             player: PlayerDetail {
                 id: p.id.clone(),
@@ -1236,7 +1236,7 @@ async fn competition_ranking_handler(
         }
     }
     let res = SuccessResult {
-        success: true,
+        status: true,
         data: Some(CompetitionRankingHandlerResult {
             competition: CompetitionDetail {
                 id: competition.id.clone(),
@@ -1307,7 +1307,7 @@ async fn competitions_handler(
         })
     }
     let res = SuccessResult {
-        success: true,
+        status: true,
         data: Some(CompetitionsHandlerResult { competitions: cds }),
     };
     Ok(HttpResponse::Ok().json(res))
@@ -1344,7 +1344,7 @@ async fn me_handler(
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
     if v.role == ROLE_ADMIN || v.role == ROLE_ORGANIZER {
         return Ok(HttpResponse::Ok().json(SuccessResult {
-            success: true,
+            status: true,
             data: Some(MeHandlerResult {
                 tenant: Some(td.clone()),
                 me: None,
@@ -1359,7 +1359,7 @@ async fn me_handler(
         .unwrap();
 
     Ok(HttpResponse::Ok().json(SuccessResult {
-        success: true,
+        status: true,
         data: Some(MeHandlerResult {
             tenant: Some(td),
             me: Some(PlayerDetail {
@@ -1391,7 +1391,7 @@ async fn initialize_handler() -> actix_web::Result<HttpResponse> {
     };
 
     Ok(HttpResponse::Ok().json(SuccessResult{
-        success: true,
+        status: true,
         data: Some(res),
     }))
 }
