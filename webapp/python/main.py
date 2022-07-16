@@ -278,7 +278,7 @@ def flock_by_tenant_id(tenant_id: int):
 
 
 @app.route("/api/admin/tenants/add", methods=["POST"])
-def admin_add_tenants():
+def tenants_add_handler():
     """
     SasS管理者用API
     テナントを追加する
@@ -414,7 +414,7 @@ class PlayerDetail:
 
 
 @app.route("/api/admin/tenants/billing", methods=["GET"])
-def admin_get_tenants_billing():
+def tenants_billing_handler():
     """
     SaaS管理者用API
     テナントごとの課金レポートを最大20件、テナントのid降順で取得する
@@ -462,7 +462,7 @@ def admin_get_tenants_billing():
 
 
 @app.route("/api/organizer/players", methods=["GET"])
-def organizer_get_players():
+def players_list_handler():
     """
     テナント管理者向けAPI
     参加者一覧を返す
@@ -492,7 +492,7 @@ def organizer_get_players():
 
 
 @app.route("/api/organizer/players/add", methods=["POST"])
-def organizer_add_players():
+def players_add_handler():
     """
     テナント管理者向けAPI
     テナントに参加者を追加する
@@ -534,7 +534,7 @@ def organizer_add_players():
 
 
 @app.route("/api/organizer/player/<player_id>/disqualified", methods=["POST"])
-def organizer_disqualified_players(player_id: str):
+def player_disqualified_handler(player_id: str):
     """
     テナント管理者向けAPI
     参加者を失格にする
@@ -578,7 +578,7 @@ class CompetitionDetail:
 
 
 @app.route("/api/organizer/competitions/add", methods=["POST"])
-def organizer_add_competitions():
+def competitions_add_handler():
     """
     テナント管理者向けAPI
     大会を追加する
@@ -613,7 +613,7 @@ def organizer_add_competitions():
 
 
 @app.route("/api/organizer/competition/<competition_id>/finish", methods=["POST"])
-def organizer_finish_competitions(competition_id: str):
+def competition_finish_handler(competition_id: str):
     """
     テナント管理者向けAPI
     大会を終了する
@@ -641,7 +641,7 @@ def organizer_finish_competitions(competition_id: str):
 
 
 @app.route("/api/organizer/competition/<competition_id>/score", methods=["POST"])
-def organizer_score_competitions(competition_id: str):
+def competition_score_handler(competition_id: str):
     """
     テナント管理者向けAPI
     大会のスコアをCSVでアップロードする
@@ -722,7 +722,7 @@ def organizer_score_competitions(competition_id: str):
 
 
 @app.route("/api/organizer/billing", methods=["GET"])
-def organizer_get_billing():
+def billing_handler():
     """
     テナント管理者向けAPI
     テナント内の課金レポートを取得する
@@ -749,7 +749,7 @@ def organizer_get_billing():
 
 
 @app.route("/api/organizer/competitions", methods=["GET"])
-def organizer_get_competitions():
+def organizer_competitions_handler():
     """
     主催者向けAPI
     大会の一覧を取得する
@@ -770,7 +770,7 @@ class PlayerScoreDetail:
 
 
 @app.route("/api/player/player/<player_id>", methods=["GET"])
-def player_get_detail(player_id: str):
+def player_handler(player_id: str):
     """
     参加者向けAPI
     参加者の詳細情報を取得する
@@ -840,7 +840,7 @@ class CompetitionRank:
 
 
 @app.route("/api/player/competition/<competition_id>/ranking", methods=["GET"])
-def player_get_competition_ranking(competition_id):
+def competition_ranking_handler(competition_id):
     """
     参加者向けAPI
     大会ごとのランキングを取得する
@@ -943,7 +943,7 @@ def player_get_competition_ranking(competition_id):
 
 
 @app.route("/api/player/competitions", methods=["GET"])
-def player_get_competitions():
+def player_competitions_handler():
     """
     参加者向けAPI
     大会の一覧を取得する
@@ -984,7 +984,7 @@ class TenantDetail:
 
 
 @app.route("/api/me", methods=["GET"])
-def get_me():
+def me_handler():
     """
     共通API
     JWTで認証した結果、テナントやユーザ情報を返す
@@ -1037,7 +1037,7 @@ def get_me():
 
 
 @app.route("/initialize", methods=["POST"])
-def bench_initialize():
+def initialize_handler():
     """
     ベンチマーカー向けAPI
     ベンチマーカーが起動したときに最初に呼ぶ
