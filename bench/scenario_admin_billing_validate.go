@@ -88,12 +88,13 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	}
 
 	conf := &OrganizerJobConfig{
-		orgAc:         orgAc,
-		scTag:         scTag,
-		tenantName:    targetTenant,
-		scoreRepeat:   1,
-		scoreInterval: 0,
-		addScoreNum:   0,
+		orgAc:           orgAc,
+		scTag:           scTag,
+		tenantName:      targetTenant,
+		scoreRepeat:     1,
+		scoreInterval:   0,
+		addScoreNum:     0,
+		playerWorkerNum: 10,
 	}
 	jobResult, err := sc.OrganizerJob(ctx, step, conf)
 	if err != nil {

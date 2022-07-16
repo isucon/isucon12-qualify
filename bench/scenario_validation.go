@@ -256,6 +256,22 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	}
 	csv := score.CSV()
 
+	// スコア入稿 先に入れておくと2度目のスコア入稿で一度DELETEが走るので、lockを取ってない場合不整合が起きる
+	{
+		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
+		v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
+				_ = r // responseは空
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
+
 	// スコア入稿とPlayerのランキング参照を同時
 	checkPlayerIndex := 10 // < disqualifiedPlayerIndex
 	{
@@ -263,7 +279,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		scoreCh := make(chan struct{})
 
 		eg.Go(func() error {
-			beforeScores := 0
+			beforeRanks := 0
 			isDone := false
 			for {
 				select {
@@ -274,19 +290,15 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 
 				// 大会スコア入稿より早く実行する ランキングはまだ反映されていない
 				// 厳密にリクエストの順番を取りたいのでActionの展開
-				res, err, txt := GetPlayerAction(ctx, playerIDs[checkPlayerIndex], playerAg)
+				res, err, txt := GetPlayerCompetitionRankingAction(ctx, competitionID, "", playerAg)
 				msg := fmt.Sprintf("%s %s", playerAc, txt)
-				v := ValidateResponseWithMsg("プレイヤーと戦績情報取得: 入稿と同時", step, res, err, msg, WithStatusCode(200),
+				v := ValidateResponseWithMsg("大会内のランキング取得: 入稿と同時", step, res, err, msg, WithStatusCode(200),
 					WithContentType("application/json"),
-					WithSuccessResponse(func(r ResponseAPIPlayer) error {
-						if playerIDs[checkPlayerIndex] != r.Data.Player.ID {
-							return fmt.Errorf("参照したプレイヤー名が違います (want: %s, got: %s)", playerIDs[checkPlayerIndex], r.Data.Player.ID)
+					WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+						if len(r.Data.Ranks) < beforeRanks {
+							return fmt.Errorf("大会のランキング数が前回リクエストから減りました (before: %d, got: %d)", beforeRanks, len(r.Data.Ranks))
 						}
-
-						if len(r.Data.Scores) < beforeScores {
-							return fmt.Errorf("参加した大会数が前回リクエストから減りました (before: %d, got: %d)", beforeScores, len(r.Data.Scores))
-						}
-						beforeScores = len(r.Data.Scores)
+						beforeRanks = len(r.Data.Ranks)
 						return nil
 					}),
 				)
