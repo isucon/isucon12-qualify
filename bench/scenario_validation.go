@@ -1307,7 +1307,7 @@ func billingAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.B
 			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPITenantsBilling) error {
 				if 10 != len(r.Data.Tenants) {
-					return fmt.Errorf("請求ダッシュボードの結果の数が違います (want: %d, got: %d)", len(r.Data.Tenants), 10)
+					return fmt.Errorf("請求ダッシュボードの結果の数が違います (want: %d, got: %d)", 10, len(r.Data.Tenants))
 				}
 				tenantIDs := []int64{}
 				for _, tenant := range r.Data.Tenants {
