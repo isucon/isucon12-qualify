@@ -11,7 +11,6 @@ requires 'DBD::mysql', '4.050';
 requires 'DBD::SQLite', '1.70';
 requires 'DBIx::Sunny', '0.9992';
 
-requires 'Log::Minimal', '0.19';
 requires 'Crypt::JWT', '0.034';
 requires 'Furl', '3.14';
 requires 'File::Slurp', '9999.32';

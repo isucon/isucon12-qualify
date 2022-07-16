@@ -6,7 +6,6 @@ use builtin qw(true false);
 
 use Kossy;
 use HTTP::Status qw(:constants);
-use Log::Minimal qw(warnf);
 use File::Slurp qw(read_file);
 use Crypt::JWT qw(decode_jwt);
 use Crypt::PK::RSA;
@@ -37,9 +36,9 @@ use constant TENANT_NAME_REGEXP => qr/^[a-z][a-z0-9-]{0,61}[a-z0-9]$/;
 # 管理用DBに接続する
 sub connect_admin_db() {
     my $host     = $ENV{ISUCON_DB_HOST}       || '127.0.0.1';
-    my $port     = $ENV{ISUCON_DB_PORT}       || '13306';
-    my $user     = $ENV{ISUCON_DB_USER}       || 'root';
-    my $password = $ENV{ISUCON_DB_PASSWORD}   || 'root';
+    my $port     = $ENV{ISUCON_DB_PORT}       || '3306';
+    my $user     = $ENV{ISUCON_DB_USER}       || 'isucon';
+    my $password = $ENV{ISUCON_DB_PASSWORD}   || 'isucon';
     my $dbname   = $ENV{ISUCON_DB_NAME}       || 'isuports';
 
     my $dsn = "dbi:mysql:database=$dbname;host=$host;port=$port";
@@ -115,21 +114,21 @@ post '/api/admin/tenants/add'     => \&tenants_add_handler;
 get  '/api/admin/tenants/billing' => \&tenants_billing_handler;
 
 # テナント管理者向けAPI - 参加者追加、一覧、失格
-get  '/api/organizer/players'                          => \&players_list_handler;
-post '/api/organizer/players/add'                      => \&players_add_handler;
-post '/api/organizer/player/:player_name/disqualified' => \&player_disqualified_handler;
+get  '/api/organizer/players'                         => \&players_list_handler;
+post '/api/organizer/players/add'                     => \&players_add_handler;
+post '/api/organizer/player/{player_id}/disqualified' => \&player_disqualified_handler;
 
 # テナント管理者向けAPI - 大会管理
-post '/api/organizer/competitions/add'                   => \&competitions_add_handler;
-post '/api/organizer/competition/:competition_id/finish' => \&competition_finish_handler;
-post '/api/organizer/competition/:competition_id/score'  => \&competition_score_handler;
-get  '/api/organizer/billing'                            => \&billing_handler;
-get  '/api/organizer/competitions'                       => \&organizer_competition_handler;
+post '/api/organizer/competitions/add'                    => \&competitions_add_handler;
+post '/api/organizer/competition/{competition_id}/finish' => \&competition_finish_handler;
+post '/api/organizer/competition/{competition_id}/score'  => \&competition_score_handler;
+get  '/api/organizer/billing'                             => \&billing_handler;
+get  '/api/organizer/competitions'                        => \&organizer_competitions_handler;
 
 # 参加者向けAPI
-get  '/api/player/player/:player_id'                     => \&player_handler;
-get  '/api/player/competition/:competition_id/ranking'   => \&competition_ranking_handler;
-get  '/api/player/competitions'                          => \&player_competitions_handler;
+get  '/api/player/player/{player_id}'                     => \&player_handler;
+get  '/api/player/competition/{competition_id}/ranking'   => \&competition_ranking_handler;
+get  '/api/player/competitions'                           => \&player_competitions_handler;
 
 # 全ロール及び未認証でも使えるhandler
 get  '/api/me' => \&me_handler;
@@ -153,7 +152,7 @@ sub FailureResult() {
 }
 
 sub fail($c, $code, $message) {
-    warnf("error at %s: %s", $c->request->uri, $message);
+    warn sprintf("error at %s: %s", $c->request->uri, $message);
 
     my $res = $c->render_json({
         status => false,
@@ -201,7 +200,10 @@ sub parse_viewer($self, $c) {
         fail($c, HTTP_UNAUTHORIZED, sprintf("invalid token: aud field is few or too much: %s", $token_str));
     }
 
-    my $tenant = $self->retrieve_tenant_row_from_header($c);
+    my ($tenant, $err) = $self->retrieve_tenant_row_from_header($c);
+    if ($err) {
+        fail($c, HTTP_UNAUTHORIZED, sprintf("tenant not found"));
+    }
 
     if ($tenant->{name} eq 'admin' && $role ne ROLE_ADMIN) {
         fail($c, HTTP_UNAUTHORIZED, "tenant not found");
@@ -229,32 +231,33 @@ sub retrieve_tenant_row_from_header($self, $c) {
         return {
             name => "admin",
             display_name => "admin",
-        };
+        }, undef;
     }
 
     # テナントの存在確認
     my $tenant = $self->admin_db->select_row("SELECT * FROM tenant WHERE name = ?", $tenant_name);
     unless ($tenant) {
-        warnf("failed to Select tenant: name=%s", $tenant_name);
-        fail($c, HTTP_UNAUTHORIZED, "tenant not found");
+        return undef, sprintf("failed to Select tenant: name=%s", $tenant_name);
     }
-    return $tenant;
+    return $tenant, undef;
 }
 
 # 参加者を取得する
 sub retrieve_player($self, $c, $tenant_db, $id) {
     my $player = $tenant_db->select_row("SELECT * FROM player WHERE id = ?", $id);
     unless ($player) {
-        warnf("error Select player: id=%s", $id);
-        fail($c, HTTP_UNAUTHORIZED, "player not found");
+        return undef, sprintf("error Select player: id=%s", $id);
     }
-    return $player;
+    return $player, undef;
 }
 
 # 参加者を認可する
 # 参加者向けAPIで呼ばれる
 sub authorize_player($self, $c, $tenant_db, $id) {
-    my $player = $self->retrieve_player($c, $tenant_db, $id);
+    my ($player, $err) = $self->retrieve_player($c, $tenant_db, $id);
+    if ($err) {
+        fail($c, HTTP_UNAUTHORIZED, "player not found");
+    }
     if ($player->{is_disqualified}) {
         fail($c, HTTP_FORBIDDEN, "player_is disqualified");
     }
@@ -262,13 +265,12 @@ sub authorize_player($self, $c, $tenant_db, $id) {
 }
 
 # 大会を取得する
-sub retrieve_competition($c, $tenant_db, $id) {
+sub retrieve_competition($self, $c, $tenant_db, $id) {
     my $competition = $tenant_db->select_row("SELECT * FROM competition WHERE id = ?", $id);
     unless ($competition) {
-        warnf("error Select competition: id=%s", $id);
-        fail($c, HTTP_UNAUTHORIZED, "competition not found");
+        return undef, sprintf("error Select competition: id=%s", $id);
     }
-    return $competition;
+    return $competition, undef;
 }
 
 # 排他ロックのためのファイル名を生成する
@@ -293,7 +295,7 @@ use constant TenantWithBilling => {
     id           => JSON_TYPE_STRING,
     name         => JSON_TYPE_STRING,
     display_name => JSON_TYPE_STRING,
-    billing_yen  => JSON_TYPE_INT,
+    billing      => JSON_TYPE_INT,
 };
 
 use constant TenantsAddHandlerSuccess => SuccessResult({
@@ -351,7 +353,7 @@ sub tenants_add_handler($self, $c) {
                 id           => $id,
                 name         => $name,
                 display_name => $display_name,
-                billing_yen  => 0,
+                billing      => 0,
             }
         }
     }, TenantsAddHandlerSuccess);
@@ -377,7 +379,10 @@ use constant BillingReport => {
 
 # 大会ごとの課金レポートを計算する
 sub billing_report_by_competition($self, $c, $tenant_db, $tenant_id, $competiton_id) {
-    my $comp = retrieve_competition($c, $tenant_db, $competiton_id);
+    my ($comp, $err) = $self->retrieve_competition($c, $tenant_db, $competiton_id);
+    if ($err) {
+        fail($c, HTTP_INTERNAL_SERVER_ERROR, sprintf("error retrieve_competition: %s", $err));
+    }
 
     # ランキングにアクセスした参加者のIDを取得する
     my $visit_history_summaries = $self->admin_db->select_all(
@@ -400,13 +405,13 @@ sub billing_report_by_competition($self, $c, $tenant_db, $tenant_id, $competiton
     defer { close $fl }
 
     # スコアを登録した参加者のIDを取得する
-    my $scored_player_ids = $tenant_db->select_all(
-        "SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?",
+    my $scored_players = $tenant_db->select_all(
+        "SELECT DISTINCT(player_id) AS player_id FROM player_score WHERE tenant_id = ? AND competition_id = ?",
         $tenant_id, $comp->{id},
     );
-    for my $pid ($scored_player_ids->@*) {
+    for my $sp ($scored_players->@*) {
         # スコアが登録されている参加者
-        $billing_map->{$pid} = "player"
+        $billing_map->{$sp->{player_id}} = "player"
     }
 
     # 大会が終了している場合のみ請求金額が確定するので計算する
@@ -443,7 +448,7 @@ use constant TenantsBillingHandlerSuccess => SuccessResult({
 # GET /api/admin/tenants/billing
 # URL引数beforeを指定した場合、指定した値よりもidが小さいテナントの課金レポートを取得する
 sub tenants_billing_handler($self, $c) {
-    unless ($c->request->env->{HTTP_HOST} eq $ENV{ISUCON_ADMIN_HOSTNAME} || "admin.t.isucon.dev") {
+    unless ($c->request->env->{HTTP_HOST} eq ($ENV{ISUCON_ADMIN_HOSTNAME} || "admin.t.isucon.dev")) {
         fail($c, HTTP_NOT_FOUND, sprintf("invalid hostname %s", $c->request->env->{HTTP_HOST}));
     }
 
@@ -452,8 +457,7 @@ sub tenants_billing_handler($self, $c) {
         fail($c, HTTP_FORBIDDEN, "admin role required");
     }
 
-    my $before = $c->request->query_parameters->{"before"};
-    my $before_id = $before ? hex($before) : 0;
+    my $before_id = $c->request->query_parameters->{"before"} || 0;
     # テナントごとに
     #   大会ごとに
     #     scoreに登録されているplayerでアクセスした人 * 100
@@ -472,9 +476,10 @@ sub tenants_billing_handler($self, $c) {
         }
 
         my $tenant_billing = {
-            id           => hex($tenant->{id}),
+            id           => $tenant->{id},
             name         => $tenant->{name},
             display_name => $tenant->{display_name},
+            billing      => 0,
         };
 
         my $tenant_db = connect_to_tenant_db($tenant->{id});
@@ -488,12 +493,13 @@ sub tenants_billing_handler($self, $c) {
         for my $comp ($competitions->@*) {
             my $report = $self->billing_report_by_competition($c, $tenant_db, $tenant->{id}, $comp->{id});
 
-            $tenant_billing->{billing_yen} += $report->{billing_yen};
+            $tenant_billing->{billing} += $report->{billing_yen};
         }
-        push $tenant_billings->@*, $tenant_billing;
+
+        push $tenant_billings->@* => $tenant_billing;
 
         if ($tenant_billings->@* >= 10) {
-            next;
+            last;
         }
     }
 
@@ -582,11 +588,15 @@ sub players_add_handler($self, $c) {
             $id, $v->{tenant_id}, $display_name, false, $now, $now,
         );
 
-        my $p = $self->retrieve_player($c, $tenant_db, $id);
+        (my $player, $err) = $self->retrieve_player($c, $tenant_db, $id);
+        if ($err) {
+            fail($c, HTTP_INTERNAL_SERVER_ERROR, sprintf("error retrieve_player: %w", $err));
+        }
+
         push $player_details->@* => {
-            id              => $p->{id},
-            display_name    => $p->{display_name},
-            is_disqualified => $p->{is_disqualified},
+            id              => $player->{id},
+            display_name    => $player->{display_name},
+            is_disqualified => $player->{is_disqualified},
         }
     }
 
@@ -607,32 +617,34 @@ use constant PlayerDisqualifiedHandlerSuccess => SuccessResult({
 # 参加者を失格にする
 sub player_disqualified_handler($self, $c) {
     my $v = $self->parse_viewer($c);
-    if ($v->{role} eq ROLE_ORGANIZER) {
+    unless ($v->{role} eq ROLE_ORGANIZER) {
         fail($c, HTTP_FORBIDDEN, "role organizer required");
     }
 
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
     defer { $tenant_db->disconnect }
 
-    my $player_id = $c->request->query_parameters->{player_id};
+    my $player_id = $c->args->{player_id};
 
     my $now = time;
-
     $tenant_db->query(
         "UPDATE player SET is_disqualified = ?, updated_at = ? WHERE id = ?",
         true, $now, $player_id,
     );
 
-    my $p = $self->retrieve_player($c, $tenant_db, $player_id);
-    unless ($p) { # 存在しないプレイヤー
+    my ($player, $err) = $self->retrieve_player($c, $tenant_db, $player_id);
+    if ($err) { # 存在しないプレイヤー
         fail($c, HTTP_NOT_FOUND, "player not found");
     }
 
     return $c->render_json({
-        player => {
-            id              => $p->{id},
-            display_name    => $p->{display_name},
-            is_disqualified => $p->{is_disqualified},
+        status => true,
+        data => {
+            player => {
+                id              => $player->{id},
+                display_name    => $player->{display_name},
+                is_disqualified => $player->{is_disqualified},
+            },
         },
     }, PlayerDisqualifiedHandlerSuccess);
 }
@@ -697,13 +709,13 @@ sub competition_finish_handler($self, $c) {
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
     defer { $tenant_db->disconnect }
 
-    my $id = $c->request->body_parameters->{competition_id};
+    my $id = $c->args->{competition_id};
     unless ($id) {
         fail($c, HTTP_BAD_REQUEST, "competition_id required")
     }
 
-    my $comp = $self->retrieve_competition($c, $tenant_db, $id);
-    unless ($comp) { # 存在しない大会
+    my (undef, $err) = $self->retrieve_competition($c, $tenant_db, $id);
+    if ($err) { # 存在しない大会
         fail($c, HTTP_NOT_FOUND, "competition not found");
     }
 
@@ -733,13 +745,13 @@ sub competition_score_handler($self, $c) {
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
     defer { $tenant_db->disconnect }
 
-    my $competition_id = $c->request->body_parameters->{competition_id};
+    my $competition_id = $c->args->{competition_id};
     unless ($competition_id) {
         fail($c, HTTP_BAD_REQUEST, "competition_id required")
     }
 
-    my $comp = $self->retrieve_competition($c, $tenant_db, $competition_id);
-    unless ($comp) { # 存在しない大会
+    my ($comp, $err) = $self->retrieve_competition($c, $tenant_db, $competition_id);
+    if ($err) { # 存在しない大会
         fail($c, HTTP_NOT_FOUND, "competition not found");
     }
 
@@ -756,7 +768,7 @@ sub competition_score_handler($self, $c) {
     unless ($file) {
         fail($c, HTTP_INTERNAL_SERVER_ERROR, "error uploads->{scores}");
     }
-    open my $fh, '<', $file->filename or fail($c, "error open uploads->{scores}");
+    open my $fh, '<', $file->path or fail($c, HTTP_INTERNAL_SERVER_ERROR, "error open uploads->{scores}");
 
     my $csv = Text::CSV_XS->new();
     my $headers = $csv->getline($fh);
@@ -777,13 +789,13 @@ sub competition_score_handler($self, $c) {
         }
 
         my ($player_id, $score_str) = $row->@*;
-        my $player = $self->retrieve_player($c, $tenant_db, $player_id);
-        unless ($player) { # 存在しない参加者が含まれている
+        my ($player, $err) = $self->retrieve_player($c, $tenant_db, $player_id);
+        if ($err) { # 存在しない参加者が含まれている
             fail($c, HTTP_BAD_REQUEST, sprintf('player not found: %s', $player_id));
         }
         my $score = $score_str+0;
 
-        my ($id, $err) = $self->dispense_id();
+        (my $id, $err) = $self->dispense_id();
         if ($err) {
             fail($c, HTTP_INTERNAL_SERVER_ERROR, "error dispenseID: %s", $err);
         }
@@ -880,15 +892,15 @@ sub player_handler($self, $c) {
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
     defer { $tenant_db->disconnect }
 
-    $self->authorize_player($c, $tenant_db, $v->{tenant_id});
+    $self->authorize_player($c, $tenant_db, $v->{player_id});
 
-    my $player_id = $c->request->query_parameters->{player_id};
+    my $player_id = $c->args->{player_id};
     unless ($player_id) {
         fail($c, HTTP_BAD_REQUEST, "player_id is required");
     }
 
-    my $player = $self->retrieve_player($c, $tenant_db, $player_id);
-    unless ($player) {
+    my ($player, $err) = $self->retrieve_player($c, $tenant_db, $player_id);
+    if ($err) {
         fail($c, HTTP_NOT_FOUND, "player not found");
     }
 
@@ -901,7 +913,7 @@ sub player_handler($self, $c) {
     defer { close $fl }
 
     my $player_scores = [];
-    for my $comp ($competitions) {
+    for my $comp ($competitions->@*) {
         my $player_score = $tenant_db->select_row(
             # 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
             "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1",
@@ -917,8 +929,11 @@ sub player_handler($self, $c) {
 
     my $player_score_details = [];
     for my $player_score ($player_scores->@*) {
-        my $comp = $self->retrieve_competition($c, $tenant_db, $player_score->{competition_id});
-        push $player_score_details->@*, {
+        my ($comp, $err) = $self->retrieve_competition($c, $tenant_db, $player_score->{competition_id});
+        if ($err) {
+            fail($c, HTTP_INTERNAL_SERVER_ERROR, sprintf("error retrieveCompetition: %s", $err));
+        }
+        push $player_score_details->@* => {
             competition_title => $comp->{title},
             score             => $player_score->{score},
         }
@@ -939,16 +954,16 @@ sub player_handler($self, $c) {
 
 
 use constant CompetitionRank => {
-    rank => JSON_TYPE_INT,
-    score => JSON_TYPE_INT,
-    player_id => JSON_TYPE_STRING,
+    rank                => JSON_TYPE_INT,
+    score               => JSON_TYPE_INT,
+    player_id           => JSON_TYPE_STRING,
     player_display_name => JSON_TYPE_STRING,
-    row_num => undef, # # APIレスポンスのJSONには含まれない
+    row_num             => undef, # # APIレスポンスのJSONには含まれない
 };
 
 use constant CompetitionRankingHandlerSuccess => SuccessResult({
     competition => CompetitionDetail,
-    ranks => json_type_arrayof(CompetitionRank),
+    ranks       => json_type_arrayof(CompetitionRank),
 });
 
 # 参加者向けAPI
@@ -963,16 +978,16 @@ sub competition_ranking_handler($self, $c) {
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
     defer { $tenant_db->disconnect }
 
-    $self->authorize_player($c, $tenant_db, $v->{tenant_id});
+    $self->authorize_player($c, $tenant_db, $v->{player_id});
 
-    my $competition_id = $c->request->query_parameters->{competition_id};
+    my $competition_id = $c->args->{competition_id};
     unless ($competition_id) {
         fail($c, HTTP_BAD_REQUEST, "competition_id is required");
     }
 
     # 大会の存在確認
-    my $competition = $self->retrieve_competition($c, $tenant_db, $competition_id);
-    unless ($competition) {
+    my ($competition, $err) = $self->retrieve_competition($c, $tenant_db, $competition_id);
+    if ($err) {
         fail($c, HTTP_NOT_FOUND, "competition not found")
     }
 
@@ -988,7 +1003,7 @@ sub competition_ranking_handler($self, $c) {
         $v->{player_id}, $tenant->{id}, $competition_id, $now, $now,
     );
 
-    my $rank_after = $c->request->query_parameters->{rank_after};
+    my $rank_after = $c->request->query_parameters->{rank_after} || 0;
 
     # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
     my $fl = flock_by_tenant_id($v->{tenant_id});
@@ -1009,7 +1024,12 @@ sub competition_ranking_handler($self, $c) {
             next;
         }
 
-        my $player = $self->retrieve_player($c, $tenant_db, $player_score->{player_id});
+        $scored_player_set->{$player_score->{player_id}} = !!1;
+        my ($player, $err) = $self->retrieve_player($c, $tenant_db, $player_score->{player_id});
+        if ($err) {
+            fail($c, HTTP_INTERNAL_SERVER_ERROR, sprintf("error retrieve_player: %s", $err));
+        }
+
         push $ranks->@* => {
             score               => $player_score->{score},
             player_id           => $player->{id},
@@ -1034,9 +1054,9 @@ sub competition_ranking_handler($self, $c) {
         }
 
         push $page_ranks->@* => {
-            rank => $i + 1,
-            score => $rank->{score},
-            player_id => $rank->{player_id},
+            rank                => $i + 1,
+            score               => $rank->{score},
+            player_id           => $rank->{player_id},
             player_display_name => $rank->{player_display_name},
         };
 
@@ -1053,6 +1073,7 @@ sub competition_ranking_handler($self, $c) {
                 title       => $competition->{title},
                 is_finished => !!$competition->{finished_at},
             },
+            ranks => $page_ranks,
         }
     }, CompetitionRankingHandlerSuccess);
 }
@@ -1073,7 +1094,7 @@ sub player_competitions_handler($self, $c) {
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
     defer { $tenant_db->disconnect }
 
-    $self->authorize_player($c, $tenant_db, $v->{tenant_id});
+    $self->authorize_player($c, $tenant_db, $v->{player_id});
 
     return competitions_handler($c, $v, $tenant_db);
 }
@@ -1132,7 +1153,10 @@ use constant MeHandlerSuccess => SuccessResult({
 # GET /api/me
 # JWTで認証した結果、テナントやユーザ情報を返す
 sub me_handler($self, $c) {
-    my $tenant = $self->retrieve_tenant_row_from_header($c);
+    my ($tenant, $err) = $self->retrieve_tenant_row_from_header($c);
+    if ($err) {
+        fail($c, HTTP_INTERNAL_SERVER_ERROR, sprintf("error retrieve_tenant_row_from_header: %s", $err));
+    }
     my $tenant_detail = {
         name         => $tenant->{name},
         display_name => $tenant->{display_name},
@@ -1173,8 +1197,8 @@ sub me_handler($self, $c) {
     my $tenant_db = connect_to_tenant_db($v->{tenant_id});
     defer { $tenant_db->disconnect }
 
-    my $player = $self->retrieve_player($c, $tenant_db, $v->{player_id});
-    unless ($player) {
+    (my $player, $err) = $self->retrieve_player($c, $tenant_db, $v->{player_id});
+    if ($err) {
         return $c->render_json({
             status => true,
             data => {
