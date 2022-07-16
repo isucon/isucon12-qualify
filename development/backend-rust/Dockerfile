@@ -16,7 +16,6 @@ RUN curl -sLO https://github.com/cli/cli/releases/download/v2.13.0/gh_2.13.0_lin
 
 WORKDIR /home/isucon/webapp/rust
 COPY ./webapp/rust /home/isucon/webapp/rust
-RUN cargo build
-CMD [ "./target/debug/isuports" ]
+CMD [ "cargo", "run" ]
 
 
