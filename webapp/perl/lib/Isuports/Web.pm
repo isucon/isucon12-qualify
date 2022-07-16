@@ -6,7 +6,6 @@ use builtin qw(true false);
 
 use Kossy;
 use HTTP::Status qw(:constants);
-use File::Slurp qw(read_file);
 use Crypt::JWT qw(decode_jwt);
 use Crypt::PK::RSA;
 use Fcntl qw(LOCK_EX LOCK_NB LOCK_UN O_RDWR O_CREAT);
@@ -102,14 +101,10 @@ sub dispense_id($self) {
                 $last_err = sprintf("error REPLACE INTO id_generator: %s", $e);
                 next;
             }
+            die $e; #rethrow
         }
 
-        try {
-            $id = $self->admin_db->last_insert_id;
-        }
-        catch ($e) {
-            return "", sprintf("error ret.LastInsertId: %s", $e);
-        };
+        $id = $self->admin_db->last_insert_id;
         last;
     }
     if ($id != 0) {
@@ -165,7 +160,7 @@ sub fail($c, $code, $message) {
     warn sprintf("error at %s: %s", $c->request->uri, $message);
 
     my $res = $c->render_json({
-        status => false,
+        status  => false,
         message => $message,
     }, FailureResult);
 
