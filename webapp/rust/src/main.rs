@@ -272,6 +272,7 @@ async fn parse_viewer(
         Ok(token) => token,
         Err(e) => {
             if matches!(e.kind(), jsonwebtoken::errors::ErrorKind::Json(_)) {
+                info!("{:?}",e.kind());
                 return Err(actix_web::error::ErrorBadRequest("invalid JWT payload"));
             } else {
                 return Err(actix_web::error::ErrorForbidden("forbidden"));
