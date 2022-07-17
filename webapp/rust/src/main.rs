@@ -102,7 +102,6 @@ async fn dispense_id(pool: web::Data<sqlx::MySqlPool>) -> Result<String, sqlx::E
 pub async fn main() -> std::io::Result<()> {
 
     std::env::set_var("RUST_LOG", "info");
-    std::env::set_var("RUST_BACKTRACE", "1");
     env_logger::init();
 
 
@@ -247,7 +246,12 @@ async fn parse_viewer(
             if matches!(e.kind(), jsonwebtoken::errors::ErrorKind::Json(_)) {
                 info!("{:?}",e.kind());
                 return Err(actix_web::error::ErrorBadRequest("invalid JWT payload"));
-            } else {
+            } else if matches!(e.kind(), jsonwebtoken::errors::ErrorKind::ExpiredSignature){
+                info!("{:?}",e.kind());
+                return Err(actix_web::error::ErrorUnauthorized(
+                    "JWT expired or not signed with the correct key",
+                ));
+            }else{
                 return Err(actix_web::error::ErrorForbidden("forbidden"));
             }
         }
