@@ -1,4 +1,5 @@
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
+use cookie::Cookie;
 use jsonwebtoken;
 use lazy_static::lazy_static;
 use nix::fcntl::{flock, open, FlockArg, OFlag};
@@ -234,9 +235,10 @@ struct Viewer {
     tenant_id: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug,  Deserialize)]
 struct Claims {
-    player_id: String,
+    iss: String,
+    sub: String,
     aud: String,
     role: String,
 }
@@ -247,18 +249,24 @@ async fn parse_viewer(
     request: HttpRequest,
 ) -> Result<Viewer, actix_web::Error> {
     info!("parse viewer now");
-    let req_jwt = request
+    let cookie = request
         .headers()
-        .get(COOKIE_NAME)
+        .get("cookie")
         .map(|value| value.to_str().unwrap_or_default())
         .unwrap_or_default();
 
+    let c = Cookie::parse(cookie).unwrap();
+    let req_jwt = c.value();
+    info!("{:?}",req_jwt);
     let key_file_name = get_env("ISUCON_JWT_KEY_FILE", "./public.pem");
     let key_src = fs::read_to_string(key_file_name).expect("Something went wrong reading the file");
-    let key = jsonwebtoken::DecodingKey::from_rsa_pem(key_src.as_bytes());
+    info!("{:?}", key_src);
+
+    let key = jsonwebtoken::DecodingKey::from_rsa_pem(key_src.as_bytes()).unwrap();
+
     let token = match jsonwebtoken::decode::<Claims>(
         req_jwt,
-        &key.unwrap(),
+        &key,
         &jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256),
     ) {
         Ok(token) => token,
@@ -270,7 +278,9 @@ async fn parse_viewer(
             }
         }
     };
+    info!("{:?}",token);
     let tr = token.claims.role;
+    info!("{:?}", tr);
     let role = match tr.as_str() {
         ROLE_ADMIN => tr.to_string(),
         ROLE_ORGANIZER => tr.to_string(),
@@ -295,7 +305,7 @@ async fn parse_viewer(
 
     let viewer = Viewer {
         role,
-        player_id: token.claims.player_id,
+        player_id: token.claims.sub,
         tenant_name: tenant.name,
         tenant_id: tenant.id,
     };
