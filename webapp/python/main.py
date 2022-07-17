@@ -6,6 +6,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
+from io import TextIOWrapper
 from typing import Any, Optional
 
 import jwt
@@ -260,21 +261,16 @@ def lock_file_path(id: int) -> str:
     return os.path.join(tenant_db_dir, f"{id}.lock")
 
 
-def flock_by_tenant_id(tenant_id: int):
+def flock_by_tenant_id(tenant_id: int) -> Optional[TextIOWrapper]:
     """排他ロックする"""
     path = lock_file_path(tenant_id)
-    with os.open(path, os.O_RDWR | os.O_CREAT | os.O_TRUNC) as fd:
-        lock_file_fd = None
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError as e:
-            raise RuntimeError from e
-        else:
-            lock_file_fd = fd
-
-        yield lock_file_fd
-
-        fcntl.flock(lock_file_fd, fcntl.LOCK_UN)
+    lock_file = open(path, "a")
+    try:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        return lock_file
+    except OSError:
+        lock_file.close()
+        return None
 
 
 @app.route("/api/admin/tenants/add", methods=["POST"])
@@ -363,29 +359,33 @@ def billing_report_by_competition(tenant_db: Engine, tenant_id: int, competition
         billing_map[str(vh.player_id)] = "visitor"
 
     # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-    lock_file_fd = flock_by_tenant_id(tenant_id)
-    if not lock_file_fd:
+    lock_file = flock_by_tenant_id(tenant_id)
+    if not lock_file:
         raise RuntimeError("error flock_by_tenant_id")
 
-    # スコアを登録した参加者のIDを取得する
-    scored_player_id_rows = tenant_db.execute(
-        "SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?",
-        tenant_id,
-        competition.id,
-    ).fetchall()
+    try:
+        # スコアを登録した参加者のIDを取得する
+        scored_player_id_rows = tenant_db.execute(
+            "SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?",
+            tenant_id,
+            competition.id,
+        ).fetchall()
 
-    for pid in scored_player_id_rows:
-        # スコアが登録されている参加者
-        billing_map[str(pid.player_id)] = "player"
+        for pid in scored_player_id_rows:
+            # スコアが登録されている参加者
+            billing_map[str(pid.player_id)] = "player"
 
-    player_count = 0
-    visitor_count = 0
-    if bool(competition.finished_at):
-        for category in billing_map.values():
-            if category == "player":
-                player_count += 1
-            if category == "visitor":
-                visitor_count += 1
+        player_count = 0
+        visitor_count = 0
+        if bool(competition.finished_at):
+            for category in billing_map.values():
+                if category == "player":
+                    player_count += 1
+                if category == "visitor":
+                    visitor_count += 1
+    finally:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        lock_file.close()
 
     return BillingReport(
         competition_id=competition.id,
@@ -667,56 +667,60 @@ def competition_score_handler(competition_id: str):
         abort(400, "invalid CSV headers")
 
     # DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
-    lock_file_fd = flock_by_tenant_id(viewer.tenant_id)
-    if not lock_file_fd:
+    lock_file = flock_by_tenant_id(viewer.tenant_id)
+    if not lock_file:
         raise RuntimeError("error flock_by_tenant_id")
 
-    row_num = 0
-    player_score_rows = []
-    for row in csv_reader:
-        row_num += 1
-        if len(row) != 2:
-            continue
-        player_id = row[0]
-        score_str = row[1]
-        if retrieve_player(tenant_db, player_id) is None:
-            # 存在しない参加者が含まれている
-            abort(400, f"player not found: {player_id}")
+    try:
+        row_num = 0
+        player_score_rows = []
+        for row in csv_reader:
+            row_num += 1
+            if len(row) != 2:
+                continue
+            player_id = row[0]
+            score_str = row[1]
+            if retrieve_player(tenant_db, player_id) is None:
+                # 存在しない参加者が含まれている
+                abort(400, f"player not found: {player_id}")
 
-        score = int(score_str, 10)
-        id = dispense_id()
-        now = int(datetime.now().timestamp())
-        player_score_rows.append(
-            PlayerScoreRow(
-                id=id,
-                tenant_id=viewer.tenant_id,
-                player_id=player_id,
-                competition_id=competition_id,
-                score=score,
-                row_num=row_num,
-                created_at=now,
-                updated_at=now,
+            score = int(score_str, 10)
+            id = dispense_id()
+            now = int(datetime.now().timestamp())
+            player_score_rows.append(
+                PlayerScoreRow(
+                    id=id,
+                    tenant_id=viewer.tenant_id,
+                    player_id=player_id,
+                    competition_id=competition_id,
+                    score=score,
+                    row_num=row_num,
+                    created_at=now,
+                    updated_at=now,
+                )
             )
-        )
 
-    tenant_db.execute(
-        "DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?",
-        viewer.tenant_id,
-        competition_id,
-    )
-
-    for player_score_row in player_score_rows:
         tenant_db.execute(
-            "INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            player_score_row.id,
-            player_score_row.tenant_id,
-            player_score_row.player_id,
-            player_score_row.competition_id,
-            player_score_row.score,
-            player_score_row.row_num,
-            player_score_row.created_at,
-            player_score_row.updated_at,
+            "DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?",
+            viewer.tenant_id,
+            competition_id,
         )
+
+        for player_score_row in player_score_rows:
+            tenant_db.execute(
+                "INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                player_score_row.id,
+                player_score_row.tenant_id,
+                player_score_row.player_id,
+                player_score_row.competition_id,
+                player_score_row.score,
+                player_score_row.row_num,
+                player_score_row.created_at,
+                player_score_row.updated_at,
+            )
+    finally:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        lock_file.close()
 
     return jsonify(SuccessResult(status=True, data={"rows": len(player_score_rows)}))
 
@@ -790,32 +794,36 @@ def player_handler(player_id: str):
     competition_rows = tenant_db.execute("SELECT * FROM competition ORDER BY created_at ASC").fetchall()
 
     # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-    lock_file_fd = flock_by_tenant_id(viewer.tenant_id)
-    if not lock_file_fd:
+    lock_file = flock_by_tenant_id(viewer.tenant_id)
+    if not lock_file:
         raise RuntimeError("error flock_by_tenant_id")
 
-    player_score_rows = []
-    for competition_row in competition_rows:
-        # 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
-        player_score_row = tenant_db.execute(
-            "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1",
-            viewer.tenant_id,
-            competition_row.id,
-            player.id,
-        ).fetchone()
-        if not player_score_row:
-            # 行がない = スコアが記録されてない
-            continue
-        player_score_rows.append(PlayerScoreRow(**player_score_row))
+    try:
+        player_score_rows = []
+        for competition_row in competition_rows:
+            # 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
+            player_score_row = tenant_db.execute(
+                "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1",
+                viewer.tenant_id,
+                competition_row.id,
+                player.id,
+            ).fetchone()
+            if not player_score_row:
+                # 行がない = スコアが記録されてない
+                continue
+            player_score_rows.append(PlayerScoreRow(**player_score_row))
 
-    player_score_details = []
-    for player_score_row in player_score_rows:
-        competition = retrieve_competition(tenant_db, player_score_row.competition_id)
-        if not competition:
-            continue
-        player_score_details.append(
-            PlayerScoreDetail(competition_title=competition.title, score=player_score_row.score)
-        )
+        player_score_details = []
+        for player_score_row in player_score_rows:
+            competition = retrieve_competition(tenant_db, player_score_row.competition_id)
+            if not competition:
+                continue
+            player_score_details.append(
+                PlayerScoreDetail(competition_title=competition.title, score=player_score_row.score)
+            )
+    finally:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        lock_file.close()
 
     return jsonify(
         SuccessResult(
@@ -878,56 +886,60 @@ def competition_ranking_handler(competition_id):
         rank_after = int(rank_after_str)
 
     # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-    lock_file_fd = flock_by_tenant_id(viewer.tenant_id)
-    if not lock_file_fd:
+    lock_file = flock_by_tenant_id(viewer.tenant_id)
+    if not lock_file:
         raise RuntimeError("error flock_by_tenant_id")
 
-    player_score_rows = tenant_db.execute(
-        "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
-        tenant_row.id,
-        competition_id,
-    ).fetchall()
+    try:
+        player_score_rows = tenant_db.execute(
+            "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
+            tenant_row.id,
+            competition_id,
+        ).fetchall()
 
-    ranks = []
-    scored_player_set = {}
-    for player_score_row in player_score_rows:
-        # player_scoreが同一player_id内ではrow_numの降順でソートされているので
-        # 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
-        if scored_player_set.get(player_score_row.player_id) is not None:
-            continue
+        ranks = []
+        scored_player_set = {}
+        for player_score_row in player_score_rows:
+            # player_scoreが同一player_id内ではrow_numの降順でソートされているので
+            # 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
+            if scored_player_set.get(player_score_row.player_id) is not None:
+                continue
 
-        scored_player_set[player_score_row.player_id] = {}
-        player = retrieve_player(tenant_db, player_score_row.player_id)
-        if not player:
-            raise RuntimeError("error retrievePlayer")
-        ranks.append(
-            CompetitionRank(
-                rank=0,
-                score=player_score_row.score,
-                player_id=player.id,
-                player_display_name=player.display_name,
-                row_num=player_score_row.row_num,
+            scored_player_set[player_score_row.player_id] = {}
+            player = retrieve_player(tenant_db, player_score_row.player_id)
+            if not player:
+                raise RuntimeError("error retrievePlayer")
+            ranks.append(
+                CompetitionRank(
+                    rank=0,
+                    score=player_score_row.score,
+                    player_id=player.id,
+                    player_display_name=player.display_name,
+                    row_num=player_score_row.row_num,
+                )
             )
-        )
 
-    ranks.sort(key=lambda rank: rank.row_num)
-    ranks.sort(key=lambda rank: rank.score, reverse=True)
+        ranks.sort(key=lambda rank: rank.row_num)
+        ranks.sort(key=lambda rank: rank.score, reverse=True)
 
-    paged_ranks = []
-    for i, rank in enumerate(ranks):
-        if i < rank_after:
-            continue
-        paged_ranks.append(
-            CompetitionRank(
-                rank=i + 1,
-                score=rank.score,
-                player_id=rank.player_id,
-                player_display_name=rank.player_display_name,
-                row_num=0,
+        paged_ranks = []
+        for i, rank in enumerate(ranks):
+            if i < rank_after:
+                continue
+            paged_ranks.append(
+                CompetitionRank(
+                    rank=i + 1,
+                    score=rank.score,
+                    player_id=rank.player_id,
+                    player_display_name=rank.player_display_name,
+                    row_num=0,
+                )
             )
-        )
-        if len(paged_ranks) >= 100:
-            break
+            if len(paged_ranks) >= 100:
+                break
+    finally:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        lock_file.close()
 
     return jsonify(
         SuccessResult(
