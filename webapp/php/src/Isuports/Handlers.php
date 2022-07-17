@@ -126,7 +126,7 @@ class Handlers
             throw new HttpUnauthorizedException($request, sprintf('cookie %s is not found', self::COOKIE_NAME));
         }
 
-        $keyFilename = getenv('ISUCON_JWT_KEY_FILE') ?: __DIR__ . '/../../public.pem';
+        $keyFilename = getenv('ISUCON_JWT_KEY_FILE') ?: __DIR__ . '/../../../public.pem';
         $keysrc = file_get_contents($keyFilename);
         if ($keysrc === false) {
             throw new RuntimeException(sprintf('error file_get_contents: keyFilename=%s', $keyFilename));
