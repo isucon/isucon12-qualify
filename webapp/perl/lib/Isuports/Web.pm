@@ -175,7 +175,7 @@ sub parse_viewer($self, $c) {
         fail($c, HTTP_UNAUTHORIZED, sprintf("cookie %s is not found", COOKIE_NAME));
     }
 
-    my $key_file_name = $ENV{"ISUCON_JWT_KEY_FILE"} || "./public.pem";
+    my $key_file_name = $ENV{"ISUCON_JWT_KEY_FILE"} || "../public.pem";
     my $key = Crypt::PK::RSA->new($key_file_name);
 
     my $token;
