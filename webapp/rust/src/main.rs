@@ -129,11 +129,7 @@ pub async fn main() -> std::io::Result<()> {
         let logger = Logger::default();
         let admin_api = web::scope("/admin/tenants")
             .route("/add", web::post().to(tenants_add_handler))
-            .route("/billing", web::get().to(tenants_billing_handler))
-            .route("/index1", web::post().to(index1))
-            .route("/index2",web::post().to(index2))
-            .route("/index3", web::post().to(index3))
-            .route("/index4",web::post().to(index4));
+            .route("/billing", web::get().to(tenants_billing_handler));
         let organizer_api = web::scope("/organizer")
             .route("players", web::get().to(players_list_handler))
             .route("players/add", web::post().to(players_add_handler))
@@ -191,29 +187,6 @@ pub async fn main() -> std::io::Result<()> {
 // エラー処理関数
 // TODO:
 
-// for experiment
-async fn index1(pool: web::Data<sqlx::MySqlPool>,
-    request:HttpRequest,) -> impl Responder {
-    info!("index now, pool and request");
-    HttpResponse::Ok().body("Hello world!")
-}
-
-async fn index2(pool: web::Data<sqlx::MySqlPool>,
-    ) -> impl Responder {
-    info!("index2 now, pool");
-    HttpResponse::Ok().body("Hello world!")
-}
-
-async fn index3(
-    request: HttpRequest,) -> impl Responder {
-    info!("index3 now, request");
-    HttpResponse::Ok().body("Hello world!")
-}
-
-async fn index4() -> impl Responder {
-    info!("index4 now");
-    HttpResponse::Ok().body("Hello world!")
-}
 #[derive(Debug, Serialize)]
 struct SuccessResult<T> {
     status: bool,
@@ -239,7 +212,7 @@ struct Viewer {
 struct Claims {
     iss: String,
     sub: String,
-    aud: String,
+    aud: Vec<String>,
     role: String,
 }
 
@@ -299,7 +272,7 @@ async fn parse_viewer(
         panic!("invalid role");
     }
 
-    if tenant.name != aud {
+    if tenant.name != aud[0] {
         info!("invalid audience");
         panic!("invalid audience");
     }
