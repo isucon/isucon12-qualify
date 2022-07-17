@@ -499,6 +499,7 @@ async fn tenants_add_handler(
 
 // テナント名が規則に従っているかチェックする
 fn validate_tenant_name(name: String) -> Result<(), String> {
+    info!("validate_tenant_name now");
     if TENANT_NAME_REGEXP.is_match(name.as_str()) {
         Ok(())
     } else {
@@ -552,6 +553,7 @@ async fn billing_report_by_competition(
         .bind(tenant_id)
         .bind(comp.id.clone())
         .fetch_all(&tenant_db).await.unwrap();
+
     let mut billing_map: HashMap<String, String> = HashMap::new();
     for vh in vhs {
         // competition.finished_atよりも後の場合は, 終了後に訪問したとみなして大会開催内アクセス済みと見做さない
@@ -717,6 +719,7 @@ async fn players_list_handler(
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    info!("connected tenant_db");
     let pls: Vec<PlayerRow> =
         sqlx::query_as("SELECT * FROM player WHERE tenant_id=? ORDER BY created_at DESC")
             .bind(v.tenant_id)
@@ -762,6 +765,7 @@ async fn players_add_handler(
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    info!("connected tenant db");
     let display_names = form_param.display_name.clone();
     let mut pds = Vec::<PlayerDetail>::new();
     for display_name in display_names {
@@ -816,6 +820,7 @@ async fn player_disqualified_handler(
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    info!("connected tenant db");
     let player_id = form_param.into_inner().player_id;
     let now: i64 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -872,6 +877,7 @@ async fn competitions_add_handler(
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    info!("connected tenant db");
     let title = form.title.clone();
     let now: i64 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -918,6 +924,7 @@ async fn competition_finish_handler(
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    info!("connected tenant db");
     let id = form.into_inner().competition_id;
 
     retrieve_competition(tenant_db.clone(), id.clone())
@@ -968,6 +975,7 @@ async fn competition_score_handler(
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    info!("connected tenant db");
     let competition_id = form.competition_id.clone();
     if competition_id.is_empty() {
         return Ok(actix_web::HttpResponse::BadRequest().finish());
@@ -1007,6 +1015,7 @@ async fn competition_score_handler(
     };
     // DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
     let _fl = flock_by_tenant_id(v.tenant_id).unwrap();
+    info!("flocked now");
     let mut row_num: i64 = 0;
     let mut player_score_rows = Vec::<PlayerScoreRow>::new();
     loop{
@@ -1090,7 +1099,7 @@ async fn billing_handler(
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-
+    info!("connected tenant db");
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at DESC")
             .bind(v.tenant_id)
@@ -1142,6 +1151,7 @@ async fn player_handler(
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    info!("connected tenant db");
     authorize_player(tenant_db.clone(), v.player_id)
         .await
         .unwrap();
@@ -1157,6 +1167,7 @@ async fn player_handler(
             .unwrap();
     // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
     let _fl = flock_by_tenant_id(v.tenant_id);
+    info!("flocked now");
     let mut pss = Vec::<PlayerScoreRow>::new();
     for c in cs {
         let ps: PlayerScoreRow = sqlx::query_as(
@@ -1229,6 +1240,7 @@ async fn competition_ranking_handler(
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    info!("connected tenant db now");
     let competition_id = form.clone().competition_id;
     if competition_id.is_empty() {
         return Ok(actix_web::HttpResponse::BadRequest().finish());
@@ -1258,6 +1270,7 @@ async fn competition_ranking_handler(
 
     // player_scoreを読んでいる時に更新が走ると不整合が走るのでロックを取得する
     let _fl = flock_by_tenant_id(v.tenant_id);
+    info!("flocked now");
     let pss: Vec<PlayerScoreRow> = sqlx::query_as(
         "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC")
         .bind(tenant.id)
@@ -1343,6 +1356,7 @@ async fn player_competitions_handler(
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    info!("connected tenant db now");
     authorize_player(tenant_db.clone(), v.player_id.clone())
         .await
         .unwrap();
@@ -1362,6 +1376,7 @@ async fn organizer_competitions_handler(
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    info!("connected tenant db now");
     return competitions_handler(Some(v), tenant_db.clone()).await;
 }
 
@@ -1433,6 +1448,7 @@ async fn me_handler(
         }));
     }
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    info!("connected tenant db now");
     let p = retrieve_player(tenant_db.clone(), v.player_id.clone())
         .await
         .unwrap();
