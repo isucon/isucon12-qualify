@@ -27,10 +27,8 @@ var (
 )
 
 const (
-	ErrFailedLoadJSON failure.StringCode = "load-json"
-	ErrCannotNewAgent failure.StringCode = "agent"
-	ErrInvalidRequest failure.StringCode = "request"
-	ErrFailedBench    failure.StringCode = "fail"
+	ErrFailedPrepare failure.StringCode = "fail-prepare"
+	ErrFailedLoad    failure.StringCode = "fail-load"
 )
 
 type TenantData struct {
@@ -56,7 +54,7 @@ type Scenario struct {
 	WorkerCountMutex   sync.Mutex
 
 	InitialData        InitialDataRows
-	InitialDataTenant  InitialDataTenantMap
+	InitialDataTenant  InitialDataTenantRows
 	DisqualifiedPlayer map[string]struct{}
 	RawKey             *rsa.PrivateKey
 
@@ -99,11 +97,11 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(sc.Option.TargetURL)
 	if err != nil {
-		return failure.NewError(ErrCannotNewAgent, err)
+		return err
 	}
 	ag, err := sc.Option.NewAgent(b.Scheme+"://admin."+b.Host, true)
 	if err != nil {
-		return failure.NewError(ErrCannotNewAgent, err)
+		return err
 	}
 
 	if sc.Option.SkipPrepare {
@@ -158,14 +156,15 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 			return nil
 		}),
 	); !v.IsEmpty() {
-		return fmt.Errorf("初期化リクエストに失敗しました %v", v)
+		ContestantLogger.Printf("初期化リクエストに失敗しました")
+		return failure.NewError(ErrFailedPrepare, v)
 	}
 	ContestantLogger.Printf("初期化リクエストに成功しました 実装言語:%s", lang)
 
 	// 検証シナリオを1回まわす
 	if err := sc.ValidationScenario(ctx, step); err != nil {
-		fmt.Println(err)
-		return fmt.Errorf("整合性チェックに失敗しました")
+		ContestantLogger.Printf("整合性チェックに失敗しました")
+		return failure.NewError(ErrFailedPrepare, err)
 	}
 
 	ContestantLogger.Printf("整合性チェックに成功しました")
@@ -292,13 +291,13 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 
 		if ConstMaxError <= errorCount {
 			ContestantLogger.Printf("エラーが%d件を越えたので負荷走行を打ち切ります", ConstMaxError)
-			step.Result().Errors.Add(ErrFailedBench)
+			step.AddError(ErrFailedLoad)
 			end = true
 		}
 
 		if ConstMaxCriticalError <= criticalCount {
 			ContestantLogger.Printf("Criticalなエラーが%d件を越えたので負荷走行を打ち切ります", ConstMaxCriticalError)
-			step.Result().Errors.Add(ErrFailedBench)
+			step.AddError(ErrFailedLoad)
 			end = true
 		}
 

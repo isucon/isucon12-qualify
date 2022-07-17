@@ -122,12 +122,13 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	orgJobConf := &OrganizerJobConfig{
-		orgAc:         orgAc,
-		scTag:         scTag,
-		tenantName:    tenant.Name,
-		scoreRepeat:   1,
-		addScoreNum:   10,   // 1度のスコア入稿で増える数
-		scoreInterval: 3000, // 結果の検証時には3s、負荷かける用は1s
+		orgAc:           orgAc,
+		scTag:           scTag,
+		tenantName:      tenant.Name,
+		scoreRepeat:     1,
+		addScoreNum:     10,   // 1度のスコア入稿で増える数
+		scoreInterval:   3000, // 結果の検証時には3s、負荷かける用は1s
+		playerWorkerNum: 5,
 	}
 
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する

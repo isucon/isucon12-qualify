@@ -248,7 +248,6 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 				if diff := cmp.Diff(checkReports, competitionIDMap); diff != "" {
 					return fmt.Errorf("Billingの結果が違います (-want +got):\n%s", diff)
 				}
-				AdminLogger.Println(competitionIDMap)
 				return nil
 			}),
 		)
