@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express'
 import cookieParser from 'cookie-parser'
 import bodyParser from 'body-parser'
+import multer from 'multer'
 import mysql, { RowDataPacket, QueryError, OkPacket } from 'mysql2/promise'
 import childProcess from 'child_process'
 import { readFile } from 'fs/promises'
@@ -11,6 +12,7 @@ import sqlite3 from 'sqlite3'
 import { open, Database } from 'sqlite'
 import { openSync, closeSync } from 'fs'
 import fsExt from 'fs-ext'
+import { parse } from 'csv-parse/sync'
 
 const exec = util.promisify(childProcess.exec)
 const flock = util.promisify(fsExt.flock)
@@ -147,6 +149,21 @@ type CompetitionDetail = {
   is_finished: boolean
 }
 
+type PlayerScoreDetail = {
+  competition_title: string
+  score: number
+}
+
+type CompetitionRank = {
+  rank: number
+  score: number
+  player_id: string
+  player_display_name: string
+}
+type WithRowNum = {
+  row_num: number
+}
+
 // レスポンス型定義
 type TenantsAddResult = {
   tenant: TenantWithBilling
@@ -168,6 +185,27 @@ type PlayerDisqualifiedResult = {
 type CompetitionsAddResult = {
   competition: CompetitionDetail
 }
+type ScoreResult = {
+  rows: number
+}
+type BillingResult = {
+  reports: BillingReport[]
+}
+
+type CompetitionsResult = {
+  competitions: CompetitionDetail[]
+}
+
+type PlayerResult = {
+  player: PlayerDetail
+  scores: PlayerScoreDetail[]
+}
+type CompetitionRankingResult = {
+  competition: CompetitionDetail
+  ranks: CompetitionRank[]
+}
+
+
 
 // DB型定義
 interface TenantRow {
@@ -201,11 +239,25 @@ interface PlayerRow {
   updated_at: number
 }
 
+interface PlayerScoreRow {
+  tenant_id: number
+  id: string
+  player_id: string
+  competition_id: string
+  score: number
+  row_num: number
+  created_at: number
+  updated_at: number
+}
+
 
 const app = express()
 app.use(express.json())
 app.use(cookieParser())
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.urlencoded({ extended: false }))
+app.set('etag', false)
+
+const upload = multer()
 
 //@ts-ignore see: https://expressjs.com/en/advanced/best-practice-performance.html#handle-exceptions-properly
 const wrap = fn => (...args) => fn(...args).catch(args[2])
@@ -346,20 +398,26 @@ async function authorizePlayer(tenantDB: Database, id: string): Promise<boolean>
     if (!player) {
       throw new ErrorWithStatus(401, 'player not found')
     }
+    if (player.is_disqualified) {
+      throw new ErrorWithStatus(403, 'player is disqualified')
+    }
   } catch (error: any) {
+    if (error.status) {
+      throw error
+    }
     return false
   }
   return true
 }
 
 // 大会を取得する
-async function retrieveCompetition(tenantDB: Database, id: string): Promise<CompetitionRow> {
+async function retrieveCompetition(tenantDB: Database, id: string): Promise<CompetitionRow | undefined> {
   const competitionRow = await tenantDB.get<CompetitionRow>(
     'SELECT * FROM competition WHERE id = ?',
     id,
   )
   if (!competitionRow) {
-    throw new Error('error Select competition: id=${id}')
+    return
   }
   return competitionRow
 }
@@ -460,6 +518,9 @@ function validateTenantName(name: string): boolean {
 // 大会ごとの課金レポートを計算する
 async function billingReportByCompetition(tenantDB: Database, tenantId: number, competitionId: string): Promise<BillingReport> {
   const comp = await retrieveCompetition(tenantDB, competitionId)
+  if (!comp) {
+    throw Error('error retrieveCompetition on billingReportByCompetition')
+  }
 
   // ランキングにアクセスした参加者のIDを取得する
   const [vhs] = await adminDB.query<(VisitHistorySummaryRow & RowDataPacket)[]>(
@@ -855,7 +916,6 @@ app.post('/api/organizer/competition/:competitionId/finish', wrap(async (req: Re
     try {
       const competition = await retrieveCompetition(tenantDB, competitionId)
       if (!competition) {
-        // TODO
         throw new ErrorWithStatus(404, 'competition not found')
       }
 
@@ -885,174 +945,491 @@ app.post('/api/organizer/competition/:competitionId/finish', wrap(async (req: Re
 // テナント管理者向けAPI
 // POST /api/organizer/competition/:competition_id/score
 // 大会のスコアをCSVでアップロードする
-app.post('/api/organizer/competition/:competitionId/score', wrap(async (req: Request, res: Response) => {
-/*
-  ctx := context.Background()
-	v, err := parseViewer(c)
-	if err != nil {
-		return fmt.Errorf("error parseViewer: %w", err)
-	}
-	if v.role != RoleOrganizer {
-		return echo.NewHTTPError(http.StatusForbidden, "role organizer required")
-	}
+app.post('/api/organizer/competition/:competitionId/score', upload.single('scores'), wrap(async (req: Request, res: Response) => {
+  try {
+    const viewer = await parseViewer(req)
+    if (viewer.role !== RoleOrganizer) {
+      throw new ErrorWithStatus(403, 'role organizer required')
+    }
 
-	tenantDB, err := connectToTenantDB(v.tenantID)
-	if err != nil {
-		return err
-	}
-	defer tenantDB.Close()
+    const tenantDB = await connectToTenantDB(viewer.tenantId)
+    const { competitionId } = req.params
+    if (!competitionId) {
+      throw new ErrorWithStatus(400, 'competition_id required')
+    }
 
-	competitionID := c.Param("competition_id")
-	if competitionID == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "competition_id required")
-	}
-	comp, err := retrieveCompetition(ctx, tenantDB, competitionID)
-	if err != nil {
-		// 存在しない大会
-		if errors.Is(err, sql.ErrNoRows) {
-			return echo.NewHTTPError(http.StatusNotFound, "competition not found")
-		}
-		return fmt.Errorf("error retrieveCompetition: %w", err)
-	}
-	if comp.FinishedAt.Valid {
-		res := FailureResult{
-			Success: false,
-			Message: "competition is finished",
-		}
-		return c.JSON(http.StatusBadRequest, res)
-	}
+    const playerScoreRows: PlayerScoreRow[] = []
+    try {
+      const competition = await retrieveCompetition(tenantDB, competitionId)
+      if (!competition) {
+        throw new ErrorWithStatus(404, 'competition not found')
+      }
 
-	fh, err := c.FormFile("scores")
-	if err != nil {
-		return fmt.Errorf("error c.FormFile(scores): %w", err)
-	}
-	f, err := fh.Open()
-	if err != nil {
-		return fmt.Errorf("error fh.Open FormFile(scores): %w", err)
-	}
-	defer f.Close()
+      if (competition.finished_at) {
+        return res.status(400).json({
+          status: false,
+          message: 'competition is finished'
+        })
+      }
 
-	r := csv.NewReader(f)
-	headers, err := r.Read()
-	if err != nil {
-		return fmt.Errorf("error r.Read at header: %w", err)
-	}
-	if !reflect.DeepEqual(headers, []string{"player_id", "score"}) {
-		return echo.NewHTTPError(http.StatusBadRequest, "invalid CSV headers")
-	}
+      const file = req.file
+      if (!file) {
+        throw new Error('error form[scores] is not specified')
+      }
 
-	// / DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
-	fl, err := flockByTenantID(v.tenantID)
-	if err != nil {
-		return fmt.Errorf("error flockByTenantID: %w", err)
-	}
-	defer fl.Close()
-	var rowNum int64
-	playerScoreRows := []PlayerScoreRow{}
-	for {
-		rowNum++
-		row, err := r.Read()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return fmt.Errorf("error r.Read at rows: %w", err)
-		}
-		if len(row) != 2 {
-			return fmt.Errorf("row must have two columns: %#v", row)
-		}
-		playerID, scoreStr := row[0], row[1]
-		if _, err := retrievePlayer(ctx, tenantDB, playerID); err != nil {
-			// 存在しない参加者が含まれている
-			if errors.Is(err, sql.ErrNoRows) {
-				return echo.NewHTTPError(
-					http.StatusBadRequest,
-					fmt.Sprintf("player not found: %s", playerID),
-				)
-			}
-			return fmt.Errorf("error retrievePlayer: %w", err)
-		}
-		var score int64
-		if score, err = strconv.ParseInt(scoreStr, 10, 64); err != nil {
-			return echo.NewHTTPError(
-				http.StatusBadRequest,
-				fmt.Sprintf("error strconv.ParseUint: scoreStr=%s, %s", scoreStr, err),
-			)
-		}
-		id, err := dispenseID(ctx)
-		if err != nil {
-			return fmt.Errorf("error dispenseID: %w", err)
-		}
-		now := time.Now().Unix()
-		playerScoreRows = append(playerScoreRows, PlayerScoreRow{
-			ID:            id,
-			TenantID:      v.tenantID,
-			PlayerID:      playerID,
-			CompetitionID: competitionID,
-			Score:         score,
-			RowNum:        rowNum,
-			CreatedAt:     now,
-			UpdatedAt:     now,
-		})
-	}
+      const buf = req.file?.buffer
+      if (!buf) {
+        throw new Error('error form[scores] has no data')
+      }
 
-	if _, err := tenantDB.ExecContext(
-		ctx,
-		"DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?",
-		v.tenantID,
-		competitionID,
-	); err != nil {
-		return fmt.Errorf("error Delete player_score: tenantID=%d, competitionID=%s, %w", v.tenantID, competitionID, err)
-	}
-	for _, ps := range playerScoreRows {
-		if _, err := tenantDB.NamedExecContext(
-			ctx,
-			"INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (:id, :tenant_id, :player_id, :competition_id, :score, :row_num, :created_at, :updated_at)",
-			ps,
-		); err != nil {
-			return fmt.Errorf(
-				"error Insert player_score: id=%s, tenant_id=%d, playerID=%s, competitionID=%s, score=%d, rowNum=%d, createdAt=%d, updatedAt=%d, %w",
-				ps.ID, ps.TenantID, ps.PlayerID, ps.CompetitionID, ps.Score, ps.RowNum, ps.CreatedAt, ps.UpdatedAt, err,
-			)
+      const records : any[] = parse(buf.toString(), {
+        columns: true,
+        skip_empty_lines: true,
+      })
 
-		}
-	}
+      const recordKeys = Object.keys(records[0])
+      if (recordKeys.length !== 2 || recordKeys[0] !== 'player_id' || recordKeys[1] !== 'score') {
+        throw new ErrorWithStatus(400, 'invalid CSV headers')
+      }
 
-	return c.JSON(http.StatusOK, SuccessResult{
-		Success: true,
-		Data:    ScoreHandlerResult{Rows: int64(len(playerScoreRows))},
-	})
-*/
+      // DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
+      const unlock = await flockByTenantID(viewer.tenantId)
+      let rowNum = 0
+      try {
+        for (const record of records) {
+          rowNum++
+          const keys = Object.keys(record)
+          if (keys.length !== 2) {
+            throw new Error('row must have two columns ${record}')
+          }
+
+          const { player_id, score: scoreStr } = record
+          const p = await retrievePlayer(tenantDB, player_id)
+          if (!p) {
+            // 存在しない参加者が含まれている
+            throw new ErrorWithStatus(400, `player not found: ${player_id}`)
+          }
+
+          const score = parseInt(scoreStr, 10)
+          if (isNaN(score)) {
+            throw new ErrorWithStatus(400, `error parseInt: scoreStr=${scoreStr}`)
+          }
+
+          const id = await dispenseID()
+          const now = Math.floor(new Date().getTime() / 1000)
+
+          playerScoreRows.push({
+            id,
+            tenant_id: viewer.tenantId,
+            player_id,
+            competition_id: competitionId,
+            score: score,
+            row_num: rowNum,
+            created_at: now,
+            updated_at: now,
+          })
+        }
+
+        await tenantDB.run(
+          'DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?',
+          viewer.tenantId, competitionId,
+        )
+
+        for (const row of playerScoreRows) {
+          await tenantDB.run(
+            'INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES ($id, $tenant_id, $player_id, $competition_id, $score, $row_num, $created_at, $updated_at)', {
+              $id: row.id,
+              $tenant_id: row.tenant_id,
+              $player_id: row.player_id,
+              $competition_id: row.competition_id,
+              $score: row.score,
+              $row_num: row.row_num,
+              $created_at: row.created_at,
+              $updated_at: row.updated_at,
+            }
+          )
+        }
+      } catch (error) {
+        throw error
+      } finally {
+        unlock()
+      }
+
+
+    } catch (error: any) {
+      if (error.status) {
+        throw error // rethrow
+      }
+      throw error
+    } finally {
+      tenantDB.close()
+      
+    }
+
+    const data: ScoreResult = {
+      rows: playerScoreRows.length,
+    }
+
+
+    res.status(200).json({
+      status: true,
+      data,
+    })
+  } catch (error: any)  {
+    if (error.status) {
+      throw error // rethrow
+    }
+    throw new ErrorWithStatus(500, error.toString())
+  }
 }))
 
 // テナント管理者向けAPI
 // GET /api/organizer/billing
 // テナント内の課金レポートを取得する
 app.get('/api/organizer/billing', wrap(async (req: Request, res: Response) => {
+  try {
+    const viewer = await parseViewer(req)
+    if (viewer.role !== RoleOrganizer) {
+      throw new ErrorWithStatus(403, 'role organizer required')
+    }
+
+    const reports: BillingReport[] = []
+    const tenantDB = await connectToTenantDB(viewer.tenantId)
+    try {
+      const competitions = await tenantDB.all<CompetitionRow[]>(
+        'SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC',
+        viewer.tenantId,
+      )
+
+      for (const comp of competitions) {
+        const report = await billingReportByCompetition(tenantDB, viewer.tenantId, comp.id)
+        reports.push(report)
+      }
+    } catch(error) {
+      throw error
+    } finally {
+      tenantDB.close()
+    }
+
+    const data: BillingResult = {
+      reports,
+    }
+
+    res.status(200).json({
+      status: true,
+      data,
+    })
+  } catch (error: any)  {
+    if (error.status) {
+      throw error // rethrow
+    }
+    throw new ErrorWithStatus(500, error.toString())
+  }
 }))
+
+async function competitionsHandler(req: Request, res: Response, viewer: Viewer, tenantDB: Database) {
+  try {
+    const competitions = await tenantDB.all<CompetitionRow[]>(
+      'SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at DESC',
+      viewer.tenantId,
+    )
+
+    const cds: CompetitionDetail[] = []
+    for (const comp of competitions) {
+      cds.push({
+        id: comp.id,
+        title: comp.title,
+        is_finished: !!comp.finished_at,
+      })
+    }
+
+    const data: CompetitionsResult = {
+      competitions: cds,
+    }
+
+    res.status(200).json({
+      status: true,
+      data,
+    })
+  } catch (error: any)  {
+    if (error.status) {
+      throw error // rethrow
+    }
+    throw new ErrorWithStatus(500, error.toString())
+  }
+}
 
 // 主催者向けAPI
 // GET /api/organizer/competitions
 // 大会の一覧を取得する
 app.get('/api/organizer/competitions', wrap(async (req: Request, res: Response) => {
+  try {
+    const viewer = await parseViewer(req)
+    if (viewer.role !== RoleOrganizer) {
+      throw new ErrorWithStatus(403, 'role organizer required')
+    }
+
+    const tenantDB = await connectToTenantDB(viewer.tenantId)
+    try {
+      await competitionsHandler(req, res, viewer, tenantDB)
+    } finally {
+      tenantDB.close()
+    }
+  } catch (error: any)  {
+    if (error.status) {
+      throw error // rethrow
+    }
+    throw new ErrorWithStatus(500, error.toString())
+  }
 }))
 
 // 参加者向けAPI
-// GET /api/player/player/:player_id
+// GET /api/player/player/:playerId
 // 参加者の詳細情報を取得する
 app.get('/api/player/player/:playerId', wrap(async (req: Request, res: Response) => {
+  try {
+    const viewer = await parseViewer(req)
+    if (viewer.role !== RolePlayer) {
+      throw new ErrorWithStatus(403, 'role player required')
+    }
+
+    const tenantDB = await connectToTenantDB(viewer.tenantId)
+    const { playerId } = req.params
+    let pd: PlayerDetail
+    const psds: PlayerScoreDetail[] = []
+    if (!playerId) {
+      throw new ErrorWithStatus(400, 'player_id is required')
+    }
+    try {
+      const result = await authorizePlayer(tenantDB, viewer.playerId)
+      if (!result) {
+        throw new Error('error authorizePlayer failed')
+      }
+      
+      const p = await retrievePlayer(tenantDB, playerId)
+      if (!p) {
+        throw new ErrorWithStatus(404, 'player not found')
+      }
+      pd = {
+        id: p.id,
+        display_name: p.display_name,
+        is_disqualified: !!p.is_disqualified,
+      }
+
+      const competitions = await tenantDB.all<CompetitionRow[]>(
+        'SELECT * FROM competition ORDER BY created_at ASC',
+      )
+
+      const pss: PlayerScoreRow[] = []
+
+      // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+      const unlock = await flockByTenantID(viewer.tenantId)
+      try {
+        for(const comp of competitions) {
+          const ps = await tenantDB.get<PlayerScoreRow>(
+            // 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
+            'SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1',
+            viewer.tenantId, comp.id, p.id,
+          )
+          if (!ps) {
+            // 行がない = スコアが記録されてない
+            continue
+          }
+
+          pss.push(ps)
+        }
+
+        for (const ps of pss) {
+          const comp = await retrieveCompetition(tenantDB, ps.competition_id)
+          if (!comp) {
+            throw new Error('error retrieveCompetition')
+          }
+          psds.push({
+            competition_title: comp?.title,
+            score: ps.score,
+          })
+        }
+      } catch (error) {
+        throw error
+      } finally {
+        unlock()
+      }
+    } finally {
+      tenantDB.close()
+    }
+
+    const data: PlayerResult = {
+      player: pd,
+      scores: psds,
+    }
+
+    res.status(200).json({
+      status: true,
+      data,
+    })
+
+  } catch (error: any)  {
+    if (error.status) {
+      throw error // rethrow
+    }
+    throw new ErrorWithStatus(500, error.toString())
+  }
 }))
 
 // 参加者向けAPI
-// GET /api/player/competition/:competition_id/ranking
+// GET /api/player/competition/:competitionId/ranking
 // 大会ごとのランキングを取得する
 app.get('/api/player/competition/:competitionId/ranking', wrap(async (req: Request, res: Response) => {
+  try {
+    const viewer = await parseViewer(req)
+    if (viewer.role !== RolePlayer) {
+      throw new ErrorWithStatus(403, 'role player required')
+    }
+
+    const tenantDB = await connectToTenantDB(viewer.tenantId)
+    const { competitionId } = req.params
+    let cd: CompetitionDetail
+    const ranks: CompetitionRank[] = []
+    if (!competitionId) {
+      throw new ErrorWithStatus(400, 'competition_id is required')
+    }
+    try {
+      const result = await authorizePlayer(tenantDB, viewer.playerId)
+      if (!result) {
+        throw new Error('error authorizePlayer failed')
+      }
+
+      const competition = await retrieveCompetition(tenantDB, competitionId)
+      if (!competition) {
+        throw new ErrorWithStatus(404, 'competition not found')
+      }
+      cd = {
+        id: competition.id,
+        title: competition.title,
+        is_finished: !!competition.finished_at,
+      }
+
+      const now = Math.floor(new Date().getTime() / 1000)
+      const [[tenant]] = await adminDB.query<(TenantRow & RowDataPacket)[]>(
+        'SELECT * FROM tenant WHERE id = ?',
+        [viewer.tenantId],
+      )
+
+      await adminDB.execute<OkPacket>(
+        'INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+        [viewer.playerId, tenant.id, competitionId, now, now],
+      )
+
+      const { rank_after: rankAfterStr } = req.query
+      let rankAfter: number
+      if (rankAfterStr) {
+        rankAfter = parseInt(rankAfterStr.toString(), 10)
+      }
+
+      // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+      const unlock = await flockByTenantID(tenant.id)
+      try {
+        const pss = await tenantDB.all<PlayerScoreRow[]>(
+          'SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC',
+          tenant.id, competition.id,
+        )
+
+        const scoredPlayerSet: {[player_id: string]: number} = {}
+        const tmpRanks: (CompetitionRank & WithRowNum)[] = []
+        for (const ps of pss) {
+          // player_scoreが同一player_id内ではrow_numの降順でソートされているので
+          // 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
+          if (scoredPlayerSet[ps.player_id]) {
+            continue
+          }
+          scoredPlayerSet[ps.player_id] = 1
+          const p = await retrievePlayer(tenantDB, ps.player_id)
+          if (!p) {
+            throw new Error('error retrievePlayer')
+          }
+
+          tmpRanks.push({
+            rank: 0,
+            score: ps.score,
+            player_id: p.id,
+            player_display_name: p.display_name,
+            row_num: ps.row_num,
+          })
+        }
+
+        tmpRanks.sort((a, b) => {
+          if (a.score == b.score) {
+            return a.row_num < b.row_num ? -1 : 1
+          }
+          return a.score > b.score ? -1 : 1
+        })
+
+        tmpRanks.forEach((rank, index) => {
+          if (index < rankAfter) return
+          if (ranks.length >= 100) return
+          ranks.push({
+            rank: index + 1,
+            score: rank.score,
+            player_id: rank.player_id,
+            player_display_name: rank.player_display_name,
+          })
+        })
+
+
+      } catch (error) {
+
+      } finally {
+        unlock()
+      }
+    } finally {
+      tenantDB.close()
+    }
+
+    const data: CompetitionRankingResult = {
+      competition: cd,
+      ranks,
+    }
+    res.status(200).json({
+      status: true,
+      data,
+    })
+  } catch (error: any)  {
+    if (error.status) {
+      throw error // rethrow
+    }
+    throw new ErrorWithStatus(500, error.toString())
+  }
 }))
 
 // 参加者向けAPI
 // GET /api/player/competitions
 // 大会の一覧を取得する
 app.get('/api/player/competitions', wrap(async (req: Request, res: Response) => {
+  try {
+    const viewer = await parseViewer(req)
+    if (viewer.role !== RolePlayer) {
+      throw new ErrorWithStatus(403, 'role player required')
+    }
+
+    const tenantDB = await connectToTenantDB(viewer.tenantId)
+    try {
+      const result = await authorizePlayer(tenantDB, viewer.playerId)
+      if (!result) {
+        throw new Error('error authorizePlayer failed')
+      }
+
+      await competitionsHandler(req, res, viewer, tenantDB)
+    } catch (error) {
+      throw error
+    } finally {
+      tenantDB.close()
+    }
+  } catch (error: any)  {
+    if (error.status) {
+      throw error // rethrow
+    }
+    throw new ErrorWithStatus(500, error.toString())
+  }
 }))
 
 // 共通API
