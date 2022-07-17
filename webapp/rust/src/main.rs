@@ -263,6 +263,9 @@ async fn parse_viewer(
     };
     // aud contains one tenant name
     let aud = token.claims.aud;
+    if aud.len() != 1{
+        return Err(actix_web::error::ErrorBadRequest("invalid token: aud field is few or too much"));
+    }
     let tenant = retrieve_tenant_row_from_header(pool, request)
         .await
         .unwrap();
@@ -292,13 +295,16 @@ async fn retrieve_tenant_row_from_header(
 ) -> Option<TenantRow> {
     info!("retrieve_tenant_row_from_header now");
     // check if jwt tenant name and host header's tenant name is the same
+    let base_host = get_env("ISUCON_BASE_HOSTNAME", ".t.isucon.dev");
+
+    info!("{:?}",request.headers());
     let tenant_name = request
         .headers()
         .get("Host")
         .unwrap()
         .to_str()
         .unwrap()
-        .trim_start();
+        .trim_end_matches(&base_host);
 
     // SaaS管理者用ドメイン
     if tenant_name == "admin" {
@@ -311,13 +317,13 @@ async fn retrieve_tenant_row_from_header(
         });
     }
 
-    sqlx::query("SELECT * FROM tenants WHERE name = ?")
+    let tenant: TenantRow = sqlx::query_as("SELECT * FROM tenants WHERE name = ?")
         .bind(tenant_name)
         .fetch_one(pool.as_ref())
         .await
         .ok();
 
-    None
+    Some(tenant)
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
