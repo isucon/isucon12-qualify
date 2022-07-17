@@ -122,7 +122,7 @@ def parse_viewer() -> Viewer:
     if not token_str:
         abort(401, f"cookie {COOKIE_NAME} is not found")
 
-    key_filename = os.getenv("ISUCON_JWT_KEY_FILE", "./public.pem")
+    key_filename = os.getenv("ISUCON_JWT_KEY_FILE", "../public.pem")
     key = open(key_filename, "r").read()
 
     tenant = retrieve_tenant_row_from_header()
