@@ -1,4 +1,4 @@
-use actix_web::{web, HttpRequest, HttpResponse};
+use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use jsonwebtoken;
 use lazy_static::lazy_static;
 use nix::fcntl::{flock, open, FlockArg, OFlag};
@@ -128,7 +128,11 @@ pub async fn main() -> std::io::Result<()> {
         let logger = Logger::default();
         let admin_api = web::scope("/admin/tenants")
             .route("/add", web::post().to(tenants_add_handler))
-            .route("/billing", web::get().to(tenants_billing_handler));
+            .route("/billing", web::get().to(tenants_billing_handler))
+            .route("/index1", web::post().to(index1))
+            .route("/index2",web::post().to(index2))
+            .route("/index3", web::post().to(index3))
+            .route("/index4",web::post().to(index4));
         let organizer_api = web::scope("/organizer")
             .route("players", web::get().to(players_list_handler))
             .route("players/add", web::post().to(players_add_handler))
@@ -186,6 +190,29 @@ pub async fn main() -> std::io::Result<()> {
 // エラー処理関数
 // TODO:
 
+// for experiment
+async fn index1(pool: web::Data<sqlx::MySqlPool>,
+    request:HttpRequest,) -> impl Responder {
+    info!("index now, pool and request");
+    HttpResponse::Ok().body("Hello world!")
+}
+
+async fn index2(pool: web::Data<sqlx::MySqlPool>,
+    ) -> impl Responder {
+    info!("index2 now, pool");
+    HttpResponse::Ok().body("Hello world!")
+}
+
+async fn index3(
+    request: HttpRequest,) -> impl Responder {
+    info!("index3 now, request");
+    HttpResponse::Ok().body("Hello world!")
+}
+
+async fn index4() -> impl Responder {
+    info!("index4 now");
+    HttpResponse::Ok().body("Hello world!")
+}
 #[derive(Debug, Serialize)]
 struct SuccessResult<T> {
     status: bool,
@@ -217,7 +244,7 @@ struct Claims {
 // parse request header and return Viewer
 async fn parse_viewer(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: HttpRequest,
 ) -> Result<Viewer, actix_web::Error> {
     info!("parse viewer now");
     let req_jwt = request
@@ -277,7 +304,7 @@ async fn parse_viewer(
 
 async fn retrieve_tenant_row_from_header(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<actix_web::HttpRequest>,
+    request: HttpRequest,
 ) -> Option<TenantRow> {
     info!("retrieve_tenant_row_from_header now");
     // check if jwt tenant name and host header's tenant name is the same
@@ -427,7 +454,7 @@ struct FormInfo {
 // POST /api/admin/tenants/add
 async fn tenants_add_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<actix_web::HttpRequest>,
+    request:HttpRequest,
     form: web::Form<FormInfo>,
 ) -> actix_web::Result<HttpResponse> {
     info!("tenants_add_handler now");
@@ -606,7 +633,7 @@ struct BillingQuery {
 // URL引数beforeを指定した場合, 指定した値よりもidが小さいテナントの課金レポートを取得する
 async fn tenants_billing_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: HttpRequest,
     query: web::Query<BillingQuery>,
     conn: actix_web::dev::ConnectionInfo,
 ) -> actix_web::Result<HttpResponse> {
@@ -692,7 +719,7 @@ struct PlayersListHandlerResult {
 // 参加者一覧を返す
 async fn players_list_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<actix_web::HttpRequest>,
+    request: actix_web::HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
     info!("players list handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
@@ -736,7 +763,7 @@ struct PlayerAddFormQuery {
 // テナントに参加者を追加する
 async fn players_add_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: HttpRequest,
     form_param: web::Form<PlayerAddFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
     info!("players add handler now");
@@ -790,7 +817,7 @@ struct DisqualifiedFormQuery {
 // 参加者を失格にする
 async fn player_disqualified_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: HttpRequest,
     form_param: web::Form<DisqualifiedFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
     info!("player disqualified handler nwo");
@@ -846,7 +873,7 @@ struct CompetitionAddHandlerFormQuery {
 // 大会を追加する
 async fn competitions_add_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: HttpRequest,
     form: web::Form<CompetitionAddHandlerFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
     info!("competitions add handler now");
@@ -892,7 +919,7 @@ struct CompetitionFinishFormQuery {
 // 大会を終了する
 async fn competition_finish_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: HttpRequest,
     form: web::Form<CompetitionFinishFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
     info!("competition finish handler now");
@@ -940,7 +967,7 @@ struct CompetitionScoreHandlerFormQuery {
 // 大会のスコアをCSVでアップロードする
 async fn competition_score_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: HttpRequest,
     form: web::Form<CompetitionScoreHandlerFormQuery>,
     mut payload: Multipart,
 ) -> actix_web::Result<HttpResponse> {
@@ -1065,7 +1092,7 @@ struct BillingHandlerResult {
 // テナント内の課題レポートを取得する
 async fn billing_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
     info!("billing handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
@@ -1116,7 +1143,7 @@ struct PlayerHandlerQueryParam {
 // 参加者の詳細情報を取得する
 async fn player_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: HttpRequest,
     from: web::Query<PlayerHandlerQueryParam>,
 ) -> actix_web::Result<HttpResponse> {
     info!("player handler now");
@@ -1203,7 +1230,7 @@ struct CompetitionRankingHandlerQueryParam {
 // 大会ごとのランキングを取得する
 async fn competition_ranking_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: HttpRequest,
     form: web::Form<CompetitionRankingHandlerQueryParam>,
 ) -> actix_web::Result<HttpResponse> {
     info!("compeititon ranking handler now");
@@ -1318,7 +1345,7 @@ struct CompetitionsHandlerResult {
 // 大会一覧を取得する
 async fn player_competitions_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: HttpRequest,
 ) -> actix_web::Result<actix_web::HttpResponse> {
     info!("player compeititons handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
@@ -1337,7 +1364,7 @@ async fn player_competitions_handler(
 // 大会一覧を取得する
 async fn organizer_competitions_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: HttpRequest,
 ) -> actix_web::Result<actix_web::HttpResponse> {
     info!("organizer competitions handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
@@ -1393,7 +1420,7 @@ struct MeHandlerResult {
 // JWTで認証した結果, テナントやユーザ情報を返す
 async fn me_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request: web::Data<HttpRequest>,
+    request: HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
     info!("me handler now");
     let tenant: TenantRow = retrieve_tenant_row_from_header(pool.clone(), request.clone())
