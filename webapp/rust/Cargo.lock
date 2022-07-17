@@ -975,7 +975,6 @@ dependencies = [
  "lazy_static",
  "log",
  "nix",
- "pem",
  "regex",
  "sanitize-filename",
  "serde",

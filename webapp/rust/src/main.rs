@@ -1,4 +1,4 @@
-use actix_web::{web, HttpRequest, HttpResponse, Responder};
+use actix_web::{web, HttpRequest, HttpResponse};
 use cookie::Cookie;
 use jsonwebtoken;
 use lazy_static::lazy_static;
@@ -317,11 +317,11 @@ async fn retrieve_tenant_row_from_header(
         });
     }
 
-    let tenant: TenantRow = sqlx::query_as("SELECT * FROM tenants WHERE name = ?")
+    let tenant: TenantRow = sqlx::query_as("SELECT * FROM tenant WHERE name = ?")
         .bind(tenant_name)
         .fetch_one(pool.as_ref())
         .await
-        .ok();
+        .unwrap();
 
     Some(tenant)
 }
