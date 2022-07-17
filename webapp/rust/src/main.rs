@@ -471,7 +471,7 @@ async fn tenants_add_handler(
         .as_secs() as i64;
 
     let insert_res = sqlx::query(
-        "INSERT INTO tenants (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+        "INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)",
     )
     .bind(name)
     .bind(display_name)
