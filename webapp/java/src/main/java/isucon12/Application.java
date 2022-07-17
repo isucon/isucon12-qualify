@@ -161,7 +161,7 @@ public class Application {
         String tenantDBPath = this.tenantDBPath(id);
 
         try {
-            Process p = new ProcessBuilder().command("sh", "createTenantDB.sh", tenantDBPath, TENANT_DB_SCHEMA_FILE_PATH).start();
+            Process p = new ProcessBuilder().command("sh", "-c", String.format("sqlite3 %s < %s", tenantDBPath, TENANT_DB_SCHEMA_FILE_PATH)).start();
             int exitCode = p.waitFor();
             if (exitCode != 0) {
                 InputStreamReader inputStreamReader = new InputStreamReader(p.getErrorStream());
@@ -183,7 +183,6 @@ public class Application {
         } catch (SQLException e) {
             logger.warn("failed close connection", e);
         }
-
     }
 
     // システム全体で一意なIDを生成する
@@ -342,9 +341,7 @@ public class Application {
 
     private String getHost(HttpServletRequest req) {
         // return req.getRemoteHost();
-        String host = req.getHeader("host");
-//        logger.info("hostName: " + host);
-        return host;
+        return req.getHeader("host");
     }
 
     // 参加者を取得する
@@ -738,14 +735,20 @@ public class Application {
                 String id = this.dispenseID();
 
                 java.sql.Date now = new java.sql.Date(new Date().getTime());
-                PreparedStatement ps = tenantDb.prepareStatement("INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)");
-                ps.setString(1, id);
-                ps.setLong(2, v.getTenantId());
-                ps.setString(3, displayName);
-                ps.setBoolean(4, false);
-                ps.setDate(5, now);
-                ps.setDate(6, now);
-                ps.execute();
+                try (PreparedStatement ps = tenantDb.prepareStatement("INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")) {
+                    ps.setString(1, id);
+                    ps.setLong(2, v.getTenantId());
+                    ps.setString(3, displayName);
+                    ps.setBoolean(4, false);
+                    ps.setDate(5, now);
+                    ps.setDate(6, now);
+                    ps.executeUpdate();
+                } catch (SQLException e) {
+                    throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR,
+                            String.format("error Insert player at tenantDB: id=%s, tenantId=%d, displayName=%s, isDisqualified=%b, createdAt=%s, updatedAt=%s, ",
+                                    id, v.getTenantId(), displayName, false, now, now),
+                            e);
+                }
 
                 PlayerRow p = this.retrievePlayer(tenantDb, id);
                 pds.add(new PlayerDetail(p.getId(), p.getDisplayName(), p.getIsDisqualified()));
@@ -755,8 +758,6 @@ public class Application {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDb: ", e);
         } catch (DispenseIdException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error dispenseID: ", e);
-        } catch (SQLException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error Insert player at tenantDB: ", e);
         } catch (RetrievePlayerException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrievePlayer: ", e);
         } finally {
@@ -782,7 +783,7 @@ public class Application {
             ps.setBoolean(1, true);
             ps.setDate(2, now);
             ps.setString(3, playerId);
-            ps.execute();
+            ps.executeUpdate();
 
             PlayerRow p = this.retrievePlayer(tenantDb, playerId);
             if (p == null) {
@@ -824,7 +825,7 @@ public class Application {
             ps.setDate(4, null);
             ps.setDate(5, now);
             ps.setDate(6, now);
-            ps.execute();
+            ps.executeUpdate();
 
             return new SuccessResult(true, new CompetitionsAddHandlerResult(new CompetitionDetail(id, title, false)));
         } catch (DatabaseException e) {
@@ -862,6 +863,7 @@ public class Application {
             ps.setDate(1, now);
             ps.setDate(2, now);
             ps.setString(3, id);
+            ps.executeUpdate();
             return new SuccessResult(true, null);
         } catch (DatabaseException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDb: ", e);
@@ -957,7 +959,7 @@ public class Application {
                 ps.setLong(6, psr.getRowNum());
                 ps.setDate(7, new java.sql.Date(psr.getCreatedAt().getTime()));
                 ps.setDate(8, new java.sql.Date(psr.getUpdatedAt().getTime()));
-                ps.execute();
+                ps.executeUpdate();
             }
 
             return new SuccessResult(true, new ScoreHandlerResult((long) playerScoreRows.size()));
@@ -1272,7 +1274,6 @@ public class Application {
         if (!v.getRole().equals(ROLE_PLAYER)) {
             throw new WebException(HttpStatus.FORBIDDEN, "role player required");
         }
-        logger.info("viewer: " + v.toString());
 
         Connection tenantDb = null;
         try {
