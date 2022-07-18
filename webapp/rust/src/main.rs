@@ -88,11 +88,16 @@ async fn dispense_id(pool: web::Data<sqlx::MySqlPool>) -> Result<String, sqlx::E
     info!("dispense id now");
     let mut id: u8 = 0;
     for _ in 1..100 {
-        let ret = sqlx::query("REPLACE INTO id_generator (stub) VALUES (?);")
+        let ret = match sqlx::query("REPLACE INTO id_generator (stub) VALUES (?);")
             .bind("a")
             .execute(pool.as_ref())
-            .await;
-        id = ret.unwrap().last_insert_id().try_into().unwrap();
+            .await{
+                Ok(ret) => ret,
+                _ => break
+            };
+        info!("last_insert_id = {:?}",ret.last_insert_id());
+        id = ret.last_insert_id().try_into().unwrap();
+        break;
     }
 
     if id != 0 {
@@ -368,11 +373,13 @@ struct PlayerRow {
 // 参加者を取得する
 async fn retrieve_player(tenant_db: SqlitePool, id: String) -> Result<PlayerRow, sqlx::Error> {
     info!("retrieve player now");
-    let row: PlayerRow = sqlx::query_as("SELECT * FROM player WHERE id = ?")
+    let row: PlayerRow = match sqlx::query_as("SELECT * FROM player WHERE id = ?")
         .bind(id)
         .fetch_one(&tenant_db)
-        .await
-        .unwrap();
+        .await{
+            Ok(row) => row,
+            _ => return Err(sqlx::Error::RowNotFound),
+        };
     Ok(row)
 }
 
@@ -409,11 +416,13 @@ async fn retrieve_competition(
     id: String,
 ) -> Result<CompetitionRow, sqlx::Error> {
     info!("retrieve competition now");
-    let row: CompetitionRow = sqlx::query_as("SELECT * FROM competition WHERE id = ?")
+    let row: CompetitionRow = match sqlx::query_as("SELECT * FROM competition WHERE id = ?")
         .bind(id)
         .fetch_one(&tenant_db)
-        .await
-        .unwrap();
+        .await{
+            Ok(row) => row,
+            _ => return Err(sqlx::Error::RowNotFound),
+        };
     Ok(row)
 }
 
@@ -576,11 +585,14 @@ async fn billing_report_by_competition(
     info!("billing report by competition now");
     let comp: CompetitionRow = retrieve_competition(tenant_db.clone(), competition_id)
         .await?;
-    let vhs: Vec<VisitHistorySummaryRow> = sqlx::query_as(
+    let vhs: Vec<VisitHistorySummaryRow> = match sqlx::query_as(
         "SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id")
         .bind(tenant_id)
         .bind(comp.id.clone())
-        .fetch_all(&tenant_db).await.unwrap();
+        .fetch_all(&tenant_db).await{
+            Ok(vhs) => vhs,
+            _ => return Err(sqlx::Error::RowNotFound),
+        };
 
     let mut billing_map: HashMap<String, String> = HashMap::new();
     for vh in vhs {
