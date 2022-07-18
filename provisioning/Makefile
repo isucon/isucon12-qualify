@@ -9,7 +9,7 @@ blackauth:
 	cd ../blackauth && GOOS=linux GOARCH=amd64 go build -o ../provisioning/blackauth .
 
 clean:
-	rm -rf isucon-env-checker/isucon-env-checker isucon-admin mitamae.tar.gz isucon12-qualify* blackauth
+	rm -rf isucon-env-checker/isucon-env-checker isucon-admin mitamae.tar.gz isucon12-qualify* blackauth initial_data.tar.gz
 
 isucon-admin: isucon-admin.encrypted
 	sops -d isucon-admin.encrypted > isucon-admin.tmp
