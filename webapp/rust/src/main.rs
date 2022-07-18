@@ -221,7 +221,6 @@ struct Viewer {
 
 #[derive(Debug, Deserialize)]
 struct Claims {
-    iss: String,
     sub: String,
     aud: Vec<String>,
     role: String,
@@ -790,11 +789,7 @@ struct PlayersAddHandlerResult {
     players: Vec<PlayerDetail>,
 }
 
-#[derive(Debug, serde_derive::Deserialize)]
-struct PlayerAddFormQuery {
-    #[serde(rename = "display_name[]")]
-    display_name: HashSet<String>,
-}
+
 
 // テナント管理者向けAPI
 // GET /api/organizer/players/add
@@ -802,7 +797,7 @@ struct PlayerAddFormQuery {
 async fn players_add_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
-    form_param: web::Form<PlayerAddFormQuery>,
+    form_param: web::Form<Vec<(String, String)>>,
 ) -> actix_web::Result<HttpResponse> {
     info!("players add handler now");
     let v: Viewer = parse_viewer(pool.clone(), request)
@@ -812,7 +807,11 @@ async fn players_add_handler(
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
-    let display_names = form_param.display_name.clone();
+    let display_names: std::collections::HashSet<String> = form_param
+    .into_inner()
+    .into_iter()
+    .filter_map(|(key, val)| (key == "display_name[]").then(val))
+    .collect();
     let mut pds = Vec::<PlayerDetail>::new();
     for display_name in display_names {
         let id = dispense_id(pool.clone()).await.unwrap();
@@ -1510,8 +1509,14 @@ async fn me_handler(
     request: HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
     info!("me handler now");
-    let tenant: TenantRow = retrieve_tenant_row_from_header(pool.clone(), request.clone())
-        .await?;
+    let tenant: TenantRow =  match retrieve_tenant_row_from_header(pool.clone(), request.clone())
+        .await{
+            Ok(t) => t,
+            _ => {
+                info!("{:?}",request);
+                panic!("retrieve_tenant_row_from_header")
+            }
+        };
     let td = TenantDetail {
         name: tenant.name,
         display_name: tenant.display_name,
