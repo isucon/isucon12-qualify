@@ -12,7 +12,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::mysql::MySqlConnectOptions;
 use sqlx::{Sqlite, SqlitePool};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::result::Result;
@@ -781,7 +781,7 @@ struct PlayersAddHandlerResult {
 #[derive(Debug, serde_derive::Deserialize)]
 struct PlayerAddFormQuery {
     #[serde(rename = "display_name[]")]
-    display_name: Vec<String>,
+    display_name: HashSet<String>,
 }
 
 // テナント管理者向けAPI
