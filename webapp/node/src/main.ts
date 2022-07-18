@@ -706,7 +706,7 @@ app.get('/api/organizer/players', wrap(async (req: Request, res: Response) => {
       })
 
     } catch (error) {
-      throw new Error(`error Select player: ${error}`)
+      throw new Error(`error Select player on /api/organizer/players: ${error}`)
     } finally {
       tenantDB.close()
     }
@@ -822,7 +822,7 @@ app.post('/api/organizer/player/:playerId/disqualified', wrap(async (req: Reques
       if (error.status) {
         throw error // rethrow
       }
-      throw new Error(`error Select player: ${error}`) // TODO
+      throw error
     } finally {
       tenantDB.close()
     }
@@ -859,18 +859,12 @@ app.post('/api/organizer/competitions/add', wrap(async (req: Request, res: Respo
     const now = Math.floor(new Date().getTime() / 1000) 
     const id = await dispenseID()
     try {
-      try {
-        await tenantDB.run(
-          'INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-          id, viewer.tenantId, title, null, now, now,
-        )
-      } catch (error) {
-        throw new Error(`error Insert competition: id=${id}, tenant_id=${viewer.tenantId}, title=${title}, finishedAt=null, createdAt=${now}, updatedAt=${now}, ${error}`)
-      }
-
-
+      await tenantDB.run(
+        'INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+        id, viewer.tenantId, title, null, now, now,
+      )
     } catch (error) {
-      throw new Error(`error Select player: ${error}`)
+      throw new Error(`error Insert competition: id=${id}, tenant_id=${viewer.tenantId}, title=${title}, finishedAt=null, createdAt=${now}, updatedAt=${now}, ${error}`)
     } finally {
       tenantDB.close()
     }
