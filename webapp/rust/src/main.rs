@@ -49,7 +49,7 @@ fn get_env(key: &str, default: &str) -> String {
 // テナントDBのパスを返す
 fn tenant_db_path(id: i64) -> PathBuf {
     info!("tenant_db_path now");
-    let tenant_db_dir = get_env("ISUCON_TENANT_DB_DIR", " /home/isucon/webapp/tenant_db");
+    let tenant_db_dir = get_env("ISUCON_TENANT_DB_DIR", "/home/isucon/webapp/tenant_db");
     return Path::new(&tenant_db_dir).join(format!("{}.db", id));
 }
 
@@ -58,9 +58,10 @@ async fn connect_to_tenant_db(id: i64) -> sqlx::Result<SqlitePool> {
     info!("connect to tenant db now: id = {:?}",id);
     let p = tenant_db_path(id);
 
-    let uri = format!("sqlite:{}?mode=rw", p.to_str().unwrap());
+    let uri = format!("{}", p.to_str().unwrap());
     info!("tenant db uri = {:?}",uri);
     let pool = SqlitePool::connect_with(SqliteConnectOptions::new().filename(uri).create_if_missing(true)).await?;
+    info!("created db file now");
     Ok(pool)
     // TODO: sqliteDriverNameを使ってないのをなおす
 }
@@ -815,8 +816,11 @@ async fn players_add_handler(
         .filter_map(|(key, val)| (key == "display_name[]").then(|| val))
         .collect();
     let mut pds = Vec::<PlayerDetail>::new();
+    info!("{:?}",display_names);
+
     for display_name in display_names {
         let id = dispense_id(pool.clone()).await.unwrap();
+        info!("dispense_id = {}",id);
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -830,6 +834,7 @@ async fn players_add_handler(
             .bind(now)
             .execute( &tenant_db)
             .await.unwrap();
+        
         let p = retrieve_player(tenant_db.clone(), id).await.unwrap();
         pds.push(PlayerDetail {
             id: p.id,
