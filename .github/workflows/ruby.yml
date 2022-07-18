@@ -46,3 +46,7 @@ jobs:
         working-directory: ./development
         run: |
           make run-bench-ci
+
+      - name: Show webapp logs
+        working-directory: ./development
+        run: docker compose -f docker-compose-ruby.yml logs webapp
