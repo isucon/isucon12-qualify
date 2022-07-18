@@ -291,8 +291,8 @@ async fn parse_viewer(
         ));
     }
     let tenant = match retrieve_tenant_row_from_header(pool, request).await {
-        Some(tenant) => tenant,
-        None => return Err(actix_web::error::ErrorUnauthorized("tenant not found")),
+        Ok(tenant) => tenant,
+        _ => return Err(actix_web::error::ErrorUnauthorized("tenant not found")),
     };
 
     if tenant.name == "admin" && role != ROLE_ADMIN {
@@ -317,7 +317,7 @@ async fn parse_viewer(
 async fn retrieve_tenant_row_from_header(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
-) -> Option<TenantRow> {
+) -> Result<TenantRow,sqlx::Error> {
     info!("retrieve_tenant_row_from_header now");
     // check if jwt tenant name and host header's tenant name is the same
     let base_host = get_env("ISUCON_BASE_HOSTNAME", ".t.isucon.dev");
@@ -333,7 +333,7 @@ async fn retrieve_tenant_row_from_header(
 
     // SaaS管理者用ドメイン
     if tenant_name == "admin" {
-        return Some(TenantRow {
+        return Ok(TenantRow {
             name: "admin".to_string(),
             display_name: "admin".to_string(),
             id: 0,
@@ -342,13 +342,13 @@ async fn retrieve_tenant_row_from_header(
         });
     }
 
-    let tenant: TenantRow = sqlx::query_as("SELECT * FROM tenant WHERE name = ?")
+    match sqlx::query_as("SELECT * FROM tenant WHERE name = ?")
         .bind(tenant_name)
         .fetch_one(pool.as_ref())
-        .await
-        .unwrap();
-
-    Some(tenant)
+        .await{
+            Ok(tenant) => Ok(tenant),
+            _ => Err(sqlx::Error::RowNotFound),
+        }
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -1441,8 +1441,7 @@ async fn player_competitions_handler(
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db now");
     authorize_player(tenant_db.clone(), v.player_id.clone())
-        .await
-        .unwrap();
+        .await?;
     return competitions_handler(Some(v), tenant_db.clone()).await;
 }
 
@@ -1512,8 +1511,7 @@ async fn me_handler(
 ) -> actix_web::Result<HttpResponse> {
     info!("me handler now");
     let tenant: TenantRow = retrieve_tenant_row_from_header(pool.clone(), request.clone())
-        .await
-        .unwrap();
+        .await?;
     let td = TenantDetail {
         name: tenant.name,
         display_name: tenant.display_name,
