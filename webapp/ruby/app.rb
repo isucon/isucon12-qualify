@@ -155,7 +155,7 @@ module Isuports
           raise HttpError.new(401, "cookie #{COOKIE_NAME} is not found")
         end
 
-        key_filename = ENV.fetch('ISUCON_JWT_KEY_FILE', './public.pem')
+        key_filename = ENV.fetch('ISUCON_JWT_KEY_FILE', '../public.pem')
         key_src = File.read(key_filename)
         key = OpenSSL::PKey::RSA.new(key_src)
         token, _ = JWT.decode(token_str, key, true, { algorithm: 'RS256' })
