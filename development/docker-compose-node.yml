@@ -18,11 +18,11 @@ services:
       - mysql
     volumes:
       - ../webapp:/home/isucon/webapp
-      - tenant_db:/home/isucon/webapp/tenant_db
+      - tenant_db_node:/home/isucon/webapp/tenant_db
       - initial_data:/home/isucon/initial_data
     init: true
     restart: always
 
 volumes:
-  tenant_db:
+  tenant_db_node:
   initial_data:
