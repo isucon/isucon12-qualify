@@ -11,6 +11,7 @@ use nix::sys::stat::Mode;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::mysql::MySqlConnectOptions;
+use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::{Sqlite, SqlitePool};
 use std::collections::{HashMap};
 use std::fs;
@@ -56,8 +57,10 @@ fn tenant_db_path(id: i64) -> PathBuf {
 async fn connect_to_tenant_db(id: i64) -> sqlx::Result<SqlitePool> {
     info!("connect to tenant db now: id = {:?}",id);
     let p = tenant_db_path(id);
+
     let uri = format!("file:{}?mode=rw", p.to_str().unwrap());
-    let pool = SqlitePool::connect(&uri).await.unwrap();
+    info!("tenant db uri = {:?}",uri);
+    let pool = SqlitePool::connect_with(SqliteConnectOptions::new().filename(uri).create_if_missing(true)).await?;
     Ok(pool)
     // TODO: sqliteDriverNameを使ってないのをなおす
 }
