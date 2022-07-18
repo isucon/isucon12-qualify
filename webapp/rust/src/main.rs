@@ -810,7 +810,7 @@ async fn players_add_handler(
     let display_names: std::collections::HashSet<String> = form_param
     .into_inner()
     .into_iter()
-    .filter_map(|(key, val)| (key == "display_name[]").then(val))
+    .filter_map(|(key, val)| (key == "display_name[]").then(|| val))
     .collect();
     let mut pds = Vec::<PlayerDetail>::new();
     for display_name in display_names {
