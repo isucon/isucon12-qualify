@@ -21,9 +21,6 @@ ci: bench
 ci-with-comment: ci
 	./pr-comment ci.log
 
-ci-loadtype-light: bench
-	./bench -target-url https://t.isucon.dev -load-type light -strict-prepare=false
-
 .PHONY: clean image push
 clean:
 	rm -f bench benchmarker*.json ../initial_data.tar.gz

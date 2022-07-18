@@ -56,7 +56,7 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	rangeStart := ConstAdminBillingValidateScenarioIDRange[0] + 10
 	rangeEnd := ConstAdminBillingValidateScenarioIDRange[1] + 1
 	index := randomRange([]int{rangeStart, rangeEnd})
-	billingBeforeTenantID := fmt.Sprintf("%d", sc.InitialDataTenant[int64(index)].TenantID)
+	billingBeforeTenantID := fmt.Sprintf("%d", sc.InitialDataTenant[index].TenantID)
 
 	// 最初の状態のBilling
 	var billingResultTenants []isuports.TenantWithBilling
@@ -88,12 +88,13 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 	}
 
 	conf := &OrganizerJobConfig{
-		orgAc:         orgAc,
-		scTag:         scTag,
-		tenantName:    targetTenant,
-		scoreRepeat:   1,
-		scoreInterval: 0,
-		addScoreNum:   0,
+		orgAc:           orgAc,
+		scTag:           scTag,
+		tenantName:      targetTenant,
+		scoreRepeat:     1,
+		scoreInterval:   0,
+		addScoreNum:     0,
+		playerWorkerNum: 10,
 	}
 	jobResult, err := sc.OrganizerJob(ctx, step, conf)
 	if err != nil {
