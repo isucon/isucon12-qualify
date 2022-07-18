@@ -80,7 +80,6 @@ async function createTenantDB(id: number): Promise<Error | undefined> {
   try {
     await exec(`sh -c "sqlite3 ${p} < ${tenantDBSchemaFilePath}"`)
   } catch (error: any) {
-    console.log
     return new Error(`failed to exec "sqlite3 ${p} < ${tenantDBSchemaFilePath}", out=${error.stderr}`)
   }
 }
@@ -108,7 +107,7 @@ async function dispenseID(): Promise<string> {
     return id.toString(16)
   }
 
-  throw new Error('error REPLACE INTO id_generator: ${lastErr.toString()}')
+  throw new Error(`error REPLACE INTO id_generator: ${lastErr.toString()}`)
 }
 
 // カスタムエラーハンドラにステータスコード拾ってもらうエラー型
@@ -166,6 +165,14 @@ type WithRowNum = {
   row_num: number
 }
 
+// アクセスしてきた人の情報
+type Viewer = {
+  role: string
+  playerId: string
+  tenantName: string
+  tenantId: number
+}
+
 // レスポンス型定義
 type TenantsAddResult = {
   tenant: TenantWithBilling
@@ -206,8 +213,6 @@ type CompetitionRankingResult = {
   competition: CompetitionDetail
   ranks: CompetitionRank[]
 }
-
-
 
 // DB型定義
 interface TenantRow {
@@ -262,14 +267,6 @@ const upload = multer()
 
 //@ts-ignore see: https://expressjs.com/en/advanced/best-practice-performance.html#handle-exceptions-properly
 const wrap = fn => (...args) => fn(...args).catch(args[2])
-
-// アクセスしてきた人の情報
-type Viewer = {
-  role: string
-  playerId: string
-  tenantName: string
-  tenantId: number
-}
 
 // リクエストヘッダをパースしてViewerを返す
 async function parseViewer(req: Request): Promise<Viewer> {
@@ -364,15 +361,15 @@ async function retrieveTenantRowFromHeader(req: Request): Promise<TenantRow | un
   }
 
   // テナントの存在確認
-  const [[tenant]] = await adminDB.query<(TenantRow & RowDataPacket)[]>(
-    'SELECT * FROM tenant WHERE name = ?',
-    [tenantName]
-  )
-  if (!tenant) {
-    return // no row
+  try {
+    const [[tenantRow]] = await adminDB.query<(TenantRow & RowDataPacket)[]>(
+      'SELECT * FROM tenant WHERE name = ?',
+      [tenantName]
+    )
+    return tenantRow
+  } catch (error) {
+    throw new Error(`failed to Select tenant: name=${tenantName}, ${error}`)
   }
-
-  return tenant
 }
 
 // 参加者を取得する
@@ -382,9 +379,6 @@ async function retrievePlayer(tenantDB: Database, id: string): Promise<PlayerRow
       'SELECT * FROM player WHERE id = ?',
       id,
     )
-    if (!playerRow) {
-      return
-    }
     return playerRow
   } catch(error) {
     throw new Error(`error Select player: id=${id}, ${error}`)
@@ -393,7 +387,7 @@ async function retrievePlayer(tenantDB: Database, id: string): Promise<PlayerRow
 
 // 参加者を認可する
 // 参加者向けAPIで呼ばれる
-async function authorizePlayer(tenantDB: Database, id: string): Promise<boolean> {
+async function authorizePlayer(tenantDB: Database, id: string): Promise<Error | undefined> {
   try {
     const player = await retrievePlayer(tenantDB, id)
     if (!player) {
@@ -402,25 +396,23 @@ async function authorizePlayer(tenantDB: Database, id: string): Promise<boolean>
     if (player.is_disqualified) {
       throw new ErrorWithStatus(403, 'player is disqualified')
     }
-  } catch (error: any) {
-    if (error.status) {
-      throw error
-    }
-    return false
+    return
+  } catch (error) {
+    return error as Error
   }
-  return true
 }
 
 // 大会を取得する
 async function retrieveCompetition(tenantDB: Database, id: string): Promise<CompetitionRow | undefined> {
-  const competitionRow = await tenantDB.get<CompetitionRow>(
-    'SELECT * FROM competition WHERE id = ?',
-    id,
-  )
-  if (!competitionRow) {
-    return
+  try {
+    const competitionRow = await tenantDB.get<CompetitionRow>(
+      'SELECT * FROM competition WHERE id = ?',
+      id,
+    )
+    return competitionRow
+  } catch (error) {
+    throw new Error(`error Select competition: id=${id}, ${error}`)
   }
-  return competitionRow
 }
 
 // 排他ロックのためのファイル名を生成する
@@ -506,7 +498,6 @@ app.post('/api/admin/tenants/add', wrap(async (req: Request, res: Response) => {
         billing: 0,
       }
     }
-
     res.status(200).json({
       status: true,
       data,
@@ -540,7 +531,7 @@ async function billingReportByCompetition(tenantDB: Database, tenantId: number, 
     [tenantId, comp.id],
   )
 
-  const billingMap: {[playerId: string]: string} = {}
+  const billingMap: {[playerId: string]: 'player' | 'visitor'} = {}
   for (const vh of vhs) {
     // competition.finished_atよりもあとの場合は、終了後に訪問したとみなして大会開催内アクセス済みとみなさない
     if (comp.finished_at !== null && comp.finished_at < vh.min_created_at) {
@@ -589,7 +580,6 @@ async function billingReportByCompetition(tenantDB: Database, tenantId: number, 
       billing_visitor_yen: 10 * counts.visitor, 
       billing_yen: 100 * counts.player + 10 * counts.visitor,
     }
-  
   } catch (error: any) {
     throw new Error(`error Select count player_score: tenantId=${tenantId}, competitionId=${comp.id}, ${error.toString()}`)
   } finally {
@@ -724,7 +714,6 @@ app.get('/api/organizer/players', wrap(async (req: Request, res: Response) => {
     const data: PlayersListResult = {
       players: pds,
     }
-
     res.status(200).json({
       status: true,
       data,
@@ -829,12 +818,11 @@ app.post('/api/organizer/player/:playerId/disqualified', wrap(async (req: Reques
         display_name: player.display_name,
         is_disqualified: !!player.is_disqualified,
       }
-
     } catch (error: any) {
       if (error.status) {
         throw error // rethrow
       }
-      throw new Error(`error Select player: ${error}`)
+      throw new Error(`error Select player: ${error}`) // TODO
     } finally {
       tenantDB.close()
     }
@@ -842,7 +830,6 @@ app.post('/api/organizer/player/:playerId/disqualified', wrap(async (req: Reques
     const data: PlayerDisqualifiedResult = {
       player: pd,
     }
-
     res.status(200).json({
       status: true,
       data,
@@ -1062,12 +1049,10 @@ app.post('/api/organizer/competition/:competitionId/score', upload.single('score
           )
         }
       } catch (error) {
-        console.error(error)
         throw error
       } finally {
         unlock()
       }
-
 
     } catch (error: any) {
       if (error.status) {
@@ -1076,13 +1061,11 @@ app.post('/api/organizer/competition/:competitionId/score', upload.single('score
       throw error
     } finally {
       tenantDB.close()
-      
     }
 
     const data: ScoreResult = {
       rows: playerScoreRows.length,
     }
-
 
     res.status(200).json({
       status: true,
@@ -1127,7 +1110,6 @@ app.get('/api/organizer/billing', wrap(async (req: Request, res: Response) => {
     const data: BillingResult = {
       reports,
     }
-
     res.status(200).json({
       status: true,
       data,
@@ -1159,7 +1141,6 @@ async function competitionsHandler(req: Request, res: Response, viewer: Viewer, 
     const data: CompetitionsResult = {
       competitions: cds,
     }
-
     res.status(200).json({
       status: true,
       data,
@@ -1214,9 +1195,9 @@ app.get('/api/player/player/:playerId', wrap(async (req: Request, res: Response)
       throw new ErrorWithStatus(400, 'player_id is required')
     }
     try {
-      const result = await authorizePlayer(tenantDB, viewer.playerId)
-      if (!result) {
-        throw new Error('error authorizePlayer failed')
+      const error = await authorizePlayer(tenantDB, viewer.playerId)
+      if (error) {
+        throw error
       }
       
       const p = await retrievePlayer(tenantDB, playerId)
@@ -1275,12 +1256,10 @@ app.get('/api/player/player/:playerId', wrap(async (req: Request, res: Response)
       player: pd,
       scores: psds,
     }
-
     res.status(200).json({
       status: true,
       data,
     })
-
   } catch (error: any)  {
     if (error.status) {
       throw error // rethrow
@@ -1307,9 +1286,9 @@ app.get('/api/player/competition/:competitionId/ranking', wrap(async (req: Reque
       throw new ErrorWithStatus(400, 'competition_id is required')
     }
     try {
-      const result = await authorizePlayer(tenantDB, viewer.playerId)
-      if (!result) {
-        throw new Error('error authorizePlayer failed')
+      const error = await authorizePlayer(tenantDB, viewer.playerId)
+      if (error) {
+        throw error
       }
 
       const competition = await retrieveCompetition(tenantDB, competitionId)
@@ -1426,9 +1405,9 @@ app.get('/api/player/competitions', wrap(async (req: Request, res: Response) => 
 
     const tenantDB = await connectToTenantDB(viewer.tenantId)
     try {
-      const result = await authorizePlayer(tenantDB, viewer.playerId)
-      if (!result) {
-        throw new Error('error authorizePlayer failed')
+      const error = await authorizePlayer(tenantDB, viewer.playerId)
+      if (error) {
+        throw error
       }
 
       await competitionsHandler(req, res, viewer, tenantDB)
@@ -1482,4 +1461,3 @@ app.use((err: ErrorWithStatus, req: Request, res: Response, next: NextFunction) 
 const port = getEnv('SERVER_APP_PORT', '3000')
 console.log('starting isuports server on :' + port + ' ...')
 app.listen(port)
-
