@@ -407,7 +407,8 @@ async fn retrieve_tenant_row_from_header(
             updated_at: 0,
         });
     }
-
+    info!("tenant name = {}",tenant_name);
+    // テナントの存在確認
     match sqlx::query_as("SELECT * FROM tenant WHERE name = ?")
         .bind(tenant_name)
         .fetch_one(pool.as_ref())
@@ -593,7 +594,7 @@ async fn tenants_add_handler(
     .await
     {
         Ok(insert_res) => insert_res,
-        // TODO: duplicate entry  error handling
+        // TODO: duplicate entry  error handling ここを変えないと, duplication がOKになっちゃう
         _ => return Err(MyError{
             status: 400,
             message: "duplicate tenant".to_string()
@@ -765,6 +766,7 @@ async fn tenants_billing_handler(
         });
     };
     let before = &query.before;
+    info!("before = {}",before);
     let mut before_id = 0;
     if !before.is_empty() {
         before_id = if let Ok(id) = before.parse::<i64>() {
@@ -791,6 +793,7 @@ async fn tenants_billing_handler(
     let mut tenant_billings = Vec::<TenantWithBilling>::new();
 
     for t in ts {
+        info!("tenantRow = {:?}",t);
         if before_id != 0 && before_id <= t.id {
             continue;
         }
@@ -802,11 +805,15 @@ async fn tenants_billing_handler(
         };
         let tenant_db = connect_to_tenant_db(t.id).await.unwrap();
 
-        let cs: Vec<CompetitionRow> = sqlx::query_as("SELECT * FROM competition WHERE tenant_id=?")
+        let cs: Vec<CompetitionRow> = match sqlx::query_as("SELECT * FROM competition WHERE tenant_id=?")
             .bind(t.id)
             .fetch_all(&tenant_db)
-            .await
-            .unwrap();
+            .await{
+                Ok(cs) => cs,
+                Err(_e) => {
+                    Vec::<CompetitionRow>::new()
+                }
+            };
         for comp in cs {
             let report = billing_report_by_competition(tenant_db.clone(), t.id, comp.id)
                 .await
@@ -954,7 +961,7 @@ struct DisqualifiedFormQuery {
 async fn player_disqualified_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
-    form_param: web::Form<DisqualifiedFormQuery>,
+    form_param: web::Query<DisqualifiedFormQuery>,
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("player disqualified handler nwo");
     let v: Viewer = parse_viewer(pool.clone(), request).await?;
