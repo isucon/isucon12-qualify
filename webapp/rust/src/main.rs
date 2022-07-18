@@ -944,7 +944,9 @@ async fn competitions_add_handler(
         .unwrap()
         .as_secs() as i64;
     let id = dispense_id(pool.clone()).await.unwrap();
-    sqlx::query::<Sqlite>("INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?")
+    info!("competition data: id={}, tenant_id={}, titile = {}, now={}",id.clone(), v.tenant_id,title.clone(),now);
+
+    sqlx::query::<Sqlite>("INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(id.clone())
     .bind(v.tenant_id)
     .bind(title.clone())
@@ -953,6 +955,7 @@ async fn competitions_add_handler(
     .bind(now)
     .execute( &tenant_db)
     .await.unwrap();
+
     let res = CompetitionsAddHandlerResult {
         competition: CompetitionDetail {
             id,
