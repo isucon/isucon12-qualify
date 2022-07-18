@@ -1,26 +1,24 @@
+use actix_multipart::Multipart;
+use actix_web::middleware::Logger;
 use actix_web::{web, HttpRequest, HttpResponse};
 use cookie::Cookie;
+use futures_util::stream::StreamExt as _;
 use jsonwebtoken;
 use lazy_static::lazy_static;
+use log::info;
 use nix::fcntl::{flock, open, FlockArg, OFlag};
 use nix::sys::stat::Mode;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::mysql::MySqlConnectOptions;
 use sqlx::{Sqlite, SqlitePool};
-use tokio::io::AsyncWriteExt;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::result::Result;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use actix_multipart::Multipart;
-use futures_util::stream::StreamExt as _;
-use log::info;
-use actix_web::middleware::Logger;
-
-
+use tokio::io::AsyncWriteExt;
 
 const TENANT_DB_SCHEMA_FILE_PATH: &str = "../sql/tenant/10_schema.sql";
 const INITIALIZE_SCRIPT: &str = "../sql/init.sh";
@@ -76,7 +74,13 @@ async fn create_tenant_db(id: i64) {
         ))
         .output()
         .await
-        .unwrap_or_else(|_| panic!("failed to exec sqlite3 {} < {}",p.to_str().unwrap(),TENANT_DB_SCHEMA_FILE_PATH));
+        .unwrap_or_else(|_| {
+            panic!(
+                "failed to exec sqlite3 {} < {}",
+                p.to_str().unwrap(),
+                TENANT_DB_SCHEMA_FILE_PATH
+            )
+        });
 }
 
 // システム全体で一意なIDを生成する
@@ -100,10 +104,8 @@ async fn dispense_id(pool: web::Data<sqlx::MySqlPool>) -> Result<String, sqlx::E
 
 #[actix_web::main]
 pub async fn main() -> std::io::Result<()> {
-
     std::env::set_var("RUST_LOG", "info");
     env_logger::init();
-
 
     // sqliteのクエリログを出力する設定
     // 環境変数 ISUCON_SQLITE_TRACE_FILEを設定すると, そのファイルにクエリログをJSON形式で出力する
@@ -116,7 +118,11 @@ pub async fn main() -> std::io::Result<()> {
         .username(&get_env("ISUCON_DB_USER", "isucon"))
         .password(&get_env("ISUCON_DB_PASSWORD", "isucon"))
         .database(&get_env("ISUCON_DB_NAME", "isuports"))
-        .port(get_env("ISUCON_DB_PORT", "3306").parse::<u16>().expect("failed to parse port number"));
+        .port(
+            get_env("ISUCON_DB_PORT", "3306")
+                .parse::<u16>()
+                .expect("failed to parse port number"),
+        );
     info!("mysql config are set");
     let pool = sqlx::mysql::MySqlPoolOptions::new()
         .max_connections(10)
@@ -178,7 +184,8 @@ pub async fn main() -> std::io::Result<()> {
                 .ok()
                 .and_then(|port_str| port_str.parse().ok())
                 .unwrap_or(3000),
-        )).expect("failed to start server")
+        ))
+        .expect("failed to start server")
         .run()
         .await
 }
@@ -207,7 +214,7 @@ struct Viewer {
     tenant_id: i64,
 }
 
-#[derive(Debug,  Deserialize)]
+#[derive(Debug, Deserialize)]
 struct Claims {
     iss: String,
     sub: String,
@@ -229,7 +236,7 @@ async fn parse_viewer(
 
     let c = Cookie::parse(cookie).unwrap();
     let req_jwt = c.value();
-    info!("{:?}",req_jwt);
+    info!("{:?}", req_jwt);
     let key_file_name = get_env("ISUCON_JWT_KEY_FILE", "./public.pem");
     let key_src = fs::read_to_string(key_file_name).expect("Something went wrong reading the file");
 
@@ -241,46 +248,57 @@ async fn parse_viewer(
         &jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256),
     ) {
         Ok(token) => token,
-        Err(e) => {
-            if matches!(e.kind(), jsonwebtoken::errors::ErrorKind::Json(_)) {
-                info!("{:?}",e.kind());
-                return Err(actix_web::error::ErrorBadRequest("invalid JWT payload"));
-            } else if matches!(e.kind(), jsonwebtoken::errors::ErrorKind::ExpiredSignature){
-                info!("{:?}",e.kind());
-                return Err(actix_web::error::ErrorUnauthorized(
-                    "JWT expired or not signed with the correct key",
-                ));
-            }else{
-                return Err(actix_web::error::ErrorForbidden("forbidden"));
-            }
+        Err(e) if e.kind().to_owned() == jsonwebtoken::errors::ErrorKind::InvalidToken => {
+            return Err(actix_web::error::ErrorUnauthorized("failed to parse token"))
+        }
+        Err(e) if e.kind().to_owned() == jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
+            info!("{:?}", e.kind());
+            return Err(actix_web::error::ErrorUnauthorized(
+                "JWT expired or not signed with the correct key",
+            ));
+        }
+        _ => {
+            panic!("failed to parse token");
         }
     };
-    info!("{:?}",token);
+    if token.claims.sub.is_empty() {
+        return Err(actix_web::error::ErrorUnauthorized(
+            "invalid token: subject is not found in token",
+        ));
+    }
+    info!("{:?}", token);
     let tr = token.claims.role;
     info!("{:?}", tr);
     let role = match tr.as_str() {
         ROLE_ADMIN => tr.to_string(),
         ROLE_ORGANIZER => tr.to_string(),
         ROLE_PLAYER => tr.to_string(),
-        _ => return Err(actix_web::error::ErrorForbidden("forbidden")),
+        _ => {
+            return Err(actix_web::error::ErrorUnauthorized(
+                "invalid token: role is not found or invalid role",
+            ))
+        }
     };
     // aud contains one tenant name
     let aud = token.claims.aud;
-    if aud.len() != 1{
-        return Err(actix_web::error::ErrorBadRequest("invalid token: aud field is few or too much"));
+    if aud.len() != 1 {
+        return Err(actix_web::error::ErrorUnauthorized(
+            "invalid token: aud field is few or too much",
+        ));
     }
-    let tenant = retrieve_tenant_row_from_header(pool, request)
-        .await
-        .unwrap();
+    let tenant = match retrieve_tenant_row_from_header(pool, request).await {
+        Some(tenant) => tenant,
+        None => return Err(actix_web::error::ErrorUnauthorized("tenant not found")),
+    };
 
     if tenant.name == "admin" && role != ROLE_ADMIN {
-        info!("invalid role");
-        panic!("invalid role");
+        return Err(actix_web::error::ErrorUnauthorized("tenant not found"));
     }
 
     if tenant.name != aud[0] {
-        info!("invalid audience");
-        panic!("invalid audience");
+        return Err(actix_web::error::ErrorUnauthorized(
+            "invalid token: tenant name is not match ",
+        ));
     }
 
     let viewer = Viewer {
@@ -300,7 +318,7 @@ async fn retrieve_tenant_row_from_header(
     // check if jwt tenant name and host header's tenant name is the same
     let base_host = get_env("ISUCON_BASE_HOSTNAME", ".t.isucon.dev");
 
-    info!("{:?}",request.headers());
+    info!("{:?}", request.headers());
     let tenant_name = request
         .headers()
         .get("Host")
@@ -363,7 +381,13 @@ async fn retrieve_player(tenant_db: SqlitePool, id: String) -> Result<PlayerRow,
 // 参加者向けAPIで呼ばれる
 async fn authorize_player(tenant_db: SqlitePool, id: String) -> Result<(), actix_web::Error> {
     info!("authorize player now");
-    let player = retrieve_player(tenant_db, id).await.unwrap();
+    let player = match retrieve_player(tenant_db, id).await {
+        Ok(player) => player,
+        Err(sqlx::Error::RowNotFound) => {
+            return Err(actix_web::error::ErrorUnauthorized("player not found"));
+        }
+        _ => panic!("error retrieve_tenant_row_from_header at parse_viewer"),
+    };
     if player.is_disqualified {
         return Err(actix_web::error::ErrorForbidden("player is disqualified"));
     }
@@ -431,7 +455,6 @@ fn flock_by_tenant_id(tenant_id: i64) -> Result<i32, ()> {
     }
 }
 
-
 #[derive(Serialize)]
 struct TenantsAddHandlerResult {
     tenant: TenantWithBilling,
@@ -447,18 +470,18 @@ struct FormInfo {
 // POST /api/admin/tenants/add
 async fn tenants_add_handler(
     pool: web::Data<sqlx::MySqlPool>,
-    request:HttpRequest,
+    request: HttpRequest,
     form: web::Form<FormInfo>,
 ) -> actix_web::Result<HttpResponse> {
     info!("tenants_add_handler now");
     info!("before parsing");
-    let v: Viewer = parse_viewer(pool.clone(), request).await.expect("error parseViewer");
+    let v: Viewer = parse_viewer(pool.clone(), request)
+        .await
+        .expect("error parseViewer");
     info!("parse viewer ok");
     if v.tenant_name != *"admin" {
         // admin: SaaS管理者用の特別なテナント名
-        return Err(actix_web::error::ErrorNotFound(
-            "you don't have this API",
-        ));
+        return Err(actix_web::error::ErrorNotFound("you don't have this API"));
     }
     info!("tenant_name ok");
     if v.role != ROLE_ADMIN {
@@ -467,15 +490,13 @@ async fn tenants_add_handler(
     info!("admin role ok");
     let display_name = &form.display_name;
     let name = &form.name;
-    validate_tenant_name(name.to_string()).map_err(|e| {
-        actix_web::error::ErrorBadRequest(e)
-    })?;
+    validate_tenant_name(name.to_string()).map_err(|e| actix_web::error::ErrorBadRequest(e))?;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("error now()")
         .as_secs() as i64;
 
-    let insert_res = sqlx::query(
+    let insert_res = match sqlx::query(
         "INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)",
     )
     .bind(name)
@@ -484,10 +505,11 @@ async fn tenants_add_handler(
     .bind(now)
     .execute(pool.as_ref())
     .await
-    .map_err(|e| {
-        if e.kind() == 
-        actix_web::error::ErrorInternalServerError(e)
-    })?;
+    {
+        Ok(insert_res) => insert_res,
+        // TODO: duplicate entry  error handling
+        _ => return Err(actix_web::error::ErrorBadRequest("duplicate tenant")),
+    };
 
     let id = insert_res.last_insert_id();
     create_tenant_db(id.try_into().expect("error: try_into()")).await;
@@ -500,9 +522,9 @@ async fn tenants_add_handler(
             billing_yen: 0,
         },
     };
-    Ok(HttpResponse::Ok().json(SuccessResult{
+    Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
-        data: Some(res)
+        data: Some(res),
     }))
 }
 
@@ -593,7 +615,7 @@ async fn billing_report_by_competition(
     let mut visitor_count = 0;
     if comp.finished_at.is_some() {
         for (_, category) in billing_map {
-            if category == *"player"{
+            if category == *"player" {
                 player_count += 1;
             } else if category == *"visitor" {
                 visitor_count += 1;
@@ -624,7 +646,7 @@ struct TenantsBillingHandlerResult {
     tenants: Vec<TenantWithBilling>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(serde_derive::Serialize, serde_derive::Deserialize)]
 struct BillingQuery {
     before: String,
 }
@@ -640,11 +662,14 @@ async fn tenants_billing_handler(
 ) -> actix_web::Result<HttpResponse> {
     info!("tenants billing handler now");
     if conn.host() != get_env("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
-        return Ok(HttpResponse::Forbidden().finish());
+        return Err(actix_web::error::ErrorNotFound(format!(
+            "invalid hostname {}",
+            conn.host()
+        )));
     };
     let v = parse_viewer(pool.clone(), request).await.unwrap();
     if v.role != ROLE_ADMIN {
-        return Ok(actix_web::HttpResponse::Forbidden().finish());
+        return Err(actix_web::error::ErrorForbidden("admin role required"));
     };
     let before = &query.before;
     let mut before_id = 0;
@@ -652,7 +677,9 @@ async fn tenants_billing_handler(
         before_id = if let Ok(id) = before.parse::<i64>() {
             id
         } else {
-            return Err(actix_web::error::ErrorInternalServerError(""));
+            return Err(actix_web::error::ErrorBadRequest(
+                "failed to parse query parameter 'before'",
+            ));
         };
     }
     // テナントごとに
@@ -684,10 +711,9 @@ async fn tenants_billing_handler(
             .await
             .unwrap();
         for comp in cs {
-            let report =
-                billing_report_by_competition( tenant_db.clone(), t.id, comp.id)
-                    .await
-                    .unwrap();
+            let report = billing_report_by_competition(tenant_db.clone(), t.id, comp.id)
+                .await
+                .unwrap();
             tb.billing_yen += report.billing_yen;
         }
         tenant_billings.push(tb);
@@ -695,10 +721,10 @@ async fn tenants_billing_handler(
             break;
         }
     }
-    Ok(HttpResponse::Ok().json(SuccessResult{
+    Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
         data: Some(TenantsBillingHandlerResult {
-        tenants: tenant_billings,
+            tenants: tenant_billings,
         }),
     }))
 }
@@ -725,7 +751,7 @@ async fn players_list_handler(
     info!("players list handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
     if v.role != ROLE_ORGANIZER {
-        return Ok(actix_web::HttpResponse::Forbidden().finish());
+        return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant_db");
@@ -744,9 +770,9 @@ async fn players_list_handler(
         });
     }
     let res = PlayersListHandlerResult { players: pds };
-    Ok(HttpResponse::Ok().json(SuccessResult{
+    Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
-        data: Some(res)
+        data: Some(res),
     }))
 }
 
@@ -755,9 +781,9 @@ struct PlayersAddHandlerResult {
     players: Vec<PlayerDetail>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, serde_derive::Deserialize)]
 struct PlayerAddFormQuery {
-    #[serde(rename="display_name[]")]
+    #[serde(rename = "display_name[]")]
     display_name: Vec<String>,
 }
 
@@ -770,9 +796,11 @@ async fn players_add_handler(
     form_param: web::Form<PlayerAddFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
     info!("players add handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await.expect("error parseViewer");
+    let v: Viewer = parse_viewer(pool.clone(), request)
+        .await
+        .expect("error parseViewer");
     if v.role != ROLE_ORGANIZER {
-        return Ok(actix_web::HttpResponse::Forbidden().finish());
+        return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
@@ -812,7 +840,7 @@ struct PlayerDisqualifiedHandlerResult {
     player: PlayerDetail,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(serde_derive::Deserialize)]
 struct DisqualifiedFormQuery {
     player_id: String,
 }
@@ -827,7 +855,7 @@ async fn player_disqualified_handler(
     info!("player disqualified handler nwo");
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
     if v.role != ROLE_ORGANIZER {
-        return Ok(actix_web::HttpResponse::Forbidden().finish());
+        return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
@@ -843,7 +871,15 @@ async fn player_disqualified_handler(
         .execute(&tenant_db)
         .await
         .unwrap();
-    let p: PlayerRow = retrieve_player(tenant_db, player_id).await.unwrap();
+    let p: PlayerRow = match retrieve_player(tenant_db, player_id).await {
+        Ok(p) => p,
+        Err(sqlx::Error::RowNotFound) => {
+            return Err(actix_web::error::ErrorNotFound("player not found"));
+        }
+        _ => {
+            panic!("panic at retriev player")
+        }
+    };
     let res = PlayerDisqualifiedHandlerResult {
         player: PlayerDetail {
             id: p.id,
@@ -851,10 +887,10 @@ async fn player_disqualified_handler(
             is_disqualified: p.is_disqualified,
         },
     };
-    Ok(HttpResponse::Ok().json(
-        SuccessResult{
-            status: true,
-            data: Some(res)}))
+    Ok(HttpResponse::Ok().json(SuccessResult {
+        status: true,
+        data: Some(res),
+    }))
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -869,7 +905,7 @@ struct CompetitionsAddHandlerResult {
     competition: CompetitionDetail,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, serde_derive::Serialize, serde_derive::Deserialize)]
 struct CompetitionAddHandlerFormQuery {
     title: String,
 }
@@ -884,7 +920,7 @@ async fn competitions_add_handler(
     info!("competitions add handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
     if v.role != ROLE_ORGANIZER {
-        return Ok(actix_web::HttpResponse::Forbidden().finish());
+        return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
@@ -910,13 +946,13 @@ async fn competitions_add_handler(
             is_finished: false,
         },
     };
-    Ok(HttpResponse::Ok().json(SuccessResult{
+    Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
-        data: Some(res)
-}))
+        data: Some(res),
+    }))
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, serde_derive::Serialize, serde_derive::Deserialize)]
 struct CompetitionFinishFormQuery {
     competition_id: String,
 }
@@ -931,15 +967,24 @@ async fn competition_finish_handler(
     info!("competition finish handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
     if v.role != ROLE_ORGANIZER {
-        return Ok(actix_web::HttpResponse::Forbidden().finish());
+        return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
     let id = form.into_inner().competition_id;
+    if id.is_empty() {
+        return Err(actix_web::error::ErrorBadRequest("competition_id required"));
+    }
 
-    retrieve_competition(tenant_db.clone(), id.clone())
-        .await
-        .unwrap();
+    let _ = match retrieve_competition(tenant_db.clone(), id.clone()).await {
+        Ok(c) => c,
+        Err(sqlx::Error::RowNotFound) => {
+            return Err(actix_web::error::ErrorNotFound("competition not found"));
+        }
+        _ => {
+            panic!("panic at retireve_competition");
+        }
+    };
     let now: i64 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -965,7 +1010,7 @@ struct ScoreHandlerResult {
     rows: i64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, serde_derive::Serialize, serde_derive::Deserialize)]
 struct CompetitionScoreHandlerFormQuery {
     competition_id: String,
 }
@@ -978,36 +1023,38 @@ async fn competition_score_handler(
     form: web::Form<CompetitionScoreHandlerFormQuery>,
     mut payload: Multipart,
 ) -> actix_web::Result<HttpResponse> {
-
     info!("compeittion score handler now");
     let v = parse_viewer(pool.clone(), request).await.unwrap();
     if v.role != ROLE_ORGANIZER {
-        return Ok(actix_web::HttpResponse::Forbidden().finish());
+        return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
     let competition_id = form.competition_id.clone();
     if competition_id.is_empty() {
-        return Ok(actix_web::HttpResponse::BadRequest().finish());
+        return Err(actix_web::error::ErrorBadRequest("competition_id required"));
     };
-    let comp = retrieve_competition(tenant_db.clone(), competition_id.clone())
-        .await
-        .unwrap();
+    let comp = match retrieve_competition(tenant_db.clone(), competition_id.clone()).await {
+        Ok(c) => c,
+        Err(sqlx::Error::RowNotFound) => {
+            return Err(actix_web::error::ErrorNotFound("competition not found"));
+        }
+        _ => panic!("panic at retrieve_competition"),
+    };
     if comp.finished_at.is_some() {
         let res = FailureResult {
             status: false,
             message: "competition is finished".to_string(),
         };
-        return Ok(HttpResponse::Ok().json(res));
+        return Ok(HttpResponse::BadRequest().json(res));
     }
     let mut filepath = String::new();
     while let Some(item) = payload.next().await {
-        let mut field =  item.unwrap();
+        let mut field = item.unwrap();
         // A multipart/form-data stream has to contain `content_disposition`
         let content_disposition = field.content_disposition();
 
-        let filename = content_disposition
-            .get_filename().unwrap_or("temp.csv");
+        let filename = content_disposition.get_filename().unwrap_or("temp.csv");
         filepath = format!("./tmp/{filename}");
 
         // File::create is blocking operation, use threadpool
@@ -1021,14 +1068,14 @@ async fn competition_score_handler(
     let mut header = rdr.records();
     // check if header is "player_id", "score"
     if header.next().unwrap().unwrap() != vec!["player_id", "score"] {
-        return Ok(actix_web::HttpResponse::BadRequest().finish());
+        return Err(actix_web::error::ErrorBadRequest("invalid CSV headers"));
     };
     // DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
     let _fl = flock_by_tenant_id(v.tenant_id).unwrap();
     info!("flocked now");
     let mut row_num: i64 = 0;
     let mut player_score_rows = Vec::<PlayerScoreRow>::new();
-    loop{
+    loop {
         row_num += 1;
         // get rdr next or break
         let row = match header.next() {
@@ -1037,20 +1084,27 @@ async fn competition_score_handler(
         };
         let row = row.unwrap();
         if row.len() != 2 {
-            return Ok(actix_web::HttpResponse::BadRequest().finish());
+            panic!("row must have tow columns");
         };
         let player_id: String = row.clone()[0].to_string();
         let score_str: String = row[1].to_string();
-        retrieve_player(tenant_db.clone(), player_id.clone())
-            .await
-            .unwrap();
-        let score: i64 = score_str.parse().unwrap();
+        let _ = match retrieve_player(tenant_db.clone(), player_id.clone()).await {
+            Ok(c) => c,
+            Err(sqlx::Error::RowNotFound) => {
+                return Err(actix_web::error::ErrorNotFound("player not found"));
+            }
+            _ => panic!("panic at retireve_player"),
+        };
+        let score: i64 = match score_str.parse() {
+            Ok(s) => s,
+            _ => return Err(actix_web::error::ErrorBadRequest("error parse score_str")),
+        };
         let id = dispense_id(pool.clone()).await.unwrap();
         let now: i64 = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
-        player_score_rows.push(PlayerScoreRow{
+        player_score_rows.push(PlayerScoreRow {
             id,
             tenant_id: v.tenant_id,
             player_id: player_id.clone(),
@@ -1060,14 +1114,15 @@ async fn competition_score_handler(
             created_at: now,
             updated_at: now,
         });
-    };
+    }
     sqlx::query::<Sqlite>("DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?")
-    .bind(v.tenant_id)
-    .bind(competition_id.clone())
-    .execute(&tenant_db.clone())
-    .await.unwrap();
+        .bind(v.tenant_id)
+        .bind(competition_id.clone())
+        .execute(&tenant_db.clone())
+        .await
+        .unwrap();
 
-    for ps in &player_score_rows{
+    for ps in &player_score_rows {
         sqlx::query::<Sqlite>("INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
         .bind(ps.id.clone())
         .bind(ps.tenant_id)
@@ -1079,16 +1134,14 @@ async fn competition_score_handler(
         .bind(ps.updated_at)
         .execute(&tenant_db.clone())
         .await.unwrap();
-
     }
     let res = SuccessResult {
         status: true,
-        data: Some(ScoreHandlerResult{
+        data: Some(ScoreHandlerResult {
             rows: player_score_rows.len() as i64,
         }),
     };
     Ok(HttpResponse::Ok().json(res))
-
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1106,7 +1159,7 @@ async fn billing_handler(
     info!("billing handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
     if v.role != ROLE_ORGANIZER {
-        return Ok(actix_web::HttpResponse::Forbidden().finish());
+        return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
@@ -1119,7 +1172,7 @@ async fn billing_handler(
     let mut tbrs = Vec::<BillingReport>::new();
     for comp in cs {
         let report: BillingReport =
-            billing_report_by_competition( tenant_db.clone(), v.tenant_id, comp.id)
+            billing_report_by_competition(tenant_db.clone(), v.tenant_id, comp.id)
                 .await
                 .unwrap();
         tbrs.push(report);
@@ -1143,7 +1196,7 @@ struct PlayerHandlerResult {
     scores: Vec<PlayerScoreDetail>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, serde_derive::Serialize, serde_derive::Deserialize)]
 struct PlayerHandlerQueryParam {
     player_id: String,
 }
@@ -1158,7 +1211,7 @@ async fn player_handler(
     info!("player handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
     if v.role != ROLE_PLAYER {
-        return Ok(actix_web::HttpResponse::Forbidden().finish());
+        return Err(actix_web::error::ErrorForbidden("role player required"));
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
@@ -1167,9 +1220,17 @@ async fn player_handler(
         .unwrap();
     let player_id = from.into_inner().player_id;
     if player_id.is_empty() {
-        return Ok(actix_web::HttpResponse::BadRequest().finish());
+        return Err(actix_web::error::ErrorBadRequest("player_id required"));
     };
-    let p = retrieve_player(tenant_db.clone(), player_id).await.unwrap();
+    let p = match retrieve_player(tenant_db.clone(), player_id).await {
+        Ok(p) => p,
+        Err(sqlx::Error::RowNotFound) => {
+            return Err(actix_web::error::ErrorNotFound("player not found"));
+        }
+        _ => {
+            panic!("panic at retrieve_player")
+        }
+    };
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition ORDER BY created_at ASC")
             .fetch_all(&tenant_db)
@@ -1231,7 +1292,7 @@ struct CompetitionRankingHandlerResult {
     ranks: Vec<CompetitionRank>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, serde_derive::Serialize, serde_derive::Deserialize)]
 struct CompetitionRankingHandlerQueryParam {
     competition_id: String,
     rank_after: String,
@@ -1247,18 +1308,22 @@ async fn competition_ranking_handler(
     info!("compeititon ranking handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
     if v.role != ROLE_PLAYER {
-        return Ok(actix_web::HttpResponse::Forbidden().finish());
+        return Err(actix_web::error::ErrorForbidden("role player required"));
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db now");
     let competition_id = form.clone().competition_id;
     if competition_id.is_empty() {
-        return Ok(actix_web::HttpResponse::BadRequest().finish());
+        return Err(actix_web::error::ErrorBadRequest("competition_id required"));
     };
     // 大会の存在確認
-    let competition = retrieve_competition(tenant_db.clone(), competition_id.clone())
-        .await
-        .unwrap();
+    let competition = match retrieve_competition(tenant_db.clone(), competition_id.clone()).await {
+        Ok(c) => c,
+        Err(sqlx::Error::RowNotFound) => {
+            return Err(actix_web::error::ErrorNotFound("competition not found"));
+        }
+        _ => panic!("panic at retrieve_competiiton"),
+    };
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -1363,7 +1428,7 @@ async fn player_competitions_handler(
     info!("player compeititons handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
     if v.role != ROLE_PLAYER {
-        return Ok(actix_web::HttpResponse::Forbidden().finish());
+        return Err(actix_web::error::ErrorForbidden("role player required"));
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db now");
@@ -1383,7 +1448,7 @@ async fn organizer_competitions_handler(
     info!("organizer competitions handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
     if v.role != ROLE_ORGANIZER {
-        return Ok(actix_web::HttpResponse::Forbidden().finish());
+        return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db now");
@@ -1416,10 +1481,10 @@ async fn competitions_handler(
     Ok(HttpResponse::Ok().json(res))
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, )]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct TenantDetail {
     name: String,
-    display_name: String
+    display_name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1445,7 +1510,23 @@ async fn me_handler(
         name: tenant.name,
         display_name: tenant.display_name,
     };
-    let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
+    let v: Viewer = match parse_viewer(pool.clone(), request).await {
+        Ok(v) => v,
+        Err(e) if e.as_response_error().status_code().as_str() == "401" => {
+            return Ok(HttpResponse::Ok().json(SuccessResult {
+                status: true,
+                data: Some(MeHandlerResult {
+                    tenant: Some(td),
+                    me: None,
+                    role: "none".to_string(),
+                    logged_in: false,
+                }),
+            }));
+        }
+        _ => {
+            panic!("panic at parse_viewer")
+        }
+    };
     if v.role == ROLE_ADMIN || v.role == ROLE_ORGANIZER {
         return Ok(HttpResponse::Ok().json(SuccessResult {
             status: true,
@@ -1459,9 +1540,23 @@ async fn me_handler(
     }
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db now");
-    let p = retrieve_player(tenant_db.clone(), v.player_id.clone())
-        .await
-        .unwrap();
+    let p = match retrieve_player(tenant_db.clone(), v.player_id.clone()).await {
+        Ok(p) => p,
+        Err(sqlx::Error::RowNotFound) => {
+            return Ok(HttpResponse::Ok().json(SuccessResult {
+                status: true,
+                data: Some(MeHandlerResult {
+                    tenant: Some(td.clone()),
+                    me: None,
+                    role: "none".to_string(),
+                    logged_in: true,
+                }),
+            }));
+        }
+        _ => {
+            panic!("panic at retrieve_plaeyer")
+        }
+    };
 
     Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
@@ -1491,12 +1586,13 @@ async fn initialize_handler() -> actix_web::Result<HttpResponse> {
     info!("initialize handler now");
     let _output = tokio::process::Command::new(INITIALIZE_SCRIPT)
         .output()
-        .await.expect("error execute initialize script");
+        .await
+        .expect("error execute initialize script");
     let res = InitializeHandlerResult {
         lang: "rust".to_string(),
     };
 
-    Ok(HttpResponse::Ok().json(SuccessResult{
+    Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
         data: Some(res),
     }))
