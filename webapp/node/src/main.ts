@@ -64,9 +64,8 @@ async function connectToTenantDB(id: number): Promise<Database> {
       filename: p,
       driver: sqlite3.Database,
     })
-
     db.configure('busyTimeout', 5000)
-  } catch (error: any) {
+  } catch (error) {
     throw new Error(`failed to open tenant DB: ${error}`)
   }
 
@@ -103,7 +102,7 @@ async function dispenseID(): Promise<string> {
       }
     }
   }
-  if (id != 0) {
+  if (id !== 0) {
     return id.toString(16)
   }
 
@@ -319,7 +318,7 @@ async function parseViewer(req: Request): Promise<Viewer> {
 
   // aud は1要素で、テナント名が入っている
   const aud: string[] | undefined = token.aud as string[]
-  if (!aud || aud.length != 1) {
+  if (!aud || aud.length !== 1) {
     throw new ErrorWithStatus(401,
       `invalid token: aud field is few or too much: ${tokenStr}`
     )
@@ -329,7 +328,7 @@ async function parseViewer(req: Request): Promise<Viewer> {
   if (!tenant) {
     throw new ErrorWithStatus(401, 'tenant not found')
   }
-  if (tenant.name === 'admin' && role != RoleAdmin) {
+  if (tenant.name === 'admin' && role !== RoleAdmin) {
     throw new ErrorWithStatus(401, 'tenant not found')
   }
   if (tenant.name !== aud[0]) {
@@ -593,7 +592,7 @@ async function billingReportByCompetition(tenantDB: Database, tenantId: number, 
 // URL引数beforeを指定した場合、指定した値よりもidが小さいテナントの課金レポートを取得する
 app.get('/api/admin/tenants/billing', wrap(async (req: Request, res: Response) => {
   try {
-    if (req.hostname != getEnv('ISUCON_ADMIN_HOSTNAME', 'admin.t.isucon.dev')) {
+    if (req.hostname !== getEnv('ISUCON_ADMIN_HOSTNAME', 'admin.t.isucon.dev')) {
       throw new ErrorWithStatus(404, `invalid hostname ${req.hostname}`)
     }
   
@@ -626,7 +625,7 @@ app.get('/api/admin/tenants/billing', wrap(async (req: Request, res: Response) =
     }
   
     for (const tenant of ts) {
-      if (beforeId != 0 && beforeId <= tenant.id) {
+      if (beforeId !== 0 && beforeId <= tenant.id) {
         continue
       }
   
@@ -1344,7 +1343,7 @@ app.get('/api/player/competition/:competitionId/ranking', wrap(async (req: Reque
         }
 
         tmpRanks.sort((a, b) => {
-          if (a.score == b.score) {
+          if (a.score === b.score) {
             return a.row_num < b.row_num ? -1 : 1
           }
           return a.score > b.score ? -1 : 1
@@ -1430,7 +1429,7 @@ app.get('/api/me', wrap(async (req: Request, res: Response) => {
 // データベースの初期化などが実行されるため、スキーマを変更した場合などは適宜改変すること
 app.post('/initialize', wrap(async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const result = await exec(initializeScript)
+    await exec(initializeScript)
   
     const data: InitializeResult = {
       lang: 'node',
