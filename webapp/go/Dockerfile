@@ -1,4 +1,4 @@
-FROM golang:1.18.3-bullseye
+FROM golang:1.18.4-bullseye
 
 WORKDIR /tmp
 ENV DEBIAN_FRONTEND=noninteractive
@@ -10,11 +10,14 @@ RUN apt-get update && \
   apt-get -y update && \
   apt-get -y install mysql-client
 
+RUN useradd --uid=2000 --create-home isucon
+USER isucon
+
 RUN mkdir -p /home/isucon/webapp/go
 WORKDIR /home/isucon/webapp/go
+ADD ./ /home/isucon/webapp/go/
 
-ENV GOPATH /home/isucon/go
-ENV PATH /home/isucon/go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-RUN go install github.com/cespare/reflex@latest
+ENV GOPATH=/home/isucon/tmp/go
+ENV GOCACHE=/home/isucon/tmp/go/.cache
 
-CMD [ "reflex", "-r", "(\\.go$|go\\.mod)", "-s", "go", "run", "cmd/isuports/main.go" ]
+CMD ["go", "run", "./cmd/isuports/main.go"]
