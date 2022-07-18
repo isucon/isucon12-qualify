@@ -90,7 +90,7 @@ async fn create_tenant_db(id: i64) {
 // システム全体で一意なIDを生成する
 async fn dispense_id(pool: web::Data<sqlx::MySqlPool>) -> Result<String, sqlx::Error> {
     info!("dispense id now");
-    let mut id: u8 = 0;
+    let mut id: i64 = 0;
     for _ in 1..100 {
         let ret = match sqlx::query("REPLACE INTO id_generator (stub) VALUES (?);")
             .bind("a")
@@ -816,7 +816,7 @@ async fn players_add_handler(
         .filter_map(|(key, val)| (key == "display_name[]").then(|| val))
         .collect();
     let mut pds = Vec::<PlayerDetail>::new();
-    info!("{:?}",display_names);
+    info!("display_names = {:?}",display_names);
 
     for display_name in display_names {
         let id = dispense_id(pool.clone()).await.unwrap();
@@ -834,7 +834,7 @@ async fn players_add_handler(
             .bind(now)
             .execute( &tenant_db)
             .await.unwrap();
-        
+
         let p = retrieve_player(tenant_db.clone(), id).await.unwrap();
         pds.push(PlayerDetail {
             id: p.id,
