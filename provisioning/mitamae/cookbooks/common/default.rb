@@ -1,4 +1,6 @@
 package "sqlite3"
+package "docker.io"
+package "build-essential"
 
 file "/etc/hosts" do
   owner "root"

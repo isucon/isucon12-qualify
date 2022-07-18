@@ -1,15 +1,15 @@
 .PHONY: build clean
-build: mitamae.tar.gz
+build: isucon12-qualify mitamae.tar.gz
 	packer build qualify.pkr.hcl
 
 isucon-env-checker/isucon-env-checker: isucon-env-checker/*.go isucon-env-checker/go.*
 	cd isucon-env-checker && GOOS=linux GOARCH=amd64 go build .
 
 blackauth:
-	cd ../blackauth && GOOS=linux GOARCH=amd64 go build .
+	cd ../blackauth && GOOS=linux GOARCH=amd64 go build -o ../provisioning/blackauth .
 
 clean:
-	rm -rf isucon-env-checker/isucon-env-checker isucon-admin mitamae.tar.gz isucon12-qualify*
+	rm -rf isucon-env-checker/isucon-env-checker isucon-admin mitamae.tar.gz isucon12-qualify* blackauth
 
 isucon-admin: isucon-admin.encrypted
 	sops -d isucon-admin.encrypted > isucon-admin.tmp

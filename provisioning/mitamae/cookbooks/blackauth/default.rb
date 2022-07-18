@@ -20,4 +20,5 @@ end
 
 execute 'systemctl enable blackauth' do
   command 'systemctl daemon-reload && systemctl enable blackauth'
+  only_if { !File.exist?("/.dockerenv") }
 end

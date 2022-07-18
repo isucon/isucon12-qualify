@@ -9,6 +9,10 @@ user "isucon" do
   shell "/bin/bash"
 end
 
+execute 'add groups to isucon' do
+  command 'usermod -G sudo,docker isucon'
+end
+
 directory "/home/isucon" do
   owner "isucon"
   group "isucon"
