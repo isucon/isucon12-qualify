@@ -388,7 +388,7 @@ async function retrievePlayer(tenantDB: Database, id: string): Promise<PlayerRow
     }
     return playerRow
   } catch(error) {
-    throw new Error('error Select player: id=${id} ${error.toString()}')
+    throw new Error(`error Select player: id=${id}, ${error}`)
   }
 }
 
@@ -430,15 +430,26 @@ function lockFilePath(tenantId: number): string {
   return path.join(tenantDBDir, `${tenantId}.lock`)
 }
 
+async function asyncSleep(ms: number) {
+  return new Promise(r => setTimeout(r, ms))
+}
+
 // 排他ロックする
 async function flockByTenantID(tenantId: number): Promise<() => Promise<void>> {
   const p = lockFilePath(tenantId)
 
   const fd = openSync(p, 'w+')
-  try {
-    await flock(fd, fsExt.constants.LOCK_EX)
-  } catch (error: any) {
-    throw new Error(`error flock: path=${p}, ${error.toString()}`)
+  while (true) {
+    try {
+      await flock(fd, fsExt.constants.LOCK_EX | fsExt.constants.LOCK_NB)
+    } catch (error: any) {
+      if (error.code === 'EAGAIN' && error.errno === 11) {
+        await asyncSleep(10)
+        continue
+      }
+      throw new Error(`error flock: path=${p}, ${error.toString()}`)
+    }
+    break
   }
 
   const close = async () => {
@@ -583,7 +594,7 @@ async function billingReportByCompetition(tenantDB: Database, tenantId: number, 
   } catch (error: any) {
     throw new Error(`error Select count player_score: tenantId=${tenantId}, competitionId=${comp.id}, ${error.toString()}`)
   } finally {
-    await unlock()
+    unlock()
   }
 }
 
@@ -945,7 +956,7 @@ app.post('/api/organizer/competition/:competitionId/finish', wrap(async (req: Re
 }))
 
 // テナント管理者向けAPI
-// POST /api/organizer/competition/:competition_id/score
+// POST /api/organizer/competition/:competitionId/score
 // 大会のスコアをCSVでアップロードする
 app.post('/api/organizer/competition/:competitionId/score', upload.single('scores'), wrap(async (req: Request, res: Response) => {
   try {
@@ -1052,6 +1063,7 @@ app.post('/api/organizer/competition/:competitionId/score', upload.single('score
           )
         }
       } catch (error) {
+        console.error(error)
         throw error
       } finally {
         unlock()
@@ -1379,7 +1391,7 @@ app.get('/api/player/competition/:competitionId/ranking', wrap(async (req: Reque
 
 
       } catch (error) {
-
+        throw error
       } finally {
         unlock()
       }
