@@ -236,7 +236,6 @@ async fn parse_viewer(
 
     let c = Cookie::parse(cookie).unwrap();
     let req_jwt = c.value();
-    info!("{:?}", req_jwt);
     let key_file_name = get_env("ISUCON_JWT_KEY_FILE", "./public.pem");
     let key_src = fs::read_to_string(key_file_name).expect("Something went wrong reading the file");
 
@@ -476,8 +475,7 @@ async fn tenants_add_handler(
     info!("tenants_add_handler now");
     info!("before parsing");
     let v: Viewer = parse_viewer(pool.clone(), request)
-        .await
-        .expect("error parseViewer");
+        .await?;
     info!("parse viewer ok");
     if v.tenant_name != *"admin" {
         // admin: SaaS管理者用の特別なテナント名
@@ -577,8 +575,7 @@ async fn billing_report_by_competition(
 ) -> Result<BillingReport, sqlx::Error> {
     info!("billing report by competition now");
     let comp: CompetitionRow = retrieve_competition(tenant_db.clone(), competition_id)
-        .await
-        .unwrap();
+        .await?;
     let vhs: Vec<VisitHistorySummaryRow> = sqlx::query_as(
         "SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id")
         .bind(tenant_id)
@@ -667,7 +664,7 @@ async fn tenants_billing_handler(
             conn.host()
         )));
     };
-    let v = parse_viewer(pool.clone(), request).await.unwrap();
+    let v = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ADMIN {
         return Err(actix_web::error::ErrorForbidden("admin role required"));
     };
@@ -749,7 +746,7 @@ async fn players_list_handler(
     request: actix_web::HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
     info!("players list handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
@@ -797,8 +794,7 @@ async fn players_add_handler(
 ) -> actix_web::Result<HttpResponse> {
     info!("players add handler now");
     let v: Viewer = parse_viewer(pool.clone(), request)
-        .await
-        .expect("error parseViewer");
+        .await?;
     if v.role != ROLE_ORGANIZER {
         return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
@@ -853,7 +849,7 @@ async fn player_disqualified_handler(
     form_param: web::Form<DisqualifiedFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
     info!("player disqualified handler nwo");
-    let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
@@ -918,7 +914,7 @@ async fn competitions_add_handler(
     form: web::Form<CompetitionAddHandlerFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
     info!("competitions add handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
@@ -965,7 +961,7 @@ async fn competition_finish_handler(
     form: web::Form<CompetitionFinishFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
     info!("competition finish handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
@@ -1024,7 +1020,7 @@ async fn competition_score_handler(
     mut payload: Multipart,
 ) -> actix_web::Result<HttpResponse> {
     info!("compeittion score handler now");
-    let v = parse_viewer(pool.clone(), request).await.unwrap();
+    let v = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
@@ -1157,7 +1153,7 @@ async fn billing_handler(
     request: HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
     info!("billing handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
@@ -1209,7 +1205,7 @@ async fn player_handler(
     from: web::Query<PlayerHandlerQueryParam>,
 ) -> actix_web::Result<HttpResponse> {
     info!("player handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_PLAYER {
         return Err(actix_web::error::ErrorForbidden("role player required"));
     };
@@ -1306,7 +1302,7 @@ async fn competition_ranking_handler(
     form: web::Form<CompetitionRankingHandlerQueryParam>,
 ) -> actix_web::Result<HttpResponse> {
     info!("compeititon ranking handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_PLAYER {
         return Err(actix_web::error::ErrorForbidden("role player required"));
     };
@@ -1426,7 +1422,7 @@ async fn player_competitions_handler(
     request: HttpRequest,
 ) -> actix_web::Result<actix_web::HttpResponse> {
     info!("player compeititons handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_PLAYER {
         return Err(actix_web::error::ErrorForbidden("role player required"));
     };
@@ -1446,7 +1442,7 @@ async fn organizer_competitions_handler(
     request: HttpRequest,
 ) -> actix_web::Result<actix_web::HttpResponse> {
     info!("organizer competitions handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
