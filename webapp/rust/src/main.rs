@@ -232,7 +232,6 @@ async fn parse_viewer(
     info!("{:?}",req_jwt);
     let key_file_name = get_env("ISUCON_JWT_KEY_FILE", "./public.pem");
     let key_src = fs::read_to_string(key_file_name).expect("Something went wrong reading the file");
-    info!("{:?}", key_src);
 
     let key = jsonwebtoken::DecodingKey::from_rsa_pem(key_src.as_bytes()).unwrap();
 
@@ -366,7 +365,7 @@ async fn authorize_player(tenant_db: SqlitePool, id: String) -> Result<(), actix
     info!("authorize player now");
     let player = retrieve_player(tenant_db, id).await.unwrap();
     if player.is_disqualified {
-        return Err(actix_web::error::ErrorBadRequest("player is disqualified"));
+        return Err(actix_web::error::ErrorForbidden("player is disqualified"));
     }
     Ok(())
 }
@@ -457,18 +456,20 @@ async fn tenants_add_handler(
     info!("parse viewer ok");
     if v.tenant_name != *"admin" {
         // admin: SaaS管理者用の特別なテナント名
-        return Err(actix_web::error::ErrorUnauthorized(
+        return Err(actix_web::error::ErrorNotFound(
             "you don't have this API",
         ));
     }
     info!("tenant_name ok");
     if v.role != ROLE_ADMIN {
-        return Err(actix_web::error::ErrorUnauthorized("admin role required"));
+        return Err(actix_web::error::ErrorForbidden("admin role required"));
     }
     info!("admin role ok");
     let display_name = &form.display_name;
     let name = &form.name;
-    validate_tenant_name(name.to_string()).expect("error: validating tenant_name");
+    validate_tenant_name(name.to_string()).map_err(|e| {
+        actix_web::error::ErrorBadRequest(e)
+    })?;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("error now()")
@@ -483,7 +484,11 @@ async fn tenants_add_handler(
     .bind(now)
     .execute(pool.as_ref())
     .await
-    .expect("error: insert tenants");
+    .map_err(|e| {
+        if e.kind() == 
+        actix_web::error::ErrorInternalServerError(e)
+    })?;
+
     let id = insert_res.last_insert_id();
     create_tenant_db(id.try_into().expect("error: try_into()")).await;
     info!("insert tenant ok");
@@ -752,6 +757,7 @@ struct PlayersAddHandlerResult {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct PlayerAddFormQuery {
+    #[serde(rename="display_name[]")]
     display_name: Vec<String>,
 }
 
@@ -764,7 +770,7 @@ async fn players_add_handler(
     form_param: web::Form<PlayerAddFormQuery>,
 ) -> actix_web::Result<HttpResponse> {
     info!("players add handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await.unwrap();
+    let v: Viewer = parse_viewer(pool.clone(), request).await.expect("error parseViewer");
     if v.role != ROLE_ORGANIZER {
         return Ok(actix_web::HttpResponse::Forbidden().finish());
     };
