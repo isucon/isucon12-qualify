@@ -706,7 +706,7 @@ app.get('/api/organizer/players', wrap(async (req: Request, res: Response) => {
       })
 
     } catch (error) {
-      throw new Error(`error Select player on /api/organizer/players: ${error}`)
+      throw new Error(`error Select player, tenant_id=${viewer.tenantId}: ${error}`)
     } finally {
       tenantDB.close()
     }
