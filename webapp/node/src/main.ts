@@ -252,7 +252,6 @@ interface PlayerScoreRow {
   updated_at: number
 }
 
-
 const app = express()
 app.use(express.json())
 app.use(cookieParser())
@@ -289,11 +288,11 @@ async function parseViewer(req: Request): Promise<Viewer> {
     token = jwt.verify(tokenStr, cert, {
       algorithms: ['RS256'],
     }) as jwt.JwtPayload
-  } catch (error: any) {
-    throw new ErrorWithStatus(401, error.toString())
+  } catch (error) {
+    throw new ErrorWithStatus(401, `${error}`)
   }
 
-  if (!token['sub']) {
+  if (!token.sub) {
     throw new ErrorWithStatus(401,
       `invalid token: subject is not found in token: ${tokenStr}`,
     )
@@ -447,7 +446,7 @@ async function flockByTenantID(tenantId: number): Promise<() => Promise<void>> {
         await asyncSleep(10)
         continue
       }
-      throw new Error(`error flock: path=${p}, ${error.toString()}`)
+      throw new Error(`error flock: path=${p}, ${error}`)
     }
     break
   }
@@ -491,12 +490,12 @@ app.post('/api/admin/tenants/add', wrap(async (req: Request, res: Response) => {
       if (error.errno && error.errno === 1062) {
         throw new ErrorWithStatus(400, 'duplicate tenant')
       }
-      throw new Error(`error Insert tenant: name=${name}, displayName=${display_name}, createdAt=${now}, updatedAt=${now}, ${error.toString()}`)
+      throw new Error(`error Insert tenant: name=${name}, displayName=${display_name}, createdAt=${now}, updatedAt=${now}, ${error}`)
     }
 
     const error = await createTenantDB(id)
     if (error) {
-      throw new Error(`error createTenantDB: id=${id} name=${name} ${error.toString()}`)
+      throw new Error(`error createTenantDB: id=${id} name=${name}, ${error}`)
     }
 
     const data: TenantsAddResult = {
@@ -632,8 +631,8 @@ app.get('/api/admin/tenants/billing', wrap(async (req: Request, res: Response) =
         'SELECT * FROM tenant ORDER BY id DESC',
       )
       ts.push(...tenants)
-    } catch (error: any) {
-      throw new Error(`error Select tenant: ${error.toString()}`)
+    } catch (error) {
+      throw new Error(`error Select tenant: ${error}`)
     }
   
     for (const tenant of ts) {
@@ -682,7 +681,7 @@ app.get('/api/admin/tenants/billing', wrap(async (req: Request, res: Response) =
     if (error.status) {
       throw error // rethrow
     }
-    throw new ErrorWithStatus(500, error.toString())
+    throw new ErrorWithStatus(500, error)
   }
 }))
 
@@ -734,7 +733,7 @@ app.get('/api/organizer/players', wrap(async (req: Request, res: Response) => {
     if (error.status) {
       throw error // rethrow
     }
-    throw new ErrorWithStatus(500, error.toString())
+    throw new ErrorWithStatus(500, error)
   }
 }))
 
@@ -792,7 +791,7 @@ app.post('/api/organizer/players/add', wrap(async (req: Request, res: Response) 
     if (error.status) {
       throw error // rethrow
     }
-    throw new ErrorWithStatus(500, error.toString())
+    throw new ErrorWithStatus(500, error)
   }
 }))
 
@@ -852,7 +851,7 @@ app.post('/api/organizer/player/:playerId/disqualified', wrap(async (req: Reques
     if (error.status) {
       throw error // rethrow
     }
-    throw new ErrorWithStatus(500, error.toString())
+    throw new ErrorWithStatus(500, error)
   }
 }))
 
@@ -905,7 +904,7 @@ app.post('/api/organizer/competitions/add', wrap(async (req: Request, res: Respo
     if (error.status) {
       throw error // rethrow
     }
-    throw new ErrorWithStatus(500, error.toString())
+    throw new ErrorWithStatus(500, error)
   }
 }))
 
@@ -951,7 +950,7 @@ app.post('/api/organizer/competition/:competitionId/finish', wrap(async (req: Re
     if (error.status) {
       throw error // rethrow
     }
-    throw new ErrorWithStatus(500, error.toString())
+    throw new ErrorWithStatus(500, error)
   }
 }))
 
@@ -1093,7 +1092,7 @@ app.post('/api/organizer/competition/:competitionId/score', upload.single('score
     if (error.status) {
       throw error // rethrow
     }
-    throw new ErrorWithStatus(500, error.toString())
+    throw new ErrorWithStatus(500, error)
   }
 }))
 
@@ -1137,7 +1136,7 @@ app.get('/api/organizer/billing', wrap(async (req: Request, res: Response) => {
     if (error.status) {
       throw error // rethrow
     }
-    throw new ErrorWithStatus(500, error.toString())
+    throw new ErrorWithStatus(500, error)
   }
 }))
 
@@ -1169,7 +1168,7 @@ async function competitionsHandler(req: Request, res: Response, viewer: Viewer, 
     if (error.status) {
       throw error // rethrow
     }
-    throw new ErrorWithStatus(500, error.toString())
+    throw new ErrorWithStatus(500, error)
   }
 }
 
@@ -1193,7 +1192,7 @@ app.get('/api/organizer/competitions', wrap(async (req: Request, res: Response) 
     if (error.status) {
       throw error // rethrow
     }
-    throw new ErrorWithStatus(500, error.toString())
+    throw new ErrorWithStatus(500, error)
   }
 }))
 
@@ -1286,7 +1285,7 @@ app.get('/api/player/player/:playerId', wrap(async (req: Request, res: Response)
     if (error.status) {
       throw error // rethrow
     }
-    throw new ErrorWithStatus(500, error.toString())
+    throw new ErrorWithStatus(500, error)
   }
 }))
 
@@ -1411,7 +1410,7 @@ app.get('/api/player/competition/:competitionId/ranking', wrap(async (req: Reque
     if (error.status) {
       throw error // rethrow
     }
-    throw new ErrorWithStatus(500, error.toString())
+    throw new ErrorWithStatus(500, error)
   }
 }))
 
@@ -1442,7 +1441,7 @@ app.get('/api/player/competitions', wrap(async (req: Request, res: Response) => 
     if (error.status) {
       throw error // rethrow
     }
-    throw new ErrorWithStatus(500, error.toString())
+    throw new ErrorWithStatus(500, error)
   }
 }))
 
@@ -1467,8 +1466,8 @@ app.post('/initialize', wrap(async (req: Request, res: Response, next: NextFunct
       status: true,
       data,
     })
-  } catch (error: any) {
-    throw new ErrorWithStatus(500, `initialize failed: ${error.toString()}`)
+  } catch (error) {
+    throw new ErrorWithStatus(500, `initialize failed: ${error}`)
   }
 }))
 
