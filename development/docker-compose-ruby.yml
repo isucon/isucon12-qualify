@@ -12,7 +12,6 @@ services:
       ISUCON_DB_PASSWORD: isucon
       ISUCON_DB_NAME: isuports
       ISUCON_ADMIN_HOSTNAME: admin.t.isucon.dev
-      ISUCON_JWT_KEY_FILE: /home/isucon/webapp/go/public.pem
     ports:
       - "3000:3000"
     links:
