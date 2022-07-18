@@ -64,6 +64,8 @@ async function connectToTenantDB(id: number): Promise<Database> {
       filename: p,
       driver: sqlite3.Database,
     })
+
+    db.configure('busyTimeout', 5000)
   } catch (error: any) {
     throw new Error(`failed to open tenant DB: ${error}`)
   }
