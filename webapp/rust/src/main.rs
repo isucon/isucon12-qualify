@@ -12,7 +12,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::mysql::MySqlConnectOptions;
 use sqlx::{Sqlite, SqlitePool};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::result::Result;
@@ -54,11 +54,11 @@ fn tenant_db_path(id: i64) -> PathBuf {
 
 // テナントDBに接続する
 async fn connect_to_tenant_db(id: i64) -> sqlx::Result<SqlitePool> {
-    info!("connect to tenant db now");
+    info!("connect to tenant db now: id = {:?}",id);
     let p = tenant_db_path(id);
-    let uri = format!("sqlite:{}?mode=rw", p.to_str().unwrap());
-    let conn = SqlitePool::connect(&uri).await.unwrap();
-    Ok(conn)
+    let uri = format!("file:{}?mode=rw", p.to_str().unwrap());
+    let pool = SqlitePool::connect(&uri).await.unwrap();
+    Ok(pool)
     // TODO: sqliteDriverNameを使ってないのをなおす
 }
 // テナントDBを新規に作成する
@@ -91,11 +91,12 @@ async fn dispense_id(pool: web::Data<sqlx::MySqlPool>) -> Result<String, sqlx::E
         let ret = match sqlx::query("REPLACE INTO id_generator (stub) VALUES (?);")
             .bind("a")
             .execute(pool.as_ref())
-            .await{
-                Ok(ret) => ret,
-                _ => break
-            };
-        info!("last_insert_id = {:?}",ret.last_insert_id());
+            .await
+        {
+            Ok(ret) => ret,
+            _ => break,
+        };
+        info!("last_insert_id = {:?}", ret.last_insert_id());
         id = ret.last_insert_id().try_into().unwrap();
         break;
     }
@@ -316,7 +317,7 @@ async fn parse_viewer(
 async fn retrieve_tenant_row_from_header(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
-) -> Result<TenantRow,sqlx::Error> {
+) -> Result<TenantRow, sqlx::Error> {
     info!("retrieve_tenant_row_from_header now");
     // check if jwt tenant name and host header's tenant name is the same
     let base_host = get_env("ISUCON_BASE_HOSTNAME", ".t.isucon.dev");
@@ -344,10 +345,11 @@ async fn retrieve_tenant_row_from_header(
     match sqlx::query_as("SELECT * FROM tenant WHERE name = ?")
         .bind(tenant_name)
         .fetch_one(pool.as_ref())
-        .await{
-            Ok(tenant) => Ok(tenant),
-            _ => Err(sqlx::Error::RowNotFound),
-        }
+        .await
+    {
+        Ok(tenant) => Ok(tenant),
+        _ => Err(sqlx::Error::RowNotFound),
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
@@ -375,10 +377,11 @@ async fn retrieve_player(tenant_db: SqlitePool, id: String) -> Result<PlayerRow,
     let row: PlayerRow = match sqlx::query_as("SELECT * FROM player WHERE id = ?")
         .bind(id)
         .fetch_one(&tenant_db)
-        .await{
-            Ok(row) => row,
-            _ => return Err(sqlx::Error::RowNotFound),
-        };
+        .await
+    {
+        Ok(row) => row,
+        _ => return Err(sqlx::Error::RowNotFound),
+    };
     Ok(row)
 }
 
@@ -418,10 +421,11 @@ async fn retrieve_competition(
     let row: CompetitionRow = match sqlx::query_as("SELECT * FROM competition WHERE id = ?")
         .bind(id)
         .fetch_one(&tenant_db)
-        .await{
-            Ok(row) => row,
-            _ => return Err(sqlx::Error::RowNotFound),
-        };
+        .await
+    {
+        Ok(row) => row,
+        _ => return Err(sqlx::Error::RowNotFound),
+    };
     Ok(row)
 }
 
@@ -482,8 +486,7 @@ async fn tenants_add_handler(
 ) -> actix_web::Result<HttpResponse> {
     info!("tenants_add_handler now");
     info!("before parsing");
-    let v: Viewer = parse_viewer(pool.clone(), request)
-        .await?;
+    let v: Viewer = parse_viewer(pool.clone(), request).await?;
     info!("parse viewer ok");
     if v.tenant_name != *"admin" {
         // admin: SaaS管理者用の特別なテナント名
@@ -582,8 +585,7 @@ async fn billing_report_by_competition(
     competition_id: String,
 ) -> Result<BillingReport, sqlx::Error> {
     info!("billing report by competition now");
-    let comp: CompetitionRow = retrieve_competition(tenant_db.clone(), competition_id)
-        .await?;
+    let comp: CompetitionRow = retrieve_competition(tenant_db.clone(), competition_id).await?;
     let vhs: Vec<VisitHistorySummaryRow> = match sqlx::query_as(
         "SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id")
         .bind(tenant_id)
@@ -789,8 +791,6 @@ struct PlayersAddHandlerResult {
     players: Vec<PlayerDetail>,
 }
 
-
-
 // テナント管理者向けAPI
 // GET /api/organizer/players/add
 // テナントに参加者を追加する
@@ -800,18 +800,17 @@ async fn players_add_handler(
     form_param: web::Form<Vec<(String, String)>>,
 ) -> actix_web::Result<HttpResponse> {
     info!("players add handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request)
-        .await?;
+    let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(actix_web::error::ErrorForbidden("role organizer required"));
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
     let display_names: std::collections::HashSet<String> = form_param
-    .into_inner()
-    .into_iter()
-    .filter_map(|(key, val)| (key == "display_name[]").then(|| val))
-    .collect();
+        .into_inner()
+        .into_iter()
+        .filter_map(|(key, val)| (key == "display_name[]").then(|| val))
+        .collect();
     let mut pds = Vec::<PlayerDetail>::new();
     for display_name in display_names {
         let id = dispense_id(pool.clone()).await.unwrap();
@@ -1439,8 +1438,7 @@ async fn player_competitions_handler(
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db now");
-    authorize_player(tenant_db.clone(), v.player_id.clone())
-        .await?;
+    authorize_player(tenant_db.clone(), v.player_id.clone()).await?;
     return competitions_handler(Some(v), tenant_db.clone()).await;
 }
 
@@ -1509,11 +1507,11 @@ async fn me_handler(
     request: HttpRequest,
 ) -> actix_web::Result<HttpResponse> {
     info!("me handler now");
-    let tenant: TenantRow =  match retrieve_tenant_row_from_header(pool.clone(), request.clone())
-        .await{
+    let tenant: TenantRow =
+        match retrieve_tenant_row_from_header(pool.clone(), request.clone()).await {
             Ok(t) => t,
             _ => {
-                info!("{:?}",request);
+                info!("{:?}", request);
                 panic!("retrieve_tenant_row_from_header")
             }
         };
