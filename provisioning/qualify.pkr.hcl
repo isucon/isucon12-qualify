@@ -70,12 +70,12 @@ build {
 
   provisioner "file" {
     destination = "/dev/shm/webapp"
-    source      = "../webapp"
+    source      = "isucon12-qualify/webapp"
   }
 
   provisioner "file" {
     destination = "/dev/shm/public"
-    source      = "../public"
+    source      = "isucon12-qualify/public"
   }
 
   provisioner "shell" {
