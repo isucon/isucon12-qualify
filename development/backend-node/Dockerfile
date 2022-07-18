@@ -17,4 +17,4 @@ RUN curl -sLO https://github.com/cli/cli/releases/download/v2.13.0/gh_2.13.0_lin
 RUN mkdir -p /home/isucon/webapp/node
 WORKDIR /home/isucon/webapp/node
 
-CMD [ "npx", "nodemon" ]
+CMD [ "bash", "-c", "npm install && npm run serve" ]

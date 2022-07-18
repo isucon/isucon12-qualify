@@ -22,6 +22,7 @@ services:
       - initial_data:/home/isucon/initial_data
     init: true
     restart: always
+    command: "npx nodemon"
 
 volumes:
   tenant_db:
