@@ -8,14 +8,13 @@ RUN apt-get update && \
   wget -q https://dev.mysql.com/get/mysql-apt-config_0.8.22-1_all.deb && \
   apt-get -y install ./mysql-apt-config_*_all.deb && \
   apt-get -y update && \
-  apt-get -y install mysql-client build-essential libssl-dev libffi-dev python3-dev
+  apt-get -y install mysql-client build-essential libssl-dev libffi-dev python3-dev cargo
 
 RUN useradd --uid=1001 --create-home isucon
 USER isucon
 
 RUN mkdir -p /home/isucon/webapp/python
 WORKDIR /home/isucon/webapp/python
-ENV XDG_CACHE_HOME /home/isucon/tmp/python/.cache
 
 ADD requirements.txt /home/isucon/webapp/python
 RUN pip install -r requirements.txt
