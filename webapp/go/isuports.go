@@ -123,6 +123,14 @@ func dispenseID(ctx context.Context) (string, error) {
 	return "", lastErr
 }
 
+// 全APIにCache-Control: privateを設定する
+func SetCacheControlPrivate(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		c.Response().Header().Set(echo.HeaderCacheControl, "private")
+		return next(c)
+	}
+}
+
 // Run は cmd/isuports/main.go から呼ばれるエントリーポイントです
 func Run() {
 	e := echo.New()
@@ -145,6 +153,7 @@ func Run() {
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.Use(SetCacheControlPrivate)
 
 	// SaaS管理者向けAPI
 	e.POST("/api/admin/tenants/add", tenantsAddHandler)
