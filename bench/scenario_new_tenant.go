@@ -7,6 +7,7 @@ import (
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
 	"github.com/isucon/isucon12-qualify/data"
+	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 )
 
 type newTenantScenarioWorker struct {
@@ -18,10 +19,10 @@ func (newTenantScenarioWorker) String() string {
 }
 func (w *newTenantScenarioWorker) Process(ctx context.Context) { w.worker.Process(ctx) }
 
-func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int32) (*newTenantScenarioWorker, error) {
+func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, tenant *isuports.TenantRow, p int32) (*newTenantScenarioWorker, error) {
 	scTag := ScenarioTagOrganizerNewTenant
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
-		if err := sc.NewTenantScenario(ctx, step); err != nil {
+		if err := sc.NewTenantScenario(ctx, step, tenant); err != nil {
 			sc.ScenarioError(scTag, err)
 			SleepWithCtx(ctx, SleepOnError)
 		}
@@ -39,19 +40,20 @@ func (sc *Scenario) NewTenantScenarioWorker(step *isucandar.BenchmarkStep, p int
 	}, nil
 }
 
-func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep) error {
+func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.BenchmarkStep, tenant *isuports.TenantRow) error {
 	report := timeReporter("新規テナントシナリオ")
 	defer report()
 	scTag := ScenarioTagOrganizerNewTenant
 	sc.ScenarioStart(scTag)
 
-	adminAc, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
-	if err != nil {
-		return err
-	}
+	// tenant指定がなければ新しく作る
+	if tenant == nil {
+		tenant = data.CreateTenant(data.TenantTagGeneral)
+		adminAc, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
+		if err != nil {
+			return err
+		}
 
-	tenant := data.CreateTenant(data.TenantTagGeneral)
-	{
 		res, err, txt := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
 		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, msg, WithStatusCode(200),

@@ -198,7 +198,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 
 	// // 最初から回る新規テナント
 	{
-		wkr, err := sc.NewTenantScenarioWorker(step, 1)
+		wkr, err := sc.NewTenantScenarioWorker(step, nil, 1)
 		if err != nil {
 			return err
 		}

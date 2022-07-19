@@ -24,6 +24,10 @@ module Isuports
     end
     helpers Sinatra::Cookies
 
+    before do
+      cache_control :private
+    end
+
     TENANT_DB_SCHEMA_FILE_PATH = '../sql/tenant/10_schema.sql'
     INITIALIZE_SCRIPT = '../sql/init.sh'
     COOKIE_NAME = 'isuports_session'
@@ -168,7 +172,7 @@ module Isuports
         end
         role = token.fetch('role')
         unless [ROLE_ADMIN, ROLE_ORGANIZER, ROLE_PLAYER].include?(role)
-          raise HttpError.new(401, "invalid token: #{role} is invalid role: #{token_str}")
+          raise HttpError.new(401, "invalid token: invalid role: #{token_str}")
         end
 
         # aud は1要素でテナント名がはいっている
@@ -376,6 +380,9 @@ module Isuports
         raise e
       end
       id = admin_db.last_id
+      # NOTE: 先にadmin_dbに書き込まれることでこのAPIの処理中に
+      #       /api/admin/tenants/billingにアクセスされるとエラーになりそう
+      #       ロックなどで対処したほうが良さそう
       create_tenant_db(id)
       json(
         status: true,
@@ -412,9 +419,8 @@ module Isuports
 
       # テナントごとに
       #   大会ごとに
-      #     scoreに登録されているplayerでアクセスした人 * 100
-      #     scoreに登録されているplayerでアクセスしていない人 * 50
-      #     scoreに登録されていないplayerでアクセスした人 * 10
+      #     scoreが登録されているplayer * 100
+      #     scoreが登録されていないplayerでアクセスした人 * 10
       #   を合計したものを
       # テナントの課金とする
       tenant_billings = []
