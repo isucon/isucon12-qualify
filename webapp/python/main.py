@@ -139,6 +139,8 @@ def parse_viewer() -> Viewer:
         token = jwt.decode(token_str, key, audience=tenant.name, algorithms=["RS256"])
     except jwt.ExpiredSignatureError:
         abort(401, "Signature has expire")
+    except Exception:
+        abort(401, "error jwt.decode")
 
     if not token.get("sub"):
         abort(401, f"invalid token: subject is not found in token: {token_str}")
