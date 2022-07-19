@@ -84,6 +84,14 @@ def dispense_id() -> str:
     raise RuntimeError from last_err
 
 
+@app.after_request
+def add_header(response):
+    """全APIにCache-Control: privateを設定する"""
+    if 'Cache-Control' not in response.headers:
+        response.headers['Cache-Control'] = 'private'
+    return response
+
+
 def run():
     global admin_db
     admin_db = connect_admin_db()
@@ -437,8 +445,8 @@ def tenants_billing_handler():
 
     # テナントごとに
     #   大会ごとに
-	#     scoreが登録されているplayer * 100
-	#     scoreが登録されていないplayerでアクセスした人 * 10
+    #     scoreが登録されているplayer * 100
+    #     scoreが登録されていないplayerでアクセスした人 * 10
     #   を合計したものを
     # テナントの課金とする
     tenant_rows = admin_db.execute("SELECT * FROM tenant ORDER BY id DESC").fetchall()
