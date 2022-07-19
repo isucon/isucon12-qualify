@@ -27,7 +27,7 @@ const cookieName = 'isuports_session'
 const RoleAdmin = 'admin'
 const RoleOrganizer = 'organizer'
 const RolePlayer = 'player'
-// const RoleNone      = "none"
+const RoleNone = 'none'
 
 const tenantNameRegexp = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/
 
@@ -132,6 +132,11 @@ type TenantWithBilling = {
   billing: number
 }
 
+type TenantDetail = {
+  name: string
+  display_name: string
+}
+
 type BillingReport = {
   competition_id: string
   competition_title: string
@@ -216,6 +221,13 @@ type PlayerResult = {
 type CompetitionRankingResult = {
   competition: CompetitionDetail
   ranks: CompetitionRank[]
+}
+
+type MeResult = {
+  tenant: TenantDetail
+  me: PlayerDetail | null
+  role: string
+  logged_in: boolean
 }
 
 // DB型定義
@@ -1457,7 +1469,72 @@ app.get(
 // JWTで認証した結果、テナントやユーザ情報を返す
 app.get(
   '/api/me',
-  wrap(async (req: Request, res: Response) => {})
+  wrap(async (req: Request, res: Response) => {
+    try {
+      const tenant = await retrieveTenantRowFromHeader(req)
+      if (!tenant) {
+        throw new ErrorWithStatus(500, 'tenant not found')
+      }
+
+      const td: TenantDetail = {
+        name: tenant.name,
+        display_name: tenant.display_name,
+      }
+
+      const viewer = await parseViewer(req)
+      if (viewer.role === RoleAdmin || viewer.role === RoleOrganizer) {
+        const data: MeResult = {
+          tenant: td,
+          me: null,
+          role: viewer.role,
+          logged_in: true,
+        }
+        return res.status(200).json({
+          status: true,
+          data,
+        })
+      }
+
+      const tenantDB = await connectToTenantDB(viewer.tenantId)
+      try {
+        const p = await retrievePlayer(tenantDB, viewer.playerId)
+        if (!p) {
+          const data: MeResult = {
+            tenant: td,
+            me: null,
+            role: RoleNone,
+            logged_in: false,
+          }
+          return res.status(200).json({
+            status: true,
+            data,
+          })
+        }
+
+        const data: MeResult = {
+          tenant: td,
+          me: {
+            id: p.id,
+            display_name: p.display_name,
+            is_disqualified: !!p.is_disqualified,
+          },
+          role: viewer.role,
+          logged_in: true,
+        }
+        return res.status(200).json({
+          statu: true,
+          data,
+        })
+      } finally {
+        tenantDB.close()
+      }
+    } catch (error: any) {
+      if (error.status) {
+        throw error // rethrow
+      }
+      throw new ErrorWithStatus(500, error)
+    }
+  })
 )
 
 // ベンチマーカー向けAPI
