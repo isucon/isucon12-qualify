@@ -1,10 +1,10 @@
 group "isucon-admin" do
-  gid 1001
+  gid 2000
 end
 
 user "isucon-admin" do
-  uid 1001
-  gid 1001
+  uid 2000
+  gid 2000
   create_home true
   shell "/bin/bash"
 end
