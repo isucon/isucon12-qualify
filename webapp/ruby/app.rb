@@ -24,6 +24,10 @@ module Isuports
     end
     helpers Sinatra::Cookies
 
+    before do
+      cache_control :private
+    end
+
     TENANT_DB_SCHEMA_FILE_PATH = '../sql/tenant/10_schema.sql'
     INITIALIZE_SCRIPT = '../sql/init.sh'
     COOKIE_NAME = 'isuports_session'
