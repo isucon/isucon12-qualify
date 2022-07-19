@@ -12,3 +12,10 @@ execute 'build webapp python' do
   cwd '/home/isucon/webapp'
   not_if { File.exist?("/.dockerenv") }
 end
+
+execute 'build webapp ruby' do
+  command 'docker compose -f docker-compose-ruby.yml build'
+  user 'isucon'
+  cwd '/home/isucon/webapp'
+  not_if { File.exist?("/.dockerenv") }
+end
