@@ -89,6 +89,7 @@ func main() {
 	// ベンチマーク開始
 	result := benchmark.Start(ctx)
 
+	result.Errors.Wait()
 	time.Sleep(time.Second) // 結果が揃うまでちょっと待つ
 
 	// エラーの原因を集計する
