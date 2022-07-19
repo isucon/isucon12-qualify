@@ -215,11 +215,11 @@ func errorResponseHandler(err error, c echo.Context) {
 
 type SuccessResult struct {
 	Status bool `json:"status"`
-	Data    any  `json:"data,omitempty"`
+	Data   any  `json:"data,omitempty"`
 }
 
 type FailureResult struct {
-	Status bool   `json:"status"`
+	Status  bool   `json:"status"`
 	Message string `json:"message"`
 }
 
@@ -488,6 +488,9 @@ func tenantsAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error get LastInsertId: %w", err)
 	}
+	// NOTE: 先にadminDBに書き込まれることでこのAPIの処理中に
+	//       /api/admin/tenants/billingにアクセスされるとエラーになりそう
+	//       ロックなどで対処したほうが良さそう
 	if err := createTenantDB(id); err != nil {
 		return fmt.Errorf("error createTenantDB: id=%d name=%s %w", id, name, err)
 	}
@@ -1015,7 +1018,7 @@ func competitionScoreHandler(c echo.Context) error {
 	}
 	if comp.FinishedAt.Valid {
 		res := FailureResult{
-			Status: false,
+			Status:  false,
 			Message: "competition is finished",
 		}
 		return c.JSON(http.StatusBadRequest, res)
@@ -1119,7 +1122,7 @@ func competitionScoreHandler(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, SuccessResult{
 		Status: true,
-		Data:    ScoreHandlerResult{Rows: int64(len(playerScoreRows))},
+		Data:   ScoreHandlerResult{Rows: int64(len(playerScoreRows))},
 	})
 }
 
