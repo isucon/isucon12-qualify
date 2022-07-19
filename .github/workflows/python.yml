@@ -1,0 +1,49 @@
+name: Python CI
+on:
+  push:
+    branches: [main]
+    paths:
+      - bench/**/*
+      - webapp/python/**/*
+      - development/backend-python/**/*
+      - development/docker-compose-common.yml
+      - development/docker-compose-python.yml
+      - development/Makefile
+      - .github/workflows/python.yml
+  pull_request:
+    paths:
+      - bench/**/*
+      - webapp/python/**/*
+      - development/backend-python/**/*
+      - development/docker-compose-common.yml
+      - development/docker-compose-python.yml
+      - development/Makefile
+      - .github/workflows/python.yml
+jobs:
+  test:
+    name: Build
+    runs-on: [self-hosted, core2]
+    steps:
+      - name: cleanup
+        run: |
+          sudo rm -fr /home/github/work/isucon12-qualify/isucon12-qualify
+          mkdir /home/github/work/isucon12-qualify/isucon12-qualify
+
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: "setup containers"
+        run: |
+          make initial_data
+          make down/python
+          make up/python OPT='-d --build'
+          make install_initial_data
+        working-directory: ./development
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "run bench"
+        working-directory: ./development
+        run: |
+          make run-bench-ci
