@@ -172,7 +172,7 @@ module Isuports
         end
         role = token.fetch('role')
         unless [ROLE_ADMIN, ROLE_ORGANIZER, ROLE_PLAYER].include?(role)
-          raise HttpError.new(401, "invalid token: #{role} is invalid role: #{token_str}")
+          raise HttpError.new(401, "invalid token: invalid role: #{token_str}")
         end
 
         # aud は1要素でテナント名がはいっている
