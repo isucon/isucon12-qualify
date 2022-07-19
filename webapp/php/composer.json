@@ -1,0 +1,39 @@
+{
+    "name": "isucon/isucon-12-qualify",
+    "require": {
+        "php": "^8.1",
+        "doctrine/dbal": "^3.3",
+        "firebase/php-jwt": "^6.2",
+        "monolog/monolog": "^3.1",
+        "php-di/php-di": "^6.4",
+        "slim/psr7": "^1.5",
+        "slim/slim": "^4.10"
+    },
+    "require-dev": {
+        "jangregor/phpstan-prophecy": "^1.0.0",
+        "phpstan/extension-installer": "^1.1.0",
+        "phpstan/phpstan": "^1.7",
+        "squizlabs/php_codesniffer": "^3.6"
+    },
+    "config": {
+        "process-timeout": 0,
+        "sort-packages": true,
+        "allow-plugins": {
+            "phpstan/extension-installer": true
+        }
+    },
+    "autoload": {
+        "files": [
+            "src/Isuports/classes.php"
+        ],
+        "psr-4": {
+            "App\\": "src/",
+            "SQLTrace\\": "sqltrace/"
+        }
+    },
+    "scripts": {
+        "start": "php -S 0.0.0.0:3000 -t public public/index.php",
+        "style": "./vendor/bin/phpcs",
+        "analyse": "./vendor/bin/phpstan"
+    }
+}
