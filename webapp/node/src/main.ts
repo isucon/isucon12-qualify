@@ -101,8 +101,8 @@ async function dispenseID(): Promise<string> {
       id = result.insertId
       break
     } catch (error: any) {
-      if (error.errno && error.errno === 1213) {
-        // deadlock
+      // deadlock
+        if (error.errno && error.errno === 1213) {
         lastErr = error
       }
     }
@@ -484,6 +484,7 @@ app.post(
         )
         id = result.insertId
       } catch (error: any) {
+        // duplicate entry
         if (error.errno && error.errno === 1062) {
           throw new ErrorWithStatus(400, 'duplicate tenant')
         }
@@ -513,7 +514,7 @@ app.post(
       if (error.status) {
         throw error // rethrow
       }
-      throw new ErrorWithStatus(500, error.toString())
+      throw new ErrorWithStatus(500, error)
     }
   })
 )
@@ -593,9 +594,9 @@ async function billingReportByCompetition(
       billing_visitor_yen: 10 * counts.visitor,
       billing_yen: 100 * counts.player + 10 * counts.visitor,
     }
-  } catch (error: any) {
+  } catch (error) {
     throw new Error(
-      `error Select count player_score: tenantId=${tenantId}, competitionId=${comp.id}, ${error.toString()}`
+      `error Select count player_score: tenantId=${tenantId}, competitionId=${comp.id}, ${error}`
     )
   } finally {
     unlock()
