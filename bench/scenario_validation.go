@@ -61,49 +61,56 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 
-	eg := errgroup.Group{}
+	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		if err := allAPISuccessCheck(ctx, sc, step, tenantName, tenantDisplayName); err != nil {
+			AdminLogger.Println("allAPISuccessCheck failed")
 			return err
 		}
-		AdminLogger.Println("allAPISuccessCheck successful")
+		AdminLogger.Println("allAPISuccessCheck done")
 		return nil
 	})
 	eg.Go(func() error {
 		if err := rankingCheck(ctx, sc, step); err != nil {
+			AdminLogger.Println("rankingCheck failed")
 			return err
 		}
-		AdminLogger.Println("rankingCheck successful")
+		AdminLogger.Println("rankingCheck done")
 		return nil
 	})
 	eg.Go(func() error {
 		if err := badRequestCheck(ctx, sc, step); err != nil {
+			AdminLogger.Println("badRequestCheck failed")
 			return err
 		}
-		AdminLogger.Println("badRequestCheck successful")
+		AdminLogger.Println("badRequestCheck done")
 		return nil
 	})
 	eg.Go(func() error {
 		if err := invalidJWTCheck(ctx, sc, step); err != nil {
+			AdminLogger.Println("invalidJWTCheck failed")
 			return err
 		}
-		AdminLogger.Println("invalidJWTCheck successful")
+		AdminLogger.Println("invalidJWTCheck done")
 		return nil
 	})
 	eg.Go(func() error {
 		if err := billingAPISuccessCheck(ctx, sc, step); err != nil {
+			AdminLogger.Println("billingAPISuccessCheck failed")
 			return err
 		}
-		AdminLogger.Println("billingAPISuccessCheck successful")
+		AdminLogger.Println("billingAPISuccessCheck done")
 		return nil
 	})
 
-	if err := eg.Wait(); err != nil {
+	err = eg.Wait()
+	if err != nil {
+		AdminLogger.Printf("validation error: %s", err)
 		return err
 	}
-
 	if n := len(step.Result().Errors.All()); n != 0 {
-		return fmt.Errorf("エラーが%d件あります", n)
+		AdminLogger.Printf("エラーが%d件あります", n)
+		return fmt.Errorf("validation failed")
 	}
 
 	return nil
@@ -1278,34 +1285,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 // 不正リクエスト 無効なJWT
 func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
 	tenantName := "invalid-jwt-tenant"
-	tenantDisplayName := "valid-Tenantname"
-
-	// SaaS管理者のagent作成
-	adminAc, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
-	if err != nil {
-		return err
-	}
-	// SaaS管理API
-	{
-		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, adminAg)
-		msg := fmt.Sprintf("%s %s", adminAc, txt)
-		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, fmt.Sprintf("%s %s", msg, adminAc), WithStatusCode(200),
-			WithContentType("application/json"),
-			WithCacheControlPrivate(),
-			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
-				if tenantDisplayName != r.Data.Tenant.DisplayName {
-					return fmt.Errorf("作成したテナントのDisplayNameが違います (want: %s, got: %s)", tenantDisplayName, r.Data.Tenant.DisplayName)
-				}
-				if tenantName != r.Data.Tenant.Name {
-					return fmt.Errorf("作成したテナントのNameが違います (want: %s, got: %s)", tenantName, r.Data.Tenant.Name)
-				}
-				return nil
-			}),
-		)
-		if !v.IsEmpty() {
-			return v
-		}
-	}
+	tenantDisplayName := "invalid-jwt-Tenantname"
 
 	// exp切れ
 	{
@@ -1330,6 +1310,89 @@ func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 			WithCacheControlPrivate(),
 		)
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
+		}
+	}
+
+	// 不正なRSA鍵
+	{
+		ac := &Account{
+			Role:          AccountRoleAdmin,
+			TenantName:    "admin",
+			PlayerID:      "admin",
+			Option:        sc.Option,
+			InvalidRSAKey: true,
+		}
+		if err := ac.SetJWT(sc.RawKey, true); err != nil {
+			return fmt.Errorf("SetJWT: %s", err)
+		}
+		ag, err := ac.GetAgent()
+		if err != nil {
+			return fmt.Errorf("GetAgent: %s", err)
+		}
+
+		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, ag)
+		msg := fmt.Sprintf("%s %s", ac, txt)
+		v := ValidateResponseWithMsg("新規テナント作成: 不正リクエスト(不正なRSA鍵)", step, res, err, msg, WithStatusCode(401),
+			WithContentType("application/json"),
+			WithCacheControlPrivate(),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
+		}
+	}
+
+	// 不正な鍵認証方式
+	{
+		ac := &Account{
+			Role:           AccountRoleAdmin,
+			TenantName:     "admin",
+			PlayerID:       "admin",
+			Option:         sc.Option,
+			InvalidKeyArgo: true,
+		}
+		if err := ac.SetJWT(sc.RawKey, true); err != nil {
+			return fmt.Errorf("SetJWT: %s", err)
+		}
+		ag, err := ac.GetAgent()
+		if err != nil {
+			return fmt.Errorf("GetAgent: %s", err)
+		}
+
+		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, ag)
+		msg := fmt.Sprintf("%s %s", ac, txt)
+		v := ValidateResponseWithMsg("新規テナント作成: 不正リクエスト(不正な鍵認証方式)", step, res, err, msg, WithStatusCode(401),
+			WithContentType("application/json"),
+			WithCacheControlPrivate(),
+		)
+		if !v.IsEmpty() && sc.Option.StrictPrepare {
+			return v
+		}
+	}
+
+	// 確認用のテナントを作成する
+	adminAc, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
+	if err != nil {
+		return err
+	}
+
+	{
+		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, adminAg)
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
+		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, fmt.Sprintf("%s %s", msg, adminAc), WithStatusCode(200),
+			WithContentType("application/json"),
+			WithCacheControlPrivate(),
+			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
+				if tenantDisplayName != r.Data.Tenant.DisplayName {
+					return fmt.Errorf("作成したテナントのDisplayNameが違います (want: %s, got: %s)", tenantDisplayName, r.Data.Tenant.DisplayName)
+				}
+				if tenantName != r.Data.Tenant.Name {
+					return fmt.Errorf("作成したテナントのNameが違います (want: %s, got: %s)", tenantName, r.Data.Tenant.Name)
+				}
+				return nil
+			}),
+		)
+		if !v.IsEmpty() {
 			return v
 		}
 	}
