@@ -317,7 +317,7 @@ async function parseViewer(req: Request): Promise<Viewer> {
       break
 
     default:
-      throw new ErrorWithStatus(401, `invalid token: ${tr} is invalid role: ${tokenStr}"`)
+      throw new ErrorWithStatus(401, `invalid token: invalid role: ${tokenStr}"`)
   }
 
   // aud は1要素で、テナント名が入っている
