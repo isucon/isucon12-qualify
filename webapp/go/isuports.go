@@ -644,8 +644,8 @@ func tenantsBillingHandler(c echo.Context) error {
 	}
 	// テナントごとに
 	//   大会ごとに
-	//     scoreに登録されているplayer * 100
-	//     scoreに登録されていないplayerでアクセスした人 * 10
+	//     scoreが登録されているplayer * 100
+	//     scoreが登録されていないplayerでアクセスした人 * 10
 	//   を合計したものを
 	// テナントの課金とする
 	ts := []TenantRow{}
