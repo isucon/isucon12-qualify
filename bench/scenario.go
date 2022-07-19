@@ -62,6 +62,8 @@ type Scenario struct {
 	ErrorCh         chan struct{}
 	CriticalErrorCh chan struct{}
 
+	HeavyTenantCount int
+
 	CompetitionAddLog *CompactLogger
 	TenantAddLog      *CompactLogger
 }
@@ -90,6 +92,8 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	sc.WorkerCh = make(chan Worker, 10)
 	sc.CriticalErrorCh = make(chan struct{}, 10)
 	sc.ErrorCh = make(chan struct{}, 10)
+
+	sc.HeavyTenantCount = 0
 
 	sc.CompetitionAddLog = NewCompactLog(ContestantLogger)
 	sc.TenantAddLog = NewCompactLog(ContestantLogger)
@@ -194,16 +198,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 
 	// // 最初から回る新規テナント
 	{
-		wkr, err := sc.NewTenantScenarioWorker(step, 1)
-		if err != nil {
-			return err
-		}
-		sc.WorkerCh <- wkr
-	}
-
-	// 重いテナント(id=1)を見るworker
-	{
-		wkr, err := sc.PopularTenantScenarioWorker(step, 1, true)
+		wkr, err := sc.NewTenantScenarioWorker(step, nil, 1)
 		if err != nil {
 			return err
 		}

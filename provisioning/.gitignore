@@ -1,4 +1,7 @@
 isucon-admin
 /isucon-env-checker/isucon-env-checker
 mitamae/cookbooks/envchecker/isucon-env-checker
+mitamae/cookbooks/blackauth/blackauth
 mitamae.tar.gz
+initial_data.tar.gz
+isucon12-qualify/

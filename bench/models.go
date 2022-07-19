@@ -1,6 +1,7 @@
 package bench
 
 import (
+	crand "crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
@@ -33,8 +34,9 @@ type Account struct {
 	TenantName string // JWTのaudience adminの場合は空（あるいは無視）
 	PlayerID   string // JWTのsubject
 
-	// Option.TargetURL: http://t.isucon.dev Role: adminなら
-	// GetRequestURLは http://admin.t.isucon.dev
+	// Invalid JWT用 セットされていなければ有効な鍵がセットされる
+	InvalidRSAKey  bool
+	InvalidKeyArgo bool
 }
 
 func (ac *Account) String() string {
@@ -75,7 +77,20 @@ func (ac *Account) SetJWT(rawkey *rsa.PrivateKey, isValidExp bool) error {
 	token.Set("role", ac.Role)
 	token.Set("exp", expTime.Unix())
 
-	signedToken, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, rawkey))
+	signOpts := []jwt.SignOption{}
+	if ac.InvalidRSAKey {
+		key, err := rsa.GenerateKey(crand.Reader, 2048)
+		if err != nil {
+			return fmt.Errorf("rsa.GenerateKey: %s", err)
+		}
+		signOpts = append(signOpts, jwt.WithKey(jwa.RS256, key))
+	} else if ac.InvalidKeyArgo {
+		signOpts = append(signOpts, jwt.WithKey(jwa.RS512, rawkey))
+	} else {
+		signOpts = append(signOpts, jwt.WithKey(jwa.RS256, rawkey))
+	}
+
+	signedToken, err := jwt.Sign(token, signOpts...)
 	if err != nil {
 		return fmt.Errorf("error jwt.Sign: %w", err)
 	}

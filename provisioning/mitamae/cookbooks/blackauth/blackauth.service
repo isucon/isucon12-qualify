@@ -1,0 +1,14 @@
+[Unit]
+Description=isucon12 qualify auth server
+After=network.target
+
+[Install]
+WantedBy=multi-user.target
+
+[Service]
+Type=simple
+User=isucon-admin
+Group=isucon-admin
+WorkingDirectory=/home/isucon-admin/blackauth
+ExecStart=/home/isucon-admin/blackauth/blackauth
+Restart=always
