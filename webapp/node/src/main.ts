@@ -624,9 +624,6 @@ app.get(
             const report = await billingReportByCompetition(tenantDB, tenant.id, comp.id)
             tb.billing += report.billing_yen
           }
-          // } catch (error) {
-          //   // TODO
-          //   throw error
         } finally {
           tenantDB.close()
         }
@@ -745,8 +742,6 @@ app.post(
             is_disqualified: !!player.is_disqualified,
           })
         }
-        // } catch (error) {
-        //   throw error
       } finally {
         tenantDB.close()
       }
@@ -780,10 +775,14 @@ app.post(
         throw new ErrorWithStatus(403, 'role organizer required')
       }
 
-      const tenantDB = await connectToTenantDB(viewer.tenantId)
       const { playerId } = req.params
+      if (!playerId) {
+        throw new ErrorWithStatus(400, 'player_id is required')
+      }
+
       const now = Math.floor(new Date().getTime() / 1000)
       let pd: PlayerDetail
+      const tenantDB = await connectToTenantDB(viewer.tenantId)
       try {
         try {
           await tenantDB.run('UPDATE player SET is_disqualified = ?, updated_at = ? WHERE id = ?', true, now, playerId)
@@ -840,10 +839,10 @@ app.post(
         throw new ErrorWithStatus(403, 'role organizer required')
       }
 
-      const tenantDB = await connectToTenantDB(viewer.tenantId)
       const { title } = req.body
       const now = Math.floor(new Date().getTime() / 1000)
       const id = await dispenseID()
+      const tenantDB = await connectToTenantDB(viewer.tenantId)
       try {
         await tenantDB.run(
           'INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -893,13 +892,13 @@ app.post(
         throw new ErrorWithStatus(403, 'role organizer required')
       }
 
-      const tenantDB = await connectToTenantDB(viewer.tenantId)
       const { competitionId } = req.params
       if (!competitionId) {
         throw new ErrorWithStatus(400, 'competition_id required')
       }
-      const now = Math.floor(new Date().getTime() / 1000)
 
+      const now = Math.floor(new Date().getTime() / 1000)
+      const tenantDB = await connectToTenantDB(viewer.tenantId)
       try {
         const competition = await retrieveCompetition(tenantDB, competitionId)
         if (!competition) {
@@ -907,10 +906,6 @@ app.post(
         }
 
         await tenantDB.run('UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?', now, now, competitionId)
-
-        // } catch (error) {
-        //   // TODO
-        //   throw error
       } finally {
         tenantDB.close()
       }
@@ -940,13 +935,13 @@ app.post(
         throw new ErrorWithStatus(403, 'role organizer required')
       }
 
-      const tenantDB = await connectToTenantDB(viewer.tenantId)
       const { competitionId } = req.params
       if (!competitionId) {
         throw new ErrorWithStatus(400, 'competition_id required')
       }
 
       const playerScoreRows: PlayerScoreRow[] = []
+      const tenantDB = await connectToTenantDB(viewer.tenantId)
       try {
         const competition = await retrieveCompetition(tenantDB, competitionId)
         if (!competition) {
@@ -1035,8 +1030,6 @@ app.post(
               }
             )
           }
-          // } catch (error) {
-          //   throw error
         } finally {
           unlock()
         }
@@ -1087,8 +1080,6 @@ app.get(
           const report = await billingReportByCompetition(tenantDB, viewer.tenantId, comp.id)
           reports.push(report)
         }
-        // } catch(error) {
-        //   throw error
       } finally {
         tenantDB.close()
       }
@@ -1176,13 +1167,14 @@ app.get(
         throw new ErrorWithStatus(403, 'role player required')
       }
 
-      const tenantDB = await connectToTenantDB(viewer.tenantId)
       const { playerId } = req.params
-      let pd: PlayerDetail
-      const psds: PlayerScoreDetail[] = []
       if (!playerId) {
         throw new ErrorWithStatus(400, 'player_id is required')
       }
+
+      let pd: PlayerDetail
+      const psds: PlayerScoreDetail[] = []
+      const tenantDB = await connectToTenantDB(viewer.tenantId)
       try {
         const error = await authorizePlayer(tenantDB, viewer.playerId)
         if (error) {
@@ -1232,8 +1224,6 @@ app.get(
               score: ps.score,
             })
           }
-          // } catch (error) {
-          //   throw error
         } finally {
           unlock()
         }
@@ -1270,13 +1260,14 @@ app.get(
         throw new ErrorWithStatus(403, 'role player required')
       }
 
-      const tenantDB = await connectToTenantDB(viewer.tenantId)
       const { competitionId } = req.params
-      let cd: CompetitionDetail
-      const ranks: CompetitionRank[] = []
       if (!competitionId) {
         throw new ErrorWithStatus(400, 'competition_id is required')
       }
+
+      let cd: CompetitionDetail
+      const ranks: CompetitionRank[] = []
+      const tenantDB = await connectToTenantDB(viewer.tenantId)
       try {
         const error = await authorizePlayer(tenantDB, viewer.playerId)
         if (error) {
@@ -1355,8 +1346,6 @@ app.get(
               player_display_name: rank.player_display_name,
             })
           })
-          // } catch (error) {
-          //   throw error
         } finally {
           unlock()
         }
@@ -1401,8 +1390,6 @@ app.get(
         }
 
         await competitionsHandler(req, res, viewer, tenantDB)
-        // } catch (error) {
-        //   throw error
       } finally {
         tenantDB.close()
       }
