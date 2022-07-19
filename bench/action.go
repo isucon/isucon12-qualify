@@ -202,7 +202,9 @@ func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID string
 	}
 
 	msg := fmt.Sprintf("competitionID:%s rankAfter:%s", competitionID, rankAfter)
-	res, err := ag.Do(ctx, req)
+	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 	return res, err, msg
 }
 
@@ -212,8 +214,22 @@ func GetPlayerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Re
 		return nil, err, ""
 	}
 
-	res, err := ag.Do(ctx, req)
+	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 	return res, err, ""
+}
+
+func GetFile(ctx context.Context, ag *agent.Agent, path string) (*http.Response, error) {
+	req, err := ag.GET(path)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
+	return res, err
 }
 
 // 429 Too Many Requestsの場合にretry after分待ってretryする
