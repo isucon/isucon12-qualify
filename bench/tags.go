@@ -27,7 +27,7 @@ func (st ScenarioTag) String() string {
 }
 
 const (
-	ScenarioTagAdmin                   ScenarioTag = "Admin"
+	ScenarioTagAdminBilling            ScenarioTag = "AdminBilling"
 	ScenarioTagOrganizerNewTenant      ScenarioTag = "OrganizerNewTenant"
 	ScenarioTagOrganizerPopularTenant  ScenarioTag = "OrganizerPopularTenant"
 	ScenarioTagOrganizerPeacefulTenant ScenarioTag = "OrganizerPeacefulTenant"
@@ -57,7 +57,7 @@ var ResultScoreMap = map[score.ScoreTag]int64{
 // 各tagのリスト
 var (
 	ScenarioTagList = []ScenarioTag{
-		ScenarioTagAdmin,
+		ScenarioTagAdminBilling,
 		ScenarioTagOrganizerNewTenant,
 		ScenarioTagOrganizerPopularTenant,
 		ScenarioTagOrganizerPeacefulTenant,
