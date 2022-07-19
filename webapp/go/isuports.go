@@ -204,22 +204,22 @@ func errorResponseHandler(err error, c echo.Context) {
 	var he *echo.HTTPError
 	if errors.As(err, &he) {
 		c.JSON(he.Code, FailureResult{
-			Success: false,
+			Status: false,
 		})
 		return
 	}
 	c.JSON(http.StatusInternalServerError, FailureResult{
-		Success: false,
+		Status: false,
 	})
 }
 
 type SuccessResult struct {
-	Success bool `json:"status"`
+	Status bool `json:"status"`
 	Data    any  `json:"data,omitempty"`
 }
 
 type FailureResult struct {
-	Success bool   `json:"status"`
+	Status bool   `json:"status"`
 	Message string `json:"message"`
 }
 
@@ -503,7 +503,7 @@ func tenantsAddHandler(c echo.Context) error {
 			BillingYen:  0,
 		},
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true, Data: res})
 }
 
 // テナント名が規則に沿っているかチェックする
@@ -704,7 +704,7 @@ func tenantsBillingHandler(c echo.Context) error {
 		}
 	}
 	return c.JSON(http.StatusOK, SuccessResult{
-		Success: true,
+		Status: true,
 		Data: TenantsBillingHandlerResult{
 			Tenants: tenantBillings,
 		},
@@ -760,7 +760,7 @@ func playersListHandler(c echo.Context) error {
 	res := PlayersListHandlerResult{
 		Players: pds,
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true, Data: res})
 }
 
 type PlayersAddHandlerResult struct {
@@ -823,7 +823,7 @@ func playersAddHandler(c echo.Context) error {
 	res := PlayersAddHandlerResult{
 		Players: pds,
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true, Data: res})
 }
 
 type PlayerDisqualifiedHandlerResult struct {
@@ -877,7 +877,7 @@ func playerDisqualifiedHandler(c echo.Context) error {
 			IsDisqualified: p.IsDisqualified,
 		},
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true, Data: res})
 }
 
 type CompetitionDetail struct {
@@ -933,7 +933,7 @@ func competitionsAddHandler(c echo.Context) error {
 			IsFinished: false,
 		},
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true, Data: res})
 }
 
 // テナント管理者向けAPI
@@ -978,7 +978,7 @@ func competitionFinishHandler(c echo.Context) error {
 			now, now, id, err,
 		)
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true})
 }
 
 type ScoreHandlerResult struct {
@@ -1018,7 +1018,7 @@ func competitionScoreHandler(c echo.Context) error {
 	}
 	if comp.FinishedAt.Valid {
 		res := FailureResult{
-			Success: false,
+			Status: false,
 			Message: "competition is finished",
 		}
 		return c.JSON(http.StatusBadRequest, res)
@@ -1121,7 +1121,7 @@ func competitionScoreHandler(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, SuccessResult{
-		Success: true,
+		Status: true,
 		Data:    ScoreHandlerResult{Rows: int64(len(playerScoreRows))},
 	})
 }
@@ -1168,7 +1168,7 @@ func billingHandler(c echo.Context) error {
 	}
 
 	res := SuccessResult{
-		Success: true,
+		Status: true,
 		Data: BillingHandlerResult{
 			Reports: tbrs,
 		},
@@ -1270,7 +1270,7 @@ func playerHandler(c echo.Context) error {
 	}
 
 	res := SuccessResult{
-		Success: true,
+		Status: true,
 		Data: PlayerHandlerResult{
 			Player: PlayerDetail{
 				ID:             p.ID,
@@ -1417,7 +1417,7 @@ func competitionRankingHandler(c echo.Context) error {
 	}
 
 	res := SuccessResult{
-		Success: true,
+		Status: true,
 		Data: CompetitionRankingHandlerResult{
 			Competition: CompetitionDetail{
 				ID:         competition.ID,
@@ -1503,7 +1503,7 @@ func competitionsHandler(c echo.Context, v *Viewer, tenantDB dbOrTx) error {
 	}
 
 	res := SuccessResult{
-		Success: true,
+		Status: true,
 		Data: CompetitionsHandlerResult{
 			Competitions: cds,
 		},
@@ -1540,7 +1540,7 @@ func meHandler(c echo.Context) error {
 		var he *echo.HTTPError
 		if ok := errors.As(err, &he); ok && he.Code == http.StatusUnauthorized {
 			return c.JSON(http.StatusOK, SuccessResult{
-				Success: true,
+				Status: true,
 				Data: MeHandlerResult{
 					Tenant:   td,
 					Me:       nil,
@@ -1553,7 +1553,7 @@ func meHandler(c echo.Context) error {
 	}
 	if v.role == RoleAdmin || v.role == RoleOrganizer {
 		return c.JSON(http.StatusOK, SuccessResult{
-			Success: true,
+			Status: true,
 			Data: MeHandlerResult{
 				Tenant:   td,
 				Me:       nil,
@@ -1572,7 +1572,7 @@ func meHandler(c echo.Context) error {
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return c.JSON(http.StatusOK, SuccessResult{
-				Success: true,
+				Status: true,
 				Data: MeHandlerResult{
 					Tenant:   td,
 					Me:       nil,
@@ -1585,7 +1585,7 @@ func meHandler(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, SuccessResult{
-		Success: true,
+		Status: true,
 		Data: MeHandlerResult{
 			Tenant: td,
 			Me: &PlayerDetail{
@@ -1615,5 +1615,5 @@ func initializeHandler(c echo.Context) error {
 	res := InitializeHandlerResult{
 		Lang: "go",
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true, Data: res})
 }
