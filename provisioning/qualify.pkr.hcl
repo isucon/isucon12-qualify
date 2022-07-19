@@ -100,6 +100,9 @@ build {
       "sudo mysql -u root -p -e \"ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'root';\"",
       "sudo cat /home/isucon/webapp/sql/admin/*.sql | mysql -uroot -proot",
 
+      # prepare webapp
+      "sudo ./mitamae local roles/webapp.rb",
+
       # Remove authorized_keys for packer
       "sudo truncate -s 0 /home/ubuntu/.ssh/authorized_keys",
       "sudo truncate -s 0 /etc/machine-id",
