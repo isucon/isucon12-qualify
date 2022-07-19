@@ -257,7 +257,7 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		jwt.WithKey(jwa.RS256, key),
 	)
 	if err != nil {
-		return nil, echo.NewHTTPError(http.StatusUnauthorized, err.Error())
+		return nil, echo.NewHTTPError(http.StatusUnauthorized, fmt.Errorf("error jwt.Parse: %s", err.Error()))
 	}
 	if token.Subject() == "" {
 		return nil, echo.NewHTTPError(
