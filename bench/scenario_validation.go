@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -102,6 +104,14 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		AdminLogger.Println("billingAPISuccessCheck done")
 		return nil
 	})
+	eg.Go(func() error {
+		if err := staticFileCheck(ctx, sc, step); err != nil {
+			AdminLogger.Println("staticFileCheck failed")
+			return err
+		}
+		AdminLogger.Println("staticFileCheck done")
+		return nil
+	})
 
 	err = eg.Wait()
 	if err != nil {
@@ -113,6 +123,56 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		return fmt.Errorf("validation failed")
 	}
 
+	return nil
+}
+
+func staticFileCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
+	ag, err := sc.Option.NewAgent(sc.Option.TargetURL, false)
+	if err != nil {
+		return err
+	}
+
+	paths := []string{
+		"/index.html",
+	}
+
+	entries, err := os.ReadDir("../public/js")
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".js") {
+			paths = append(paths, "/js/"+entry.Name())
+			break
+		}
+	}
+
+	entries, err = os.ReadDir("../public/css")
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if strings.HasSuffix(entry.Name(), ".css") {
+			paths = append(paths, "/css/"+entry.Name())
+			break
+		}
+	}
+
+	for _, path := range paths {
+		res, err := GetFile(ctx, ag, path)
+		if err != nil {
+			return err
+		}
+		v := ValidateResponseWithMsg(
+			fmt.Sprintf("%sを確認", path),
+			step, res, err, "",
+			WithStatusCode(200),
+			WithBodySameFile("../public"+path),
+		)
+		if !v.IsEmpty() {
+			return v
+		}
+	}
 	return nil
 }
 
