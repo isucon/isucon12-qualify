@@ -283,7 +283,7 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 	default:
 		return nil, echo.NewHTTPError(
 			http.StatusUnauthorized,
-			fmt.Sprintf("invalid token: %s is invalid role", tokenStr),
+			fmt.Sprintf("invalid token: invalid role: %s", tokenStr),
 		)
 	}
 	// aud は1要素でテナント名がはいっている
