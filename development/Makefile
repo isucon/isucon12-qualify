@@ -14,7 +14,7 @@ init-mysql:
 		bash -c 'cat 10_schema.sql 90_data.sql | mysql -uisucon -pisucon isuports'
 
 run-bench:
-	docker compose -f docker-compose-common.yml exec bench ./run_local.sh -target-addr nginx:443
+	docker compose -f docker-compose-common.yml exec bench ./run_local.sh -target-addr nginx:443 -duration 3m
 
 run-bench-noload:
 	docker compose -f docker-compose-common.yml exec bench ./run_local.sh -prepare-only -strict-prepare=false -target-addr nginx:443
