@@ -98,5 +98,15 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 	}
 	sc.WorkerCh <- newTenantWorker
 
+	// 重いテナント(id=1)を見るworker
+	if sc.HeavyTenantCount == 0 {
+		wkr, err := sc.PopularTenantScenarioWorker(step, 1, true)
+		if err != nil {
+			return err
+		}
+		sc.WorkerCh <- wkr
+		sc.HeavyTenantCount++
+	}
+
 	return nil
 }
