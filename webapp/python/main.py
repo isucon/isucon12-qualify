@@ -305,6 +305,9 @@ def tenants_add_handler():
     except IntegrityError:  # duplicate entry
         abort(400, "duplicate tenant")
 
+    # NOTE: 先にadminDBに書き込まれることでこのAPIの処理中に
+	#       /api/admin/tenants/billingにアクセスされるとエラーになりそう
+	#       ロックなどで対処したほうが良さそう
     create_tenant_db(id)
 
     return jsonify(
