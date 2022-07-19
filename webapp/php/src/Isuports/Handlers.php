@@ -346,6 +346,9 @@ class Handlers
         /** @var string $id */
         $id = $this->adminDB->lastInsertId();
 
+        // NOTE: 先にadminDBに書き込まれることでこのAPIの処理中に
+        //       /api/admin/tenants/billingにアクセスされるとエラーになりそう
+        //       ロックなどで対処したほうが良さそう
         $this->createTenantDB((int)$id);
 
         $res = new TenantsAddHandlerResult(
@@ -456,9 +459,8 @@ class Handlers
 
         // テナントごとに
         //   大会ごとに
-        //     scoreに登録されているplayerでアクセスした人 * 100
-        //     scoreに登録されているplayerでアクセスしていない人 * 50
-        //     scoreに登録されていないplayerでアクセスした人 * 10
+        //     scoreが登録されているplayer * 100
+        //     scoreが登録されていないplayerでアクセスした人 * 10
         //   を合計したものを
         // テナントの課金とする
         $ts = $this->adminDB->executeQuery('SELECT * FROM tenant ORDER BY id DESC')
