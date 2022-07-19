@@ -61,7 +61,7 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		}
 	}
 
-	eg, ctx := errgroup.WithContext(ctx)
+	eg := errgroup.Group{}
 	eg.Go(func() error {
 		if err := allAPISuccessCheck(ctx, sc, step, tenantName, tenantDisplayName); err != nil {
 			AdminLogger.Println("allAPISuccessCheck failed")
@@ -289,7 +289,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	// スコア入稿とPlayerのランキング参照を同時
 	checkPlayerIndex := 10 // < disqualifiedPlayerIndex
 	{
-		eg := errgroup.Group{}
+		eg, ctx := errgroup.WithContext(ctx)
 		scoreCh := make(chan struct{})
 
 		getRankingFunc := func() error {

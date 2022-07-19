@@ -3,6 +3,7 @@ package bench
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -22,7 +23,7 @@ func (w *adminBillingScenarioWorker) Process(ctx context.Context) { w.worker.Pro
 // 指定回数エラーが出るまで繰り返し、並列動作はしない
 
 func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p int32) (Worker, error) {
-	scTag := ScenarioTagAdmin
+	scTag := ScenarioTagAdminBilling
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.AdminBillingScenario(ctx, step, scTag); err != nil {
 			sc.ScenarioError(scTag, err)
@@ -75,16 +76,40 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 					completed = true
 					return nil
 				}
+
+				// IDは降順である必要がある
+				beforeID := int64(0)
+				for _, tenant := range r.Data.Tenants {
+					id, err := strconv.ParseInt(tenant.ID, 10, 64)
+					if err != nil {
+						return fmt.Errorf("tenant IDの形が違います %s", tenant.ID)
+					}
+
+					if beforeID != 0 && beforeID < id {
+						return fmt.Errorf("tenant IDが降順ではありません (before:%d got:%d)", beforeID, id)
+					}
+					beforeID = id
+
+				}
+
 				beforeTenantID = r.Data.Tenants[len(r.Data.Tenants)-1].ID
 				return nil
 			}),
 		)
+
+		// 無限forになるのでcontext打ち切りを確認する
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
+			AdminLogger.Println("AdminTenantsBilling success: beforeTenantID:", beforeTenantID)
+		} else if v.Canceled {
+			// contextの打ち切りでloopを抜ける
+			return nil
 		} else {
+			// ErrorCountで打ち切りがあるので、ここでreturn ValidateErrorはせずリトライする
+			AdminLogger.Println("AdminTenantsBilling failed: beforeTenantID:", beforeTenantID)
 			sc.AddErrorCount()
-			return v
 		}
+
 		// id=1が重いので、light modeなら一回で終わる
 		if sc.Option.LoadType == LoadTypeLight {
 			completed = true
