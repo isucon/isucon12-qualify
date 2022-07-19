@@ -361,7 +361,9 @@ async function retrieveTenantRowFromHeader(req: Request): Promise<TenantRow | un
 
   // テナントの存在確認
   try {
-    const [[tenantRow]] = await adminDB.query<(TenantRow & RowDataPacket)[]>('SELECT * FROM tenant WHERE name = ?', [tenantName])
+    const [[tenantRow]] = await adminDB.query<(TenantRow & RowDataPacket)[]>('SELECT * FROM tenant WHERE name = ?', [
+      tenantName,
+    ])
     return tenantRow
   } catch (error) {
     throw new Error(`failed to Select tenant: name=${tenantName}, ${error}`)
@@ -464,13 +466,18 @@ app.post(
       const now = Math.floor(new Date().getTime() / 1000)
       let id: number
       try {
-        const [result] = await adminDB.execute<OkPacket>('INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)', [name, display_name, now, now])
+        const [result] = await adminDB.execute<OkPacket>(
+          'INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)',
+          [name, display_name, now, now]
+        )
         id = result.insertId
       } catch (error: any) {
         if (error.errno && error.errno === 1062) {
           throw new ErrorWithStatus(400, 'duplicate tenant')
         }
-        throw new Error(`error Insert tenant: name=${name}, displayName=${display_name}, createdAt=${now}, updatedAt=${now}, ${error}`)
+        throw new Error(
+          `error Insert tenant: name=${name}, displayName=${display_name}, createdAt=${now}, updatedAt=${now}, ${error}`
+        )
       }
 
       const error = await createTenantDB(id)
@@ -508,7 +515,11 @@ function validateTenantName(name: string): boolean {
 }
 
 // 大会ごとの課金レポートを計算する
-async function billingReportByCompetition(tenantDB: Database, tenantId: number, competitionId: string): Promise<BillingReport> {
+async function billingReportByCompetition(
+  tenantDB: Database,
+  tenantId: number,
+  competitionId: string
+): Promise<BillingReport> {
   const comp = await retrieveCompetition(tenantDB, competitionId)
   if (!comp) {
     throw Error('error retrieveCompetition on billingReportByCompetition')
@@ -571,7 +582,9 @@ async function billingReportByCompetition(tenantDB: Database, tenantId: number, 
       billing_yen: 100 * counts.player + 10 * counts.visitor,
     }
   } catch (error: any) {
-    throw new Error(`error Select count player_score: tenantId=${tenantId}, competitionId=${comp.id}, ${error.toString()}`)
+    throw new Error(
+      `error Select count player_score: tenantId=${tenantId}, competitionId=${comp.id}, ${error.toString()}`
+    )
   } finally {
     unlock()
   }
@@ -629,7 +642,10 @@ app.get(
 
         const tenantDB = await connectToTenantDB(tenant.id)
         try {
-          const competitions = await tenantDB.all<CompetitionRow[]>('SELECT * FROM competition WHERE tenant_id = ?', tenant.id)
+          const competitions = await tenantDB.all<CompetitionRow[]>(
+            'SELECT * FROM competition WHERE tenant_id = ?',
+            tenant.id
+          )
 
           for (const comp of competitions) {
             const report = await billingReportByCompetition(tenantDB, tenant.id, comp.id)
@@ -678,7 +694,10 @@ app.get(
 
       const tenantDB = await connectToTenantDB(viewer.tenantId)
       try {
-        const pls = await tenantDB.all<PlayerRow[]>('SELECT * FROM player WHERE tenant_id = ? ORDER BY created_at DESC', viewer.tenantId)
+        const pls = await tenantDB.all<PlayerRow[]>(
+          'SELECT * FROM player WHERE tenant_id = ? ORDER BY created_at DESC',
+          viewer.tenantId
+        )
 
         pls.forEach((player) => {
           pds.push({
@@ -865,7 +884,9 @@ app.post(
           now
         )
       } catch (error) {
-        throw new Error(`error Insert competition: id=${id}, tenant_id=${viewer.tenantId}, title=${title}, finishedAt=null, createdAt=${now}, updatedAt=${now}, ${error}`)
+        throw new Error(
+          `error Insert competition: id=${id}, tenant_id=${viewer.tenantId}, title=${title}, finishedAt=null, createdAt=${now}, updatedAt=${now}, ${error}`
+        )
       } finally {
         tenantDB.close()
       }
@@ -916,7 +937,12 @@ app.post(
           throw new ErrorWithStatus(404, 'competition not found')
         }
 
-        await tenantDB.run('UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?', now, now, competitionId)
+        await tenantDB.run(
+          'UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?',
+          now,
+          now,
+          competitionId
+        )
       } finally {
         tenantDB.close()
       }
@@ -1024,7 +1050,11 @@ app.post(
             })
           }
 
-          await tenantDB.run('DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?', viewer.tenantId, competitionId)
+          await tenantDB.run(
+            'DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?',
+            viewer.tenantId,
+            competitionId
+          )
 
           for (const row of playerScoreRows) {
             await tenantDB.run(
@@ -1085,7 +1115,10 @@ app.get(
       const reports: BillingReport[] = []
       const tenantDB = await connectToTenantDB(viewer.tenantId)
       try {
-        const competitions = await tenantDB.all<CompetitionRow[]>('SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC', viewer.tenantId)
+        const competitions = await tenantDB.all<CompetitionRow[]>(
+          'SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC',
+          viewer.tenantId
+        )
 
         for (const comp of competitions) {
           const report = await billingReportByCompetition(tenantDB, viewer.tenantId, comp.id)
@@ -1113,7 +1146,10 @@ app.get(
 
 async function competitionsHandler(req: Request, res: Response, viewer: Viewer, tenantDB: Database) {
   try {
-    const competitions = await tenantDB.all<CompetitionRow[]>('SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at DESC', viewer.tenantId)
+    const competitions = await tenantDB.all<CompetitionRow[]>(
+      'SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at DESC',
+      viewer.tenantId
+    )
 
     const cds: CompetitionDetail[] = []
     for (const comp of competitions) {
@@ -1296,15 +1332,14 @@ app.get(
         }
 
         const now = Math.floor(new Date().getTime() / 1000)
-        const [[tenant]] = await adminDB.query<(TenantRow & RowDataPacket)[]>('SELECT * FROM tenant WHERE id = ?', [viewer.tenantId])
-
-        await adminDB.execute<OkPacket>('INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [
-          viewer.playerId,
-          tenant.id,
-          competitionId,
-          now,
-          now,
+        const [[tenant]] = await adminDB.query<(TenantRow & RowDataPacket)[]>('SELECT * FROM tenant WHERE id = ?', [
+          viewer.tenantId,
         ])
+
+        await adminDB.execute<OkPacket>(
+          'INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+          [viewer.playerId, tenant.id, competitionId, now, now]
+        )
 
         const { rank_after: rankAfterStr } = req.query
         let rankAfter: number
@@ -1315,7 +1350,11 @@ app.get(
         // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
         const unlock = await flockByTenantID(tenant.id)
         try {
-          const pss = await tenantDB.all<PlayerScoreRow[]>('SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC', tenant.id, competition.id)
+          const pss = await tenantDB.all<PlayerScoreRow[]>(
+            'SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC',
+            tenant.id,
+            competition.id
+          )
 
           const scoredPlayerSet: { [player_id: string]: number } = {}
           const tmpRanks: (CompetitionRank & WithRowNum)[] = []

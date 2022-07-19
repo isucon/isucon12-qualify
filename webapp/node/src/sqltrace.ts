@@ -15,7 +15,13 @@ export const useSqliteTraceHook = (db: Database, filePath: string) => {
   //   console.log(sql + ', nsec=' + nsec + ' extra=' + extra)
   // })
 
-  const queryFormat = (before: Date, after: Date, affectedRows: number, sql: ISqlite.SqlType, ...params: any[]): SQLLog => {
+  const queryFormat = (
+    before: Date,
+    after: Date,
+    affectedRows: number,
+    sql: ISqlite.SqlType,
+    ...params: any[]
+  ): SQLLog => {
     return {
       time: before.toISOString(),
       statement: sql.toString(),
