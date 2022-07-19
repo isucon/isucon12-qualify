@@ -5,3 +5,10 @@ execute 'build webapp go' do
   cwd '/home/isucon/webapp'
   not_if { File.exist?("/.dockerenv") }
 end
+
+execute 'build webapp python' do
+  command 'docker compose -f docker-compose-python.yml build'
+  user 'isucon'
+  cwd '/home/isucon/webapp'
+  not_if { File.exist?("/.dockerenv") }
+end
