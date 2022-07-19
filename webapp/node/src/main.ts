@@ -1,8 +1,8 @@
-import express, { Request, Response, NextFunction } from 'express'
+import express, { Request, Response, NextFunction, RequestHandler } from 'express'
 import cookieParser from 'cookie-parser'
 import bodyParser from 'body-parser'
 import multer from 'multer'
-import mysql, { RowDataPacket, QueryError, OkPacket } from 'mysql2/promise'
+import mysql, { RowDataPacket, OkPacket } from 'mysql2/promise'
 import childProcess from 'child_process'
 import { readFile } from 'fs/promises'
 import jwt from 'jsonwebtoken'
@@ -25,7 +25,7 @@ const cookieName             = "isuports_session"
 const RoleAdmin     = "admin"
 const RoleOrganizer = "organizer"
 const RolePlayer    = "player"
-const RoleNone      = "none"
+// const RoleNone      = "none"
 
 const tenantNameRegexp = /^[a-z][a-z0-9-]{0,61}[a-z0-9]$/
 
@@ -264,8 +264,10 @@ app.set('etag', false)
 
 const upload = multer()
 
-//@ts-ignore see: https://expressjs.com/en/advanced/best-practice-performance.html#handle-exceptions-properly
-const wrap = fn => (...args) => fn(...args).catch(args[2])
+// see: https://expressjs.com/en/advanced/best-practice-performance.html#handle-exceptions-properly
+const wrap = (fn: (req: Request, res: Response, next: NextFunction) => Promise<Response | void>): RequestHandler => (
+  (req, res, next) => fn(req, res, next).catch(next)
+)
 
 // リクエストヘッダをパースしてViewerを返す
 async function parseViewer(req: Request): Promise<Viewer> {
@@ -429,7 +431,7 @@ async function flockByTenantID(tenantId: number): Promise<() => Promise<void>> {
   const p = lockFilePath(tenantId)
 
   const fd = openSync(p, 'w+')
-  while (true) {
+  for (;;) {
     try {
       await flock(fd, fsExt.constants.LOCK_EX | fsExt.constants.LOCK_NB)
     } catch (error: any) {
@@ -647,9 +649,9 @@ app.get('/api/admin/tenants/billing', wrap(async (req: Request, res: Response) =
           const report = await billingReportByCompetition(tenantDB, tenant.id, comp.id)
           tb.billing += report.billing_yen
         }
-      } catch (error) {
-        // TODO
-        throw error
+      // } catch (error) {
+      //   // TODO
+      //   throw error
       } finally {
         tenantDB.close()
       }
@@ -760,9 +762,8 @@ app.post('/api/organizer/players/add', wrap(async (req: Request, res: Response) 
           is_disqualified: !!player.is_disqualified,
         })
       }
-
-    } catch (error) {
-      throw error
+    // } catch (error) {
+    //   throw error
     } finally {
       tenantDB.close()
     }
@@ -916,9 +917,9 @@ app.post('/api/organizer/competition/:competitionId/finish', wrap(async (req: Re
         now, now, competitionId,
       )
 
-    } catch (error) {
-      // TODO
-      throw error
+    // } catch (error) {
+    //   // TODO
+    //   throw error
     } finally {
       tenantDB.close()
     }
@@ -1041,8 +1042,8 @@ app.post('/api/organizer/competition/:competitionId/score', upload.single('score
             }
           )
         }
-      } catch (error) {
-        throw error
+      // } catch (error) {
+      //   throw error
       } finally {
         unlock()
       }
@@ -1094,8 +1095,8 @@ app.get('/api/organizer/billing', wrap(async (req: Request, res: Response) => {
         const report = await billingReportByCompetition(tenantDB, viewer.tenantId, comp.id)
         reports.push(report)
       }
-    } catch(error) {
-      throw error
+    // } catch(error) {
+    //   throw error
     } finally {
       tenantDB.close()
     }
@@ -1236,8 +1237,8 @@ app.get('/api/player/player/:playerId', wrap(async (req: Request, res: Response)
             score: ps.score,
           })
         }
-      } catch (error) {
-        throw error
+      // } catch (error) {
+      //   throw error
       } finally {
         unlock()
       }
@@ -1359,10 +1360,8 @@ app.get('/api/player/competition/:competitionId/ranking', wrap(async (req: Reque
             player_display_name: rank.player_display_name,
           })
         })
-
-
-      } catch (error) {
-        throw error
+      // } catch (error) {
+      //   throw error
       } finally {
         unlock()
       }
@@ -1404,8 +1403,8 @@ app.get('/api/player/competitions', wrap(async (req: Request, res: Response) => 
       }
 
       await competitionsHandler(req, res, viewer, tenantDB)
-    } catch (error) {
-      throw error
+    // } catch (error) {
+    //   throw error
     } finally {
       tenantDB.close()
     }
@@ -1427,7 +1426,7 @@ app.get('/api/me', wrap(async (req: Request, res: Response) => {
 // POST /initialize
 // ベンチマーカーが起動したときに最初に呼ぶ
 // データベースの初期化などが実行されるため、スキーマを変更した場合などは適宜改変すること
-app.post('/initialize', wrap(async (req: Request, res: Response, next: NextFunction) => {
+app.post('/initialize', wrap(async (req: Request, res: Response, _next: NextFunction) => {
   try {
     await exec(initializeScript)
   
@@ -1444,7 +1443,7 @@ app.post('/initialize', wrap(async (req: Request, res: Response, next: NextFunct
 }))
 
 // エラー処理関数
-app.use((err: ErrorWithStatus, req: Request, res: Response, next: NextFunction) => {
+app.use((err: ErrorWithStatus, req: Request, res: Response, _next: NextFunction) => {
   console.error('error occurred: status=' + err.status + ' reason=' + err.message)
   res.status(err.status).json({
     status: false,
