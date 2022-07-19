@@ -101,13 +101,13 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		// 無限forになるのでcontext打ち切りを確認する
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
-			AdminLogger.Println("AdminTenantsBilling success: beforeTenantID:", beforeTenantID)
 		} else if v.Canceled {
 			// contextの打ち切りでloopを抜ける
 			return nil
 		} else {
 			// ErrorCountで打ち切りがあるので、ここでreturn ValidateErrorはせずリトライする
-			AdminLogger.Println("AdminTenantsBilling failed: beforeTenantID:", beforeTenantID)
+			// ただしsleepを挟む
+			SleepWithCtx(ctx, time.Millisecond*100)
 			sc.AddErrorCount()
 		}
 
