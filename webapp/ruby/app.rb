@@ -380,6 +380,9 @@ module Isuports
         raise e
       end
       id = admin_db.last_id
+      # NOTE: 先にadmin_dbに書き込まれることでこのAPIの処理中に
+      #       /api/admin/tenants/billingにアクセスされるとエラーになりそう
+      #       ロックなどで対処したほうが良さそう
       create_tenant_db(id)
       json(
         status: true,
