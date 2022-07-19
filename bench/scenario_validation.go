@@ -261,6 +261,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	}
 	csv := score.CSV()
 
+	var beforeRanks int
 	// スコア入稿 先に入れておくと2度目のスコア入稿で一度DELETEが走るので、lockを取ってない場合不整合が起きる
 	{
 		res, err, txt := PostOrganizerCompetitionScoreAction(ctx, competitionID, []byte(csv), orgAg)
@@ -269,7 +270,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 			WithContentType("application/json"),
 			WithCacheControlPrivate(),
 			WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
-				_ = r // responseは空
+				beforeRanks = int(r.Data.Rows) // 入稿した行数が返るのでvalidationに使える
 				return nil
 			}),
 		)
@@ -284,10 +285,9 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		eg := errgroup.Group{}
 		scoreCh := make(chan struct{})
 
-		eg.Go(func() error {
-			beforeRanks := 0
+		getRankingFunc := func() error {
 			isDone := false
-			for {
+			for !isDone {
 				select {
 				case <-scoreCh:
 					isDone = true
@@ -303,22 +303,22 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 					WithCacheControlPrivate(),
 					WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 						if len(r.Data.Ranks) < beforeRanks {
-							return fmt.Errorf("大会のランキング数が前回リクエストから減りました (before: %d, got: %d)", beforeRanks, len(r.Data.Ranks))
+							return fmt.Errorf("大会のランキング数が不足しています (expect: %d, got: %d)", beforeRanks, len(r.Data.Ranks))
 						}
-						beforeRanks = len(r.Data.Ranks)
 						return nil
 					}),
 				)
 				if !v.IsEmpty() && sc.Option.StrictPrepare {
 					return v
 				}
-
-				if isDone {
-					break
-				}
 			}
 			return nil
-		})
+		}
+		// 並列アクセスで隙間をなくす
+		eg.Go(getRankingFunc)
+		eg.Go(getRankingFunc)
+		eg.Go(getRankingFunc)
+		eg.Go(getRankingFunc)
 
 		// 大会結果CSV入稿
 		eg.Go(func() error {
@@ -332,7 +332,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 				WithContentType("application/json"),
 				WithCacheControlPrivate(),
 				WithSuccessResponse(func(r ResponseAPICompetitionResult) error {
-					_ = r // responseは空
+					_ = r
 					return nil
 				}),
 			)
