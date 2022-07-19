@@ -3,12 +3,11 @@ package main
 import (
 	"crypto/rsa"
 	"crypto/x509"
+	_ "embed"
 	"encoding/pem"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -131,21 +130,13 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 
 var privateKey *rsa.PrivateKey
 
+//go:embed isuports.pem
+var pemBytes []byte
+
 func init() {
 	// load private key
-	pemFilePath := os.Getenv("ISUCON_PEM_PATH")
-	if pemFilePath == "" {
-		pemFilePath = "isuports.pem"
-	}
-	f, err := os.Open(pemFilePath)
-	if err != nil {
-		log.Fatalf("failed to open pem file: %s", err)
-	}
-	buf, err := ioutil.ReadAll(f)
-	if err != nil {
-		log.Fatalf("failed to read file: %s", err)
-	}
-	block, _ := pem.Decode(buf)
+	block, _ := pem.Decode(pemBytes)
+	var err error
 	privateKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
 		log.Fatalf("failed to parse private key: %s", err)

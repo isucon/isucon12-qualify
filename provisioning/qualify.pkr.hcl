@@ -40,7 +40,7 @@ source "amazon-ebs" "qualify" {
 
   source_ami    = "${data.amazon-ami.ubuntu-jammy.id}"
   region        = "ap-northeast-1"
-  instance_type = "t3.micro"
+  instance_type = "t3.medium"
 
   run_tags        = local.run_tags
   run_volume_tags = local.run_tags
@@ -57,9 +57,25 @@ build {
     destination = "/dev/shm/mitamae.tar.gz"
     source      = "./mitamae.tar.gz"
   }
+
   provisioner "file" {
     destination = "/dev/shm/isucon-admin.pub"
     source      = "./mitamae/cookbooks/users/isucon-admin.pub"
+  }
+
+  provisioner "file" {
+    destination = "/dev/shm/initial_data.tar.gz"
+    source      = "../initial_data.tar.gz"
+  }
+
+  provisioner "file" {
+    destination = "/dev/shm/webapp"
+    source      = "isucon12-qualify/webapp"
+  }
+
+  provisioner "file" {
+    destination = "/dev/shm/public"
+    source      = "isucon12-qualify/public"
   }
 
   provisioner "shell" {
@@ -72,6 +88,17 @@ build {
       "cd mitamae",
       "sudo ./setup.sh",
       "sudo ./mitamae local roles/default.rb",
+
+      # install initial data and codes
+      "sudo rsync -a /dev/shm/webapp/ /home/isucon/webapp/",
+      "sudo rsync -a /dev/shm/public/ /home/isucon/public/",
+      "sudo tar xvf /dev/shm/initial_data.tar.gz -C /home/isucon",
+      "sudo rm -rf /home/isucon/bench",
+      "sudo chown -R isucon:isucon /home/isucon",
+
+      # reset mysql password
+      "sudo mysql -u root -p -e \"ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'root';\"",
+      "sudo cat /home/isucon/webapp/sql/admin/*.sql | mysql -uroot -proot",
 
       # Remove authorized_keys for packer
       "sudo truncate -s 0 /home/ubuntu/.ssh/authorized_keys",
