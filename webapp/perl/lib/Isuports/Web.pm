@@ -180,7 +180,7 @@ sub parse_viewer($self, $c) {
 
     my $token;
     try {
-        $token = decode_jwt(token => $token_str, key => $key);
+        $token = decode_jwt(token => $token_str, key => $key, accepted_alg => 'RS256');
     }
     catch ($e) {
         fail($c, HTTP_UNAUTHORIZED, $e);
