@@ -104,15 +104,17 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		AdminLogger.Println("billingAPISuccessCheck done")
 		return nil
 	})
-	eg.Go(func() error {
-		if err := staticFileCheck(ctx, sc, step); err != nil {
-			AdminLogger.Println("staticFileCheck failed")
-			return err
-		}
-		AdminLogger.Println("staticFileCheck done")
-		return nil
-	})
-
+	/*
+		TODO: staticのアクセスにvhostがないので付ける
+		eg.Go(func() error {
+			if err := staticFileCheck(ctx, sc, step); err != nil {
+				AdminLogger.Println("staticFileCheck failed")
+				return err
+			}
+			AdminLogger.Println("staticFileCheck done")
+			return nil
+		})
+	*/
 	err = eg.Wait()
 	if err != nil {
 		AdminLogger.Printf("validation error: %s", err)
