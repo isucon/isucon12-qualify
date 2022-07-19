@@ -7,6 +7,13 @@ remote_file "/etc/nginx/sites-available/isuports.conf" do
   source "isuports.conf"
 end
 
+remote_file "/etc/nginx/sites-available/isuports-php.conf" do
+  owner "root"
+  group "root"
+  mode "0644"
+  source "isuports-php.conf"
+end
+
 link "/etc/nginx/sites-enabled/isuports.conf" do
   to "/etc/nginx/sites-available/isuports.conf"
 end
