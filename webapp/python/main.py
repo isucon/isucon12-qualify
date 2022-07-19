@@ -140,7 +140,7 @@ def parse_viewer() -> Viewer:
         abort(401, f"invalid token: role is not found: {token_str}")
 
     if role not in [ROLE_ADMIN, ROLE_ORGANIZER, ROLE_PLAYER]:
-        abort(401, f"invalid token: role is not found: {token_str}")
+        abort(401, f"invalid token: invalid role: {token_str}")
 
     aud = token.get("aud")
     if len(aud) != 1:
