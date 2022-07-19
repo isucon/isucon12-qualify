@@ -11,7 +11,7 @@ logs-webapp/%:
 
 init-mysql:
 	docker compose -f docker-compose-common.yml exec --workdir /docker-entrypoint-initdb.d mysql \
-		bash -c 'cat 10_schema.sql 90_data.sql | mysql -uisucon -pisucon isuports'
+		bash -c 'cat 10_schema.sql 90_data.sql 99_tmp.sql | mysql -uisucon -pisucon isuports'
 
 run-bench:
 	docker compose -f docker-compose-common.yml exec bench ./run_local.sh -target-addr nginx:443
