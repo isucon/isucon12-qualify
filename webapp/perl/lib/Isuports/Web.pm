@@ -346,6 +346,9 @@ sub tenants_add_handler($self, $c) {
 
     my $id = $self->admin_db->last_insert_id;
 
+    # NOTE: 先にadminDBに書き込まれることでこのAPIの処理中に
+    #       /api/admin/tenants/billingにアクセスされるとエラーになりそう
+    #       ロックなどで対処したほうが良さそう
     my $err = create_tenant_db($id);
     if ($err) {
         fail($c, HTTP_INTERNAL_SERVER_ERROR, sprintf("error createTenantDB: id=%d name=%s %w", $id, $name, $err));
