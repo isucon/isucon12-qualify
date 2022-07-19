@@ -8,6 +8,7 @@ import (
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
+	"github.com/isucon/isucon12-qualify/data"
 )
 
 type adminBillingScenarioWorker struct {
@@ -117,7 +118,25 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 
 	}
 	// Billingが見終わったら新規テナントを追加する
-	newTenantWorker, err := sc.NewTenantScenarioWorker(step, 1)
+	tenant := data.CreateTenant(data.TenantTagGeneral)
+	{
+		res, err, txt := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
+		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, msg, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+		sc.TenantAddLog.Printf("テナント「%s」を作成しました", tenant.DisplayName)
+	}
+
+	newTenantWorker, err := sc.NewTenantScenarioWorker(step, tenant, 1)
 	if err != nil {
 		return err
 	}
