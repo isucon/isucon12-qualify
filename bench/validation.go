@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/isucon/isucandar"
@@ -116,6 +117,20 @@ func WithCacheControlPrivate() ResponseValidator {
 			// TODO: 一通り対応が終わったら有効化します
 			// return fmt.Errorf("Cache-Control: private が含まれていません")
 			ContestantLogger.Printf("validate error: Cache-Control: private が含まれていません path:%s", r.Response.Request.URL.Path)
+		}
+		return nil
+	}
+}
+
+func WithBodySameFile(filePath string) ResponseValidator {
+	return func(r *Response) error {
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return err
+		}
+
+		if r.Body != string(data) {
+			return fmt.Errorf("file body mismatch. local filepath: %s", filePath)
 		}
 		return nil
 	}

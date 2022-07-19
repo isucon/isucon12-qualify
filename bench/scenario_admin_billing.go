@@ -8,6 +8,7 @@ import (
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
+	"github.com/isucon/isucon12-qualify/data"
 )
 
 type adminBillingScenarioWorker struct {
@@ -65,7 +66,11 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 	}
 
 	// 1ページ目から最後まで辿る
-	beforeTenantID := "" // 最初はbeforeが空
+	// 最初はbeforeが空, ただし初回のみテナント追加と最新の取得がかぶらないように初期データのIDを入れる
+	beforeTenantID := ""
+	if sc.HeavyTenantCount == 0 {
+		beforeTenantID = "100"
+	}
 	completed := false
 	for !completed {
 		res, err, txt := GetAdminTenantsBillingAction(ctx, beforeTenantID, adminAg)
@@ -100,14 +105,14 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		// 無限forになるのでcontext打ち切りを確認する
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
-			AdminLogger.Println("AdminTenantsBilling success: beforeTenantID:", beforeTenantID)
 		} else if v.Canceled {
 			// contextの打ち切りでloopを抜ける
 			return nil
 		} else {
 			// ErrorCountで打ち切りがあるので、ここでreturn ValidateErrorはせずリトライする
-			AdminLogger.Println("AdminTenantsBilling failed: beforeTenantID:", beforeTenantID)
+			// ただしsleepを挟む
 			sc.AddErrorCount()
+			SleepWithCtx(ctx, time.Millisecond*100)
 		}
 
 		// id=1が重いので、light modeなら一回で終わる
@@ -117,7 +122,25 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 
 	}
 	// Billingが見終わったら新規テナントを追加する
-	newTenantWorker, err := sc.NewTenantScenarioWorker(step, 1)
+	tenant := data.CreateTenant(data.TenantTagGeneral)
+	{
+		res, err, txt := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
+		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, msg, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+		sc.TenantAddLog.Printf("テナント「%s」を作成しました", tenant.DisplayName)
+	}
+
+	newTenantWorker, err := sc.NewTenantScenarioWorker(step, tenant, 1)
 	if err != nil {
 		return err
 	}

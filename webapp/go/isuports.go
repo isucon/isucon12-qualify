@@ -457,6 +457,9 @@ func tenantsAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error get LastInsertId: %w", err)
 	}
+	// NOTE: 先にadminDBに書き込まれることでこのAPIの処理中に
+	//       /api/admin/tenants/billingにアクセスされるとエラーになりそう
+	//       ロックなどで対処したほうが良さそう
 	if err := createTenantDB(id); err != nil {
 		return fmt.Errorf("error createTenantDB: id=%d name=%s %w", id, name, err)
 	}
