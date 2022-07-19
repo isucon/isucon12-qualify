@@ -66,7 +66,11 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 	}
 
 	// 1ページ目から最後まで辿る
-	beforeTenantID := "" // 最初はbeforeが空
+	// 最初はbeforeが空, ただし初回のみテナント追加と最新の取得がかぶらないように初期データのIDを入れる
+	beforeTenantID := ""
+	if sc.HeavyTenantCount == 0 {
+		beforeTenantID = "100"
+	}
 	completed := false
 	for !completed {
 		res, err, txt := GetAdminTenantsBillingAction(ctx, beforeTenantID, adminAg)
@@ -101,14 +105,14 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		// 無限forになるのでcontext打ち切りを確認する
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
-			AdminLogger.Println("AdminTenantsBilling success: beforeTenantID:", beforeTenantID)
 		} else if v.Canceled {
 			// contextの打ち切りでloopを抜ける
 			return nil
 		} else {
 			// ErrorCountで打ち切りがあるので、ここでreturn ValidateErrorはせずリトライする
-			AdminLogger.Println("AdminTenantsBilling failed: beforeTenantID:", beforeTenantID)
+			// ただしsleepを挟む
 			sc.AddErrorCount()
+			SleepWithCtx(ctx, time.Millisecond*100)
 		}
 
 		// id=1が重いので、light modeなら一回で終わる
