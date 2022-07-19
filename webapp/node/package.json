@@ -4,15 +4,13 @@
   "description": "ISUPORTS is not e-Sports",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "serve": "ts-node src/main.ts",
+    "serve": "ts-node --transpile-only src/main.ts",
     "lint": "eslint ./src --ext .ts",
     "format": "prettier --write src/"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^0.27.2",
     "cookie-parser": "^1.4.6",
     "csv-parse": "^5.3.0",
     "express": "^4.18.1",
