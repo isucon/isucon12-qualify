@@ -14,6 +14,8 @@ import { openSync, closeSync } from 'fs'
 import fsExt from 'fs-ext'
 import { parse } from 'csv-parse/sync'
 
+import { useSqliteTraceHook } from './sqltrace'
+
 const exec = util.promisify(childProcess.exec)
 const flock = util.promisify(fsExt.flock)
 
@@ -65,6 +67,11 @@ async function connectToTenantDB(id: number): Promise<Database> {
       driver: sqlite3.Database,
     })
     db.configure('busyTimeout', 5000)
+
+    const traceFilePath = getEnv('ISUCON_SQLITE_TRACE_FILE', '')
+    if (traceFilePath) {
+      db = useSqliteTraceHook(db, traceFilePath)
+    }
   } catch (error) {
     throw new Error(`failed to open tenant DB: ${error}`)
   }
