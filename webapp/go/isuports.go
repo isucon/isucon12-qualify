@@ -123,6 +123,14 @@ func dispenseID(ctx context.Context) (string, error) {
 	return "", lastErr
 }
 
+// 全APIにCache-Control: privateを設定する
+func SetCacheControlPrivate(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		c.Response().Header().Set(echo.HeaderCacheControl, "private")
+		return next(c)
+	}
+}
+
 // Run は cmd/isuports/main.go から呼ばれるエントリーポイントです
 func Run() {
 	e := echo.New()
@@ -145,6 +153,7 @@ func Run() {
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.Use(SetCacheControlPrivate)
 
 	// SaaS管理者向けAPI
 	e.POST("/api/admin/tenants/add", tenantsAddHandler)
@@ -195,22 +204,22 @@ func errorResponseHandler(err error, c echo.Context) {
 	var he *echo.HTTPError
 	if errors.As(err, &he) {
 		c.JSON(he.Code, FailureResult{
-			Success: false,
+			Status: false,
 		})
 		return
 	}
 	c.JSON(http.StatusInternalServerError, FailureResult{
-		Success: false,
+		Status: false,
 	})
 }
 
 type SuccessResult struct {
-	Success bool `json:"status"`
-	Data    any  `json:"data,omitempty"`
+	Status bool `json:"status"`
+	Data   any  `json:"data,omitempty"`
 }
 
 type FailureResult struct {
-	Success bool   `json:"status"`
+	Status  bool   `json:"status"`
 	Message string `json:"message"`
 }
 
@@ -248,10 +257,7 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 		jwt.WithKey(jwa.RS256, key),
 	)
 	if err != nil {
-		if jwt.IsValidationError(err) {
-			return nil, echo.NewHTTPError(http.StatusUnauthorized, err.Error())
-		}
-		return nil, fmt.Errorf("failed to parse token: %w", err)
+		return nil, echo.NewHTTPError(http.StatusUnauthorized, fmt.Errorf("error jwt.Parse: %s", err.Error()))
 	}
 	if token.Subject() == "" {
 		return nil, echo.NewHTTPError(
@@ -274,7 +280,7 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 	default:
 		return nil, echo.NewHTTPError(
 			http.StatusUnauthorized,
-			fmt.Sprintf("invalid token: %s is invalid role: %s", role, tokenStr),
+			fmt.Sprintf("invalid token: invalid role: %s", tokenStr),
 		)
 	}
 	// aud は1要素でテナント名がはいっている
@@ -482,6 +488,9 @@ func tenantsAddHandler(c echo.Context) error {
 	if err != nil {
 		return fmt.Errorf("error get LastInsertId: %w", err)
 	}
+	// NOTE: 先にadminDBに書き込まれることでこのAPIの処理中に
+	//       /api/admin/tenants/billingにアクセスされるとエラーになりそう
+	//       ロックなどで対処したほうが良さそう
 	if err := createTenantDB(id); err != nil {
 		return fmt.Errorf("error createTenantDB: id=%d name=%s %w", id, name, err)
 	}
@@ -494,7 +503,7 @@ func tenantsAddHandler(c echo.Context) error {
 			BillingYen:  0,
 		},
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true, Data: res})
 }
 
 // テナント名が規則に沿っているかチェックする
@@ -644,9 +653,8 @@ func tenantsBillingHandler(c echo.Context) error {
 	}
 	// テナントごとに
 	//   大会ごとに
-	//     scoreに登録されているplayerでアクセスした人 * 100
-	//     scoreに登録されているplayerでアクセスしていない人 * 50
-	//     scoreに登録されていないplayerでアクセスした人 * 10
+	//     scoreが登録されているplayer * 100
+	//     scoreが登録されていないplayerでアクセスした人 * 10
 	//   を合計したものを
 	// テナントの課金とする
 	ts := []TenantRow{}
@@ -696,7 +704,7 @@ func tenantsBillingHandler(c echo.Context) error {
 		}
 	}
 	return c.JSON(http.StatusOK, SuccessResult{
-		Success: true,
+		Status: true,
 		Data: TenantsBillingHandlerResult{
 			Tenants: tenantBillings,
 		},
@@ -752,7 +760,7 @@ func playersListHandler(c echo.Context) error {
 	res := PlayersListHandlerResult{
 		Players: pds,
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true, Data: res})
 }
 
 type PlayersAddHandlerResult struct {
@@ -815,7 +823,7 @@ func playersAddHandler(c echo.Context) error {
 	res := PlayersAddHandlerResult{
 		Players: pds,
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true, Data: res})
 }
 
 type PlayerDisqualifiedHandlerResult struct {
@@ -869,7 +877,7 @@ func playerDisqualifiedHandler(c echo.Context) error {
 			IsDisqualified: p.IsDisqualified,
 		},
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true, Data: res})
 }
 
 type CompetitionDetail struct {
@@ -925,7 +933,7 @@ func competitionsAddHandler(c echo.Context) error {
 			IsFinished: false,
 		},
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true, Data: res})
 }
 
 // テナント管理者向けAPI
@@ -970,7 +978,7 @@ func competitionFinishHandler(c echo.Context) error {
 			now, now, id, err,
 		)
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true})
 }
 
 type ScoreHandlerResult struct {
@@ -1010,7 +1018,7 @@ func competitionScoreHandler(c echo.Context) error {
 	}
 	if comp.FinishedAt.Valid {
 		res := FailureResult{
-			Success: false,
+			Status:  false,
 			Message: "competition is finished",
 		}
 		return c.JSON(http.StatusBadRequest, res)
@@ -1113,8 +1121,8 @@ func competitionScoreHandler(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, SuccessResult{
-		Success: true,
-		Data:    ScoreHandlerResult{Rows: int64(len(playerScoreRows))},
+		Status: true,
+		Data:   ScoreHandlerResult{Rows: int64(len(playerScoreRows))},
 	})
 }
 
@@ -1160,7 +1168,7 @@ func billingHandler(c echo.Context) error {
 	}
 
 	res := SuccessResult{
-		Success: true,
+		Status: true,
 		Data: BillingHandlerResult{
 			Reports: tbrs,
 		},
@@ -1262,7 +1270,7 @@ func playerHandler(c echo.Context) error {
 	}
 
 	res := SuccessResult{
-		Success: true,
+		Status: true,
 		Data: PlayerHandlerResult{
 			Player: PlayerDetail{
 				ID:             p.ID,
@@ -1409,7 +1417,7 @@ func competitionRankingHandler(c echo.Context) error {
 	}
 
 	res := SuccessResult{
-		Success: true,
+		Status: true,
 		Data: CompetitionRankingHandlerResult{
 			Competition: CompetitionDetail{
 				ID:         competition.ID,
@@ -1495,7 +1503,7 @@ func competitionsHandler(c echo.Context, v *Viewer, tenantDB dbOrTx) error {
 	}
 
 	res := SuccessResult{
-		Success: true,
+		Status: true,
 		Data: CompetitionsHandlerResult{
 			Competitions: cds,
 		},
@@ -1532,7 +1540,7 @@ func meHandler(c echo.Context) error {
 		var he *echo.HTTPError
 		if ok := errors.As(err, &he); ok && he.Code == http.StatusUnauthorized {
 			return c.JSON(http.StatusOK, SuccessResult{
-				Success: true,
+				Status: true,
 				Data: MeHandlerResult{
 					Tenant:   td,
 					Me:       nil,
@@ -1545,7 +1553,7 @@ func meHandler(c echo.Context) error {
 	}
 	if v.role == RoleAdmin || v.role == RoleOrganizer {
 		return c.JSON(http.StatusOK, SuccessResult{
-			Success: true,
+			Status: true,
 			Data: MeHandlerResult{
 				Tenant:   td,
 				Me:       nil,
@@ -1564,7 +1572,7 @@ func meHandler(c echo.Context) error {
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return c.JSON(http.StatusOK, SuccessResult{
-				Success: true,
+				Status: true,
 				Data: MeHandlerResult{
 					Tenant:   td,
 					Me:       nil,
@@ -1577,7 +1585,7 @@ func meHandler(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, SuccessResult{
-		Success: true,
+		Status: true,
 		Data: MeHandlerResult{
 			Tenant: td,
 			Me: &PlayerDetail{
@@ -1607,5 +1615,5 @@ func initializeHandler(c echo.Context) error {
 	res := InitializeHandlerResult{
 		Lang: "go",
 	}
-	return c.JSON(http.StatusOK, SuccessResult{Success: true, Data: res})
+	return c.JSON(http.StatusOK, SuccessResult{Status: true, Data: res})
 }
