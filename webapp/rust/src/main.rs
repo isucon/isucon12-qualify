@@ -1461,7 +1461,10 @@ async fn competition_ranking_handler(
             message: "role player required".to_string(),
         });
     };
+
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    authorize_player(&mut tenant_db, &v.player_id).await?;
+
     let (competition_id,) = params.into_inner();
 
     // 大会の存在確認
