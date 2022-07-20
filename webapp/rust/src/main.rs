@@ -2,11 +2,9 @@ use actix_multipart::Multipart;
 use actix_web::http::StatusCode;
 use actix_web::middleware::Logger;
 use actix_web::{web, HttpRequest, HttpResponse, ResponseError};
-use cookie::Cookie;
 use futures_util::stream::StreamExt as _;
-use jsonwebtoken;
 use lazy_static::lazy_static;
-use log::info;
+use log::{error, info};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::mysql::{MySqlConnectOptions, MySqlDatabaseError};
@@ -14,11 +12,11 @@ use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::{Sqlite, SqlitePool};
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::fs;
 use std::path::PathBuf;
 use std::result::Result;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
 const TENANT_DB_SCHEMA_FILE_PATH: &str = "../sql/tenant/10_schema.sql";
@@ -51,13 +49,13 @@ impl Display for MyError {
 
 impl ResponseError for MyError {
     fn error_response(&self) -> HttpResponse {
-        let response = HttpResponse::Ok()
-            .content_type("application/json")
-            .body(serde_json::to_string(&self.message).unwrap());
-
-        dbg!(&response);
-
-        response
+        #[derive(Debug, Serialize)]
+        struct FailureResult {
+            status: bool,
+        }
+        const FAILURE_RESULT: FailureResult = FailureResult { status: false };
+        error!("{}", self);
+        HttpResponse::build(self.status_code()).json(&FAILURE_RESULT)
     }
 
     fn status_code(&self) -> StatusCode {
@@ -264,76 +262,77 @@ struct Viewer {
 
 #[derive(Debug, Deserialize)]
 struct Claims {
-    sub: String,
+    sub: Option<String>,
+    #[serde(default)]
     aud: Vec<String>,
-    role: String,
+    role: Option<String>,
 }
 
-// parse request header and return Viewer
+// リクエストヘッダをパースしてViewerを返す
 async fn parse_viewer(pool: &sqlx::MySqlPool, request: HttpRequest) -> Result<Viewer, MyError> {
-    info!("parse viewer now");
-    let cookie = request
-        .headers()
-        .get("cookie")
-        .map(|value| value.to_str().unwrap_or_default())
-        .unwrap_or_default();
-
-    let c = Cookie::parse(cookie).unwrap();
-    let req_jwt = c.value();
-    let key_file_name = get_env("ISUCON_JWT_KEY_FILE", "./public.pem");
-    let key_src = fs::read_to_string(key_file_name).expect("Something went wrong reading the file");
-
-    let key = jsonwebtoken::DecodingKey::from_rsa_pem(key_src.as_bytes()).unwrap();
-
-    let token = match jsonwebtoken::decode::<Claims>(
-        req_jwt,
-        &key,
-        &jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256),
-    ) {
-        Ok(token) => token,
-        Err(e) if e.kind().to_owned() == jsonwebtoken::errors::ErrorKind::InvalidToken => {
-            return Err(MyError {
-                status: 401,
-                message: "invalid token".to_string(),
-            });
-        }
-        Err(e) if e.kind().to_owned() == jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
-            info!("{:?}", e.kind());
-            return Err(MyError {
-                status: 401,
-                message: "JWT expired or not signed with the correct key".to_string(),
-            });
-        }
-        _ => {
-            panic!("failed to parse token");
-        }
-    };
-    if token.claims.sub.is_empty() {
+    let cookie = request.cookie(COOKIE_NAME);
+    if cookie.is_none() {
         return Err(MyError {
             status: 401,
-            message: "invalid token: subject is not found in token".to_string(),
+            message: format!("cookie {} is not found", COOKIE_NAME),
         });
     }
-    info!("{:?}", token);
-    let tr = token.claims.role;
-    info!("{:?}", tr);
+    let cookie = cookie.unwrap();
+    let token_str = cookie.value();
+    let key_filename = get_env("ISUCON_JWT_KEY_FILE", "../public.pem");
+    let key_src = fs::read(&key_filename).await.map_err(|e| MyError {
+        status: 500,
+        message: format!("error fs::read: key_filename={}: {}", key_filename, e),
+    })?;
+
+    let key = jsonwebtoken::DecodingKey::from_rsa_pem(&key_src).map_err(|e| MyError {
+        status: 500,
+        message: format!("error jsonwebtoken::DecodingKey::from_rsa_pem: {}", e),
+    })?;
+
+    let token = jsonwebtoken::decode::<Claims>(
+        token_str,
+        &key,
+        &jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256),
+    );
+    if let Err(e) = token {
+        return Err(MyError {
+            status: 401,
+            message: e.to_string(),
+        });
+    }
+    let token = token.unwrap();
+    if token.claims.sub.is_none() {
+        return Err(MyError {
+            status: 401,
+            message: format!(
+                "invalid token: subject is not found in token: {}",
+                token_str
+            ),
+        });
+    }
+    if token.claims.role.is_none() {
+        return Err(MyError {
+            status: 401,
+            message: format!("invalid token: role is not found: {}", token_str),
+        });
+    }
+    let tr = token.claims.role.unwrap();
     let role = match tr.as_str() {
-        ROLE_ADMIN => tr.to_string(),
-        ROLE_ORGANIZER => tr.to_string(),
-        ROLE_PLAYER => tr.to_string(),
+        ROLE_ADMIN | ROLE_ORGANIZER | ROLE_PLAYER => tr,
         _ => {
             return Err(MyError {
                 status: 401,
-                message: "invalid token: role is not found or invalid role".to_string(),
+                message: format!("invalid token: invalid role: {}", token_str),
             });
         }
     };
-    // aud contains one tenant name
+    // aud は1要素でテナント名がはいっている
     let aud = token.claims.aud;
     if aud.len() != 1 {
         return Err(MyError {
             status: 401,
-            message: "invalid token: aud filed is few or too much".to_string(),
+            message: format!("invalid token: aud filed is few or too much: {}", token_str),
         });
     }
     let tenant = match retrieve_tenant_row_from_header(pool, request).await {
@@ -362,7 +361,7 @@ async fn parse_viewer(pool: &sqlx::MySqlPool, request: HttpRequest) -> Result<Vi
 
     let viewer = Viewer {
         role,
-        player_id: token.claims.sub,
+        player_id: token.claims.sub.unwrap(),
         tenant_name: tenant.name,
         tenant_id: tenant.id,
     };
