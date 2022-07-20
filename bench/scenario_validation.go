@@ -1453,7 +1453,7 @@ func billingAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.B
 	}
 	{
 		// ページングで初期データ範囲のBillingが正しいか確認
-		checkTenantCursor := int64(randomRange([]int{12, 99})) // 初期データに当たらない範囲で調べる
+		checkTenantCursor := int64(randomRange(ConstValidateScenarioAdminBillingIDRange))
 		res, err, txt := GetAdminTenantsBillingAction(ctx, fmt.Sprintf("%d", checkTenantCursor), adminAg)
 		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード: 初期データチェック", step, res, err, msg, WithStatusCode(200),
