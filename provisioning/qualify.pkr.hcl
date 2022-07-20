@@ -48,6 +48,11 @@ source "amazon-ebs" "qualify" {
   ssh_interface           = "public_ip"
   ssh_username            = "ubuntu"
   temporary_key_pair_type = "ed25519"
+
+  launch_block_device_mappings {
+    volume_size = 12
+    device_name = "/dev/sda1"
+  }
 }
 
 build {
