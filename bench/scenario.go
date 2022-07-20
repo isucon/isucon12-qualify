@@ -279,14 +279,10 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 			errorCount++
 			criticalCount++
 		case <-logTicker.C:
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				sc.CompetitionAddLog.Log()
-				sc.TenantAddLog.Log()
-				sc.PlayerAddLog.Log()
-				sc.workerAddLogPrint()
-			}()
+			sc.CompetitionAddLog.Log()
+			sc.TenantAddLog.Log()
+			sc.PlayerAddLog.Log()
+			sc.workerAddLogPrint()
 		}
 
 		if ConstMaxError <= errorCount {
