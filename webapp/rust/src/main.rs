@@ -222,18 +222,20 @@ pub async fn main() -> std::io::Result<()> {
                     .route("/me", web::get().to(me_handler)),
             )
     });
-    info!("server is running");
-    server
-        .bind((
+
+    if let Some(l) = listenfd::ListenFd::from_env().take_tcp_listener(0)? {
+        server.listen(l)?
+    } else {
+        server.bind((
             "0.0.0.0",
             std::env::var("SERVER_APP_PORT")
                 .ok()
                 .and_then(|port_str| port_str.parse().ok())
                 .unwrap_or(3000),
-        ))
-        .expect("failed to start server")
-        .run()
-        .await
+        ))?
+    }
+    .run()
+    .await
 }
 
 // エラー処理関数
