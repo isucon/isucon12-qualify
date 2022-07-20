@@ -974,6 +974,7 @@ dependencies = [
  "futures-util",
  "jsonwebtoken",
  "lazy_static",
+ "listenfd",
  "log",
  "mime",
  "nix",
@@ -1076,6 +1077,17 @@ dependencies = [
  "cc",
  "pkg-config",
  "vcpkg",
+]
+
+[[package]]
+name = "listenfd"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14e4fcc00ff6731d94b70e16e71f43bda62883461f31230742e3bc6dddf12988"
+dependencies = [
+ "libc",
+ "uuid",
+ "winapi",
 ]
 
 [[package]]
