@@ -19,7 +19,7 @@ WORKDIR /home/isucon/webapp/perl
 COPY cpanfile ./
 RUN cpm install
 
-ADD ./ /home/isucon/webapp/perl/
+COPY --chown=isucon:isucon ./ /home/isucon/webapp/perl/
 ENV PERL5LIB=/home/isucon/webapp/perl/local/lib/perl5
 ENV PATH=/home/isucon/webapp/perl/local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 

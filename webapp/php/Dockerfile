@@ -23,4 +23,4 @@ WORKDIR /home/isucon/webapp/php
 COPY composer* /home/isucon/webapp/php/
 RUN ./composer.phar install
 
-ADD ./ /home/isucon/webapp/php/
+COPY --chown=isucon:isucon ./ /home/isucon/webapp/php/

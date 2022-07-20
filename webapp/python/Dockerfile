@@ -19,6 +19,6 @@ WORKDIR /home/isucon/webapp/python
 ADD requirements.txt /home/isucon/webapp/python
 RUN pip install -r requirements.txt
 
-ADD ./ /home/isucon/webapp/python/
+COPY --chown=isucon:isucon ./ /home/isucon/webapp/python/
 
 CMD [ "python", "main.py" ]
