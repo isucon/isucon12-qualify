@@ -344,11 +344,16 @@ func (sc *Scenario) PrintWorkerCount() {
 }
 
 func (sc *Scenario) workerAddLogPrint() {
-	sc.WorkerCountMutex.Lock()
-	defer sc.WorkerCountMutex.Unlock()
+	// lockするし急ぎではないので後回し
+	sc.batchwg.Add(1)
+	go func() {
+		defer sc.batchwg.Done()
+		sc.WorkerCountMutex.Lock()
+		defer sc.WorkerCountMutex.Unlock()
 
-	for k, v := range sc.addedWorkerCountMap {
-		AdminLogger.Printf("workerを追加しました [%s](num:%d)", k, v)
-	}
-	sc.addedWorkerCountMap = make(map[string]int)
+		for k, v := range sc.addedWorkerCountMap {
+			AdminLogger.Printf("workerを追加しました [%s](num:%d)", k, v)
+		}
+		sc.addedWorkerCountMap = make(map[string]int)
+	}()
 }
