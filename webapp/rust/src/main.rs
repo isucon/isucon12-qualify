@@ -208,6 +208,18 @@ pub async fn main() -> std::io::Result<()> {
 
         actix_web::App::new()
             .wrap(logger)
+            .wrap_fn(|req, srv| {
+                use actix_web::dev::Service as _;
+                let fut = srv.call(req);
+                async {
+                    let mut res = fut.await?;
+                    res.headers_mut().insert(
+                        actix_web::http::header::CACHE_CONTROL,
+                        actix_web::http::header::HeaderValue::from_static("private"),
+                    );
+                    Ok(res)
+                }
+            })
             .app_data(web::Data::new(pool.clone()))
             .route("/initialize", web::post().to(initialize_handler))
             .service(
