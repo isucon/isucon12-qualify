@@ -12,11 +12,10 @@ use serde::{Deserialize, Serialize};
 use sqlx::mysql::{MySqlConnectOptions, MySqlDatabaseError};
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::{Sqlite, SqlitePool};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::path::PathBuf;
 use std::result::Result;
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
 
@@ -1452,8 +1451,7 @@ struct CompetitionRankingHandlerResult {
 
 #[derive(Debug, Clone, serde_derive::Serialize, serde_derive::Deserialize)]
 struct CompetitionRankingHandlerQueryParam {
-    competition_id: String,
-    rank_after: String,
+    rank_after: Option<i64>,
 }
 // 参加者向けAPI
 // GET /api/player/competition/:competition_id/ranking
@@ -1461,9 +1459,9 @@ struct CompetitionRankingHandlerQueryParam {
 async fn competition_ranking_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
-    form: web::Form<CompetitionRankingHandlerQueryParam>,
+    params: web::Path<(String,)>,
+    query: web::Query<CompetitionRankingHandlerQueryParam>,
 ) -> actix_web::Result<HttpResponse, MyError> {
-    info!("compeititon ranking handler now");
     let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_PLAYER {
         return Err(MyError {
@@ -1472,14 +1470,8 @@ async fn competition_ranking_handler(
         });
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    info!("connected tenant db now");
-    let competition_id = form.clone().competition_id;
-    if competition_id.is_empty() {
-        return Err(MyError {
-            status: 400,
-            message: "competition_id  required".to_string(),
-        });
-    };
+    let (competition_id,) = params.into_inner();
+
     // 大会の存在確認
     let competition = match retrieve_competition(tenant_db.clone(), competition_id.clone()).await {
         Ok(c) => c,
@@ -1497,42 +1489,42 @@ async fn competition_ranking_handler(
         .as_secs() as i64;
     let tenant: TenantRow = sqlx::query_as("SELECT * FROM tenant WHERE id = ?")
         .bind(v.tenant_id)
-        .fetch_one(&tenant_db)
+        .fetch_one(&**pool)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated) VALUES (?, ?, ?, ?, ?)")
+    sqlx::query("INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
     .bind(v.player_id)
     .bind(tenant.id)
-    .bind(competition_id.clone())
+    .bind(&competition_id)
     .bind(now)
     .bind(now)
-    .execute(pool.as_ref())
+    .execute(&**pool)
     .await.unwrap();
-    // TODO: 数字以外の文字列を入力した場合はエラーにする
+
+    let rank_after = query.rank_after.unwrap_or(0);
 
     // player_scoreを読んでいる時に更新が走ると不整合が走るのでロックを取得する
     let _fl = flock_by_tenant_id(v.tenant_id).unwrap();
-    info!("flocked now");
     let pss: Vec<PlayerScoreRow> = sqlx::query_as(
         "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC")
         .bind(tenant.id)
-        .bind(competition_id.clone())
+        .bind(&competition_id)
         .fetch_all(&tenant_db)
         .await
         .unwrap();
     let mut ranks = Vec::<CompetitionRank>::new();
-    let mut scored_player_set = HashMap::<String, bool>::new();
+    let mut scored_player_set = HashSet::new();
 
     for ps in pss {
         // player_scoreが同一player_id内ではrow_numの降順でソートされているので
         // 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
-        if scored_player_set.contains_key(&ps.player_id) {
+        if scored_player_set.contains(&ps.player_id) {
             continue;
         }
-        scored_player_set.insert(ps.player_id.clone(), true);
         let p = retrieve_player(tenant_db.clone(), ps.player_id.clone())
             .await
             .unwrap();
+        scored_player_set.insert(ps.player_id);
         ranks.push(CompetitionRank {
             rank: 0,
             score: ps.score,
@@ -1548,17 +1540,17 @@ async fn competition_ranking_handler(
             b.score.cmp(&a.score)
         }
     });
-    let mut paged_ranks = Vec::<CompetitionRank>::new();
-    for (i, rank) in ranks.iter().enumerate() {
+    let mut paged_ranks = Vec::new();
+    for (i, rank) in ranks.into_iter().enumerate() {
         let i = i as i64;
-        if i < Arc::new(form.rank_after.clone()).parse::<i64>().unwrap() {
+        if i < rank_after {
             continue;
         }
         paged_ranks.push(CompetitionRank {
             rank: i + 1,
             score: rank.score,
-            player_id: rank.player_id.clone(),
-            player_display_name: rank.player_display_name.clone(),
+            player_id: rank.player_id,
+            player_display_name: rank.player_display_name,
             row_num: 0,
         });
         if paged_ranks.len() >= 100 {
@@ -1569,8 +1561,8 @@ async fn competition_ranking_handler(
         status: true,
         data: Some(CompetitionRankingHandlerResult {
             competition: CompetitionDetail {
-                id: competition.id.clone(),
-                title: competition.title.clone(),
+                id: competition.id,
+                title: competition.title,
                 is_finished: competition.finished_at.is_some(),
             },
             ranks: paged_ranks,
