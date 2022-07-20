@@ -1,4 +1,4 @@
-%w[go python ruby php perl].each do |lang|
+%w[go python ruby php perl node].each do |lang|
   execute "build webapp #{lang}" do
     command "docker compose -f docker-compose-#{lang}.yml build"
     user 'isucon'
