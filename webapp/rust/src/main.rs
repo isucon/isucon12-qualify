@@ -1348,9 +1348,7 @@ async fn player_handler(
     };
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
-    authorize_player(&mut tenant_db, &v.player_id)
-        .await
-        .unwrap();
+    authorize_player(&mut tenant_db, &v.player_id).await?;
     let (player_id,) = params.into_inner();
     let p = match retrieve_player(&mut tenant_db, &player_id).await {
         Ok(p) => p,
@@ -1373,15 +1371,18 @@ async fn player_handler(
     let _fl = flock_by_tenant_id(v.tenant_id).await.unwrap();
     let mut pss = Vec::<PlayerScoreRow>::new();
     for c in cs {
-        let ps: PlayerScoreRow = sqlx::query_as(
+        let ps: Option<PlayerScoreRow> = sqlx::query_as(
             "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1")
             .bind(v.tenant_id)
             .bind(c.id.clone())
             .bind(p.id.clone())
-            .fetch_one(&mut tenant_db)
+            .fetch_optional(&mut tenant_db)
             .await
             .unwrap();
-        pss.push(ps);
+        // 行がない = スコアが記録されてない
+        if let Some(ps) = ps {
+            pss.push(ps);
+        }
     }
     let mut psds = Vec::<PlayerScoreDetail>::new();
     for ps in pss {
