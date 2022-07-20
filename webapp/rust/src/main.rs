@@ -88,8 +88,8 @@ fn get_env(key: &str, default: &str) -> String {
 // テナントDBのパスを返す
 fn tenant_db_path(id: i64) -> PathBuf {
     info!("tenant_db_path now");
-    let tenant_db_dir = get_env("ISUCON_TENANT_DB_DIR", "/home/isucon/webapp/tenant_db");
-    return Path::new(&tenant_db_dir).join(format!("{}.db", id));
+    let tenant_db_dir = get_env("ISUCON_TENANT_DB_DIR", "../tenant_db");
+    PathBuf::from(tenant_db_dir).join(format!("{}.db", id))
 }
 
 // テナントDBに接続する
@@ -97,15 +97,7 @@ async fn connect_to_tenant_db(id: i64) -> sqlx::Result<SqlitePool> {
     info!("connect to tenant db now: id = {:?}", id);
     let p = tenant_db_path(id);
 
-    let uri = format!("{}", p.to_str().unwrap());
-    info!("tenant db uri = {:?}", uri);
-    let pool = SqlitePool::connect_with(
-        SqliteConnectOptions::new()
-            .filename(uri)
-            .create_if_missing(true),
-    )
-    .await?;
-    info!("created db file now");
+    let pool = SqlitePool::connect_with(SqliteConnectOptions::new().filename(p)).await?;
     Ok(pool)
     // TODO: sqliteDriverNameを使ってないのをなおす
 }
@@ -117,7 +109,7 @@ async fn create_tenant_db(id: i64) {
         .arg("-c")
         .arg(format!(
             "sqlite3 {} < {}",
-            p.to_str().expect("error: to_str()"),
+            p.display(),
             TENANT_DB_SCHEMA_FILE_PATH
         ))
         .output()
