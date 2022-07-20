@@ -2,7 +2,9 @@ use actix_multipart::Multipart;
 use actix_web::http::StatusCode;
 use actix_web::middleware::Logger;
 use actix_web::{web, HttpRequest, HttpResponse, ResponseError};
+use bytes::BytesMut;
 use futures_util::stream::StreamExt as _;
+use futures_util::stream::TryStreamExt as _;
 use lazy_static::lazy_static;
 use log::{error, info};
 use regex::Regex;
@@ -17,7 +19,6 @@ use std::result::Result;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
-use tokio::io::AsyncWriteExt;
 
 const TENANT_DB_SCHEMA_FILE_PATH: &str = "../sql/tenant/10_schema.sql";
 const INITIALIZE_SCRIPT: &str = "../sql/init.sh";
@@ -1149,7 +1150,7 @@ struct CompetitionScoreHandlerFormQuery {
 async fn competition_score_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
-    form: web::Form<CompetitionScoreHandlerFormQuery>,
+    params: web::Path<(String,)>,
     mut payload: Multipart,
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("compeittion score handler now");
@@ -1162,16 +1163,11 @@ async fn competition_score_handler(
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
-    let competition_id = form.competition_id.clone();
-    if competition_id.is_empty() {
-        return Err(MyError {
-            status: 400,
-            message: "competition id required".to_string(),
-        });
-    };
+    let (competition_id,) = params.into_inner();
     let comp = match retrieve_competition(tenant_db.clone(), competition_id.clone()).await {
         Ok(c) => c,
         Err(sqlx::Error::RowNotFound) => {
+            // 存在しない大会
             return Err(MyError {
                 status: 404,
                 message: "competition not found".to_string(),
@@ -1186,43 +1182,44 @@ async fn competition_score_handler(
         };
         return Ok(HttpResponse::BadRequest().json(res));
     }
-    let mut filepath = String::new();
+    let mut score_bytes: Option<BytesMut> = None;
     while let Some(item) = payload.next().await {
-        let mut field = item.unwrap();
-        // A multipart/form-data stream has to contain `content_disposition`
+        let field = item.unwrap();
         let content_disposition = field.content_disposition();
-
-        let filename = content_disposition.get_filename().unwrap_or("temp.csv");
-        filepath = format!("./tmp/{filename}");
-
-        // File::create is blocking operation, use threadpool
-        let mut f = tokio::fs::File::create(filepath.clone()).await.unwrap();
-        // Field in turn is stream of *Bytes* object
-        while let Some(chunk) = field.next().await {
-            f.write_all_buf(&mut chunk.unwrap()).await.unwrap();
+        if content_disposition.get_name().unwrap() == "scores" {
+            score_bytes = Some(
+                field
+                    .map_ok(|chunk| BytesMut::from(&chunk[..]))
+                    .try_concat()
+                    .await
+                    .unwrap(),
+            );
+            break;
         }
     }
-    let mut rdr = csv::Reader::from_path(filepath).unwrap();
-    let mut header = rdr.records();
-    // check if header is "player_id", "score"
-    if header.next().unwrap().unwrap() != vec!["player_id", "score"] {
+    if score_bytes.is_none() {
         return Err(MyError {
-            status: 400,
-            message: "invalid csv format".to_string(),
+            status: 500,
+            message: "scores field does not exist".to_owned(),
         });
-    };
+    }
+    let score_bytes = score_bytes.unwrap();
+
+    let mut rdr = csv::Reader::from_reader(score_bytes.as_ref());
+    {
+        let headers = rdr.headers().unwrap();
+        if headers != ["player_id", "score"].as_slice() {
+            return Err(MyError {
+                status: 400,
+                message: "invalid CSV headers".to_owned(),
+            });
+        }
+    }
+
     // DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
     let _fl = flock_by_tenant_id(v.tenant_id).unwrap();
-    info!("flocked now");
-    let mut row_num: i64 = 0;
     let mut player_score_rows = Vec::<PlayerScoreRow>::new();
-    loop {
-        row_num += 1;
-        // get rdr next or break
-        let row = match header.next() {
-            Some(row) => row,
-            None => break,
-        };
+    for (row_num, row) in rdr.into_records().enumerate() {
         let row = row.unwrap();
         if row.len() != 2 {
             panic!("row must have tow columns");
@@ -1249,7 +1246,7 @@ async fn competition_score_handler(
             }
         };
         let id = dispense_id(pool.clone()).await.unwrap();
-        let now: i64 = SystemTime::now()
+        let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
@@ -1259,29 +1256,29 @@ async fn competition_score_handler(
             player_id: player_id.clone(),
             competition_id: competition_id.clone(),
             score,
-            row_num,
+            row_num: row_num as i64,
             created_at: now,
             updated_at: now,
         });
     }
-    sqlx::query::<Sqlite>("DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?")
+    sqlx::query("DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?")
         .bind(v.tenant_id)
-        .bind(competition_id.clone())
-        .execute(&tenant_db.clone())
+        .bind(&competition_id)
+        .execute(&tenant_db)
         .await
         .unwrap();
 
     for ps in &player_score_rows {
-        sqlx::query::<Sqlite>("INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(ps.id.clone())
+        sqlx::query("INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .bind(&ps.id)
         .bind(ps.tenant_id)
-        .bind(ps.player_id.clone())
-        .bind(ps.competition_id.clone())
+        .bind(&ps.player_id)
+        .bind(&ps.competition_id)
         .bind(ps.score)
         .bind(ps.row_num)
         .bind(ps.created_at)
         .bind(ps.updated_at)
-        .execute(&tenant_db.clone())
+        .execute(&tenant_db)
         .await.unwrap();
     }
     let res = SuccessResult {
