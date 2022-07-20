@@ -153,20 +153,27 @@ type CompactLogger struct {
 	logger *log.Logger
 	logs   []string
 	mu     sync.Mutex
+	wg     sync.WaitGroup
 }
 
-func NewCompactLog(lgr *log.Logger) *CompactLogger {
+func NewCompactLog(lgr *log.Logger, wg sync.WaitGroup) *CompactLogger {
 	return &CompactLogger{
 		logger: lgr,
 		logs:   []string{},
 		mu:     sync.Mutex{},
+		wg:     wg,
 	}
 }
 
 func (cl *CompactLogger) Printf(format string, args ...any) {
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
-	cl.logs = append(cl.logs, fmt.Sprintf(format, args...))
+	// lockするし急ぎではないので後回し
+	cl.wg.Add(1)
+	go func(l string) {
+		defer cl.wg.Done()
+		cl.mu.Lock()
+		defer cl.mu.Unlock()
+		cl.logs = append(cl.logs, l)
+	}(fmt.Sprintf(format, args...))
 }
 
 func (cl *CompactLogger) Log() {

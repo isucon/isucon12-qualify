@@ -67,7 +67,9 @@ type Scenario struct {
 	CompetitionAddLog *CompactLogger
 	TenantAddLog      *CompactLogger
 	PlayerAddLog      *CompactLogger
-	WorkerAddLog      *CompactLogger
+
+	addedWorkerCountMap map[string]int
+	batchwg             sync.WaitGroup
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -97,10 +99,12 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 
 	sc.HeavyTenantCount = 0
 
-	sc.CompetitionAddLog = NewCompactLog(ContestantLogger)
-	sc.TenantAddLog = NewCompactLog(ContestantLogger)
-	sc.PlayerAddLog = NewCompactLog(ContestantLogger)
-	sc.WorkerAddLog = NewCompactLog(AdminLogger)
+	batchwg := sync.WaitGroup{}
+	sc.CompetitionAddLog = NewCompactLog(ContestantLogger, batchwg)
+	sc.TenantAddLog = NewCompactLog(ContestantLogger, batchwg)
+	sc.PlayerAddLog = NewCompactLog(ContestantLogger, batchwg)
+	sc.batchwg = batchwg
+	sc.addedWorkerCountMap = make(map[string]int)
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(sc.Option.TargetURL)
@@ -261,8 +265,8 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 			// if w.String() != "AdminBillingValidateWorker" {
 			// 	continue
 			// }
-			wg.Add(1)
 			sc.CountWorker(w.String())
+			wg.Add(1)
 			go func(w Worker) {
 				defer wg.Done()
 				wkr := w
@@ -275,10 +279,14 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 			errorCount++
 			criticalCount++
 		case <-logTicker.C:
-			sc.CompetitionAddLog.Log()
-			sc.TenantAddLog.Log()
-			sc.WorkerAddLog.Log()
-			sc.PlayerAddLog.Log()
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				sc.CompetitionAddLog.Log()
+				sc.TenantAddLog.Log()
+				sc.PlayerAddLog.Log()
+				sc.workerAddLogPrint()
+			}()
 		}
 
 		if ConstMaxError <= errorCount {
@@ -300,18 +308,29 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 	}
 	step.Cancel()
 	wg.Wait()
+	sc.batchwg.Wait()
 
 	return nil
 }
 
 func (sc Scenario) CountWorker(name string) {
-	sc.WorkerCountMutex.Lock()
-	defer sc.WorkerCountMutex.Unlock()
-	if _, ok := sc.WorkerCountMap[name]; !ok {
-		sc.WorkerCountMap[name] = 0
-	}
-	sc.WorkerCountMap[name]++
-	sc.WorkerAddLog.Printf("workerを増やします [%s](%d)", name, sc.WorkerCountMap[name])
+	// lockするし急ぎではないので後回し
+	sc.batchwg.Add(1)
+	go func(name string) {
+		defer sc.batchwg.Done()
+		sc.WorkerCountMutex.Lock()
+		defer sc.WorkerCountMutex.Unlock()
+		if _, ok := sc.WorkerCountMap[name]; !ok {
+			sc.WorkerCountMap[name] = 0
+		}
+		sc.WorkerCountMap[name]++
+
+		if count, ok := sc.addedWorkerCountMap[name]; !ok {
+			sc.addedWorkerCountMap[name] = 1
+		} else {
+			sc.addedWorkerCountMap[name] = count + 1
+		}
+	}(name)
 }
 
 func (sc Scenario) CountdownWorker(ctx context.Context, name string) {
@@ -326,4 +345,14 @@ func (sc Scenario) CountdownWorker(ctx context.Context, name string) {
 
 func (sc *Scenario) PrintWorkerCount() {
 	AdminLogger.Printf("WorkerCount: %s", pp.Sprint(sc.WorkerCountMap))
+}
+
+func (sc *Scenario) workerAddLogPrint() {
+	sc.WorkerCountMutex.Lock()
+	defer sc.WorkerCountMutex.Unlock()
+
+	for k, v := range sc.addedWorkerCountMap {
+		AdminLogger.Printf("workerを追加しました [%s](num:%d)", k, v)
+	}
+	sc.addedWorkerCountMap = make(map[string]int)
 }
