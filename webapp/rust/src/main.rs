@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::mysql::MySqlConnectOptions;
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::{Sqlite, SqlitePool};
-use std::collections::{HashMap};
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -54,8 +54,8 @@ impl Display for MyError {
 impl ResponseError for MyError {
     fn error_response(&self) -> HttpResponse {
         let response = HttpResponse::Ok()
-        .content_type("application/json")
-        .body(serde_json::to_string(&self.message).unwrap());
+            .content_type("application/json")
+            .body(serde_json::to_string(&self.message).unwrap());
 
         dbg!(&response);
 
@@ -63,8 +63,7 @@ impl ResponseError for MyError {
     }
 
     fn status_code(&self) -> StatusCode {
-        match self.status
-        {
+        match self.status {
             200 => StatusCode::OK,
             400 => StatusCode::BAD_REQUEST,
             401 => StatusCode::UNAUTHORIZED,
@@ -75,14 +74,7 @@ impl ResponseError for MyError {
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
-
-
 }
-
-
-
-
-
 
 // 環境変数を取得する, なければデフォルト値を返す
 fn get_env(key: &str, default: &str) -> String {
@@ -102,12 +94,17 @@ fn tenant_db_path(id: i64) -> PathBuf {
 
 // テナントDBに接続する
 async fn connect_to_tenant_db(id: i64) -> sqlx::Result<SqlitePool> {
-    info!("connect to tenant db now: id = {:?}",id);
+    info!("connect to tenant db now: id = {:?}", id);
     let p = tenant_db_path(id);
 
     let uri = format!("{}", p.to_str().unwrap());
-    info!("tenant db uri = {:?}",uri);
-    let pool = SqlitePool::connect_with(SqliteConnectOptions::new().filename(uri).create_if_missing(true)).await?;
+    info!("tenant db uri = {:?}", uri);
+    let pool = SqlitePool::connect_with(
+        SqliteConnectOptions::new()
+            .filename(uri)
+            .create_if_missing(true),
+    )
+    .await?;
     info!("created db file now");
     Ok(pool)
     // TODO: sqliteDriverNameを使ってないのをなおす
@@ -304,16 +301,16 @@ async fn parse_viewer(
     ) {
         Ok(token) => token,
         Err(e) if e.kind().to_owned() == jsonwebtoken::errors::ErrorKind::InvalidToken => {
-            return Err(MyError{
+            return Err(MyError {
                 status: 401,
                 message: "invalid token".to_string(),
             });
         }
         Err(e) if e.kind().to_owned() == jsonwebtoken::errors::ErrorKind::ExpiredSignature => {
             info!("{:?}", e.kind());
-            return Err(MyError{
+            return Err(MyError {
                 status: 401,
-                message: "JWT expired or not signed with the correct key".to_string()
+                message: "JWT expired or not signed with the correct key".to_string(),
             });
         }
         _ => {
@@ -321,7 +318,7 @@ async fn parse_viewer(
         }
     };
     if token.claims.sub.is_empty() {
-        return Err(MyError{
+        return Err(MyError {
             status: 401,
             message: "invalid token: subject is not found in token".to_string(),
         });
@@ -334,41 +331,42 @@ async fn parse_viewer(
         ROLE_ORGANIZER => tr.to_string(),
         ROLE_PLAYER => tr.to_string(),
         _ => {
-            return Err(MyError{
+            return Err(MyError {
                 status: 401,
-                message: "invalid token: role is not found or invalid role".to_string()
+                message: "invalid token: role is not found or invalid role".to_string(),
             });
         }
     };
     // aud contains one tenant name
     let aud = token.claims.aud;
     if aud.len() != 1 {
-        return Err(MyError{
+        return Err(MyError {
             status: 401,
             message: "invalid token: aud filed is few or too much".to_string(),
         });
     }
     let tenant = match retrieve_tenant_row_from_header(pool, request).await {
         Ok(tenant) => tenant,
-        _ => return Err(MyError{
-            status: 401,
-            message: "tenant not found".to_string()
-        })
+        _ => {
+            return Err(MyError {
+                status: 401,
+                message: "tenant not found".to_string(),
+            })
+        }
     };
 
     if tenant.name == "admin" && role != ROLE_ADMIN {
-        return Err(MyError{
+        return Err(MyError {
             status: 401,
-            message: "tenant not found".to_string()
-        })
-
+            message: "tenant not found".to_string(),
+        });
     }
 
     if tenant.name != aud[0] {
-        return Err(MyError{
+        return Err(MyError {
             status: 401,
-            message:"invalid token: tenant name is not match ".to_string()
-        })
+            message: "invalid token: tenant name is not match ".to_string(),
+        });
     }
 
     let viewer = Viewer {
@@ -407,7 +405,7 @@ async fn retrieve_tenant_row_from_header(
             updated_at: 0,
         });
     }
-    info!("tenant name = {}",tenant_name);
+    info!("tenant name = {}", tenant_name);
     // テナントの存在確認
     match sqlx::query_as("SELECT * FROM tenant WHERE name = ?")
         .bind(tenant_name)
@@ -459,17 +457,17 @@ async fn authorize_player(tenant_db: SqlitePool, id: String) -> Result<(), MyErr
     let player = match retrieve_player(tenant_db, id).await {
         Ok(player) => player,
         Err(sqlx::Error::RowNotFound) => {
-            return Err(MyError{
+            return Err(MyError {
                 status: 401,
-                message: "player not found".to_string()
+                message: "player not found".to_string(),
             });
         }
         _ => panic!("error retrieve_tenant_row_from_header at parse_viewer"),
     };
     if player.is_disqualified {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
-            message: "player is disqualified".to_string()
+            message: "player is disqualified".to_string(),
         });
     }
     Ok(())
@@ -562,22 +560,24 @@ async fn tenants_add_handler(
     info!("parse viewer ok");
     if v.tenant_name != *"admin" {
         // admin: SaaS管理者用の特別なテナント名
-        return Err(MyError{
+        return Err(MyError {
             status: 404,
-            message: "you dont have this API".to_string()
+            message: "you dont have this API".to_string(),
         });
     }
     info!("tenant_name ok");
     if v.role != ROLE_ADMIN {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
-            message: "admin role required".to_string()
+            message: "admin role required".to_string(),
         });
     }
     info!("admin role ok");
     let display_name = &form.display_name;
     let name = &form.name;
-    validate_tenant_name(name.to_string()).map_err(|e| actix_web::error::ErrorBadRequest(e)).unwrap();
+    validate_tenant_name(name.to_string())
+        .map_err(|e| actix_web::error::ErrorBadRequest(e))
+        .unwrap();
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("error now()")
@@ -595,10 +595,12 @@ async fn tenants_add_handler(
     {
         Ok(insert_res) => insert_res,
         // TODO: duplicate entry  error handling ここを変えないと, duplication がOKになっちゃう
-        _ => return Err(MyError{
-            status: 400,
-            message: "duplicate tenant".to_string()
-        }),
+        _ => {
+            return Err(MyError {
+                status: 400,
+                message: "duplicate tenant".to_string(),
+            })
+        }
     };
 
     let id = insert_res.last_insert_id();
@@ -753,26 +755,26 @@ async fn tenants_billing_handler(
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("tenants billing handler now");
     if conn.host() != get_env("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
-        return Err(MyError{
+        return Err(MyError {
             status: 404,
             message: "invalid hostname".to_string(),
         });
     };
     let v = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ADMIN {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
             message: "admin role required".to_string(),
         });
     };
     let before = &query.before;
-    info!("before = {}",before);
+    info!("before = {}", before);
     let mut before_id = 0;
     if !before.is_empty() {
         before_id = if let Ok(id) = before.parse::<i64>() {
             id
         } else {
-            return Err(MyError{
+            return Err(MyError {
                 status: 400,
                 message: "failed to parse query parameter 'before'".to_string(),
             });
@@ -793,7 +795,7 @@ async fn tenants_billing_handler(
     let mut tenant_billings = Vec::<TenantWithBilling>::new();
 
     for t in ts {
-        info!("tenantRow = {:?}",t);
+        info!("tenantRow = {:?}", t);
         if before_id != 0 && before_id <= t.id {
             continue;
         }
@@ -805,14 +807,14 @@ async fn tenants_billing_handler(
         };
         let tenant_db = connect_to_tenant_db(t.id).await.unwrap();
 
-        let cs: Vec<CompetitionRow> = match sqlx::query_as("SELECT * FROM competition WHERE tenant_id=?")
-            .bind(t.id)
-            .fetch_all(&tenant_db)
-            .await{
+        let cs: Vec<CompetitionRow> =
+            match sqlx::query_as("SELECT * FROM competition WHERE tenant_id=?")
+                .bind(t.id)
+                .fetch_all(&tenant_db)
+                .await
+            {
                 Ok(cs) => cs,
-                Err(_e) => {
-                    Vec::<CompetitionRow>::new()
-                }
+                Err(_e) => Vec::<CompetitionRow>::new(),
             };
         for comp in cs {
             let report = billing_report_by_competition(tenant_db.clone(), t.id, comp.id)
@@ -852,11 +854,11 @@ struct PlayersListHandlerResult {
 async fn players_list_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: actix_web::HttpRequest,
-) -> actix_web::Result<HttpResponse,MyError> {
+) -> actix_web::Result<HttpResponse, MyError> {
     info!("players list handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
             message: "organizer role required".to_string(),
         });
@@ -900,7 +902,7 @@ async fn players_add_handler(
     info!("players add handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
             message: "organizer role required".to_string(),
         });
@@ -913,11 +915,11 @@ async fn players_add_handler(
         .filter_map(|(key, val)| (key == "display_name[]").then(|| val))
         .collect();
     let mut pds = Vec::<PlayerDetail>::new();
-    info!("display_names = {:?}",display_names);
+    info!("display_names = {:?}", display_names);
 
     for display_name in display_names {
         let id = dispense_id(pool.clone()).await.unwrap();
-        info!("dispense_id = {}",id);
+        info!("dispense_id = {}", id);
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -966,7 +968,7 @@ async fn player_disqualified_handler(
     info!("player disqualified handler nwo");
     let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
             message: "organizer role required".to_string(),
         });
@@ -988,7 +990,7 @@ async fn player_disqualified_handler(
     let p: PlayerRow = match retrieve_player(tenant_db, player_id).await {
         Ok(p) => p,
         Err(sqlx::Error::RowNotFound) => {
-            return Err(MyError{
+            return Err(MyError {
                 status: 404,
                 message: "player not found".to_string(),
             });
@@ -1037,7 +1039,7 @@ async fn competitions_add_handler(
     info!("competitions add handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
             message: "organizer role required".to_string(),
         });
@@ -1050,7 +1052,13 @@ async fn competitions_add_handler(
         .unwrap()
         .as_secs() as i64;
     let id = dispense_id(pool.clone()).await.unwrap();
-    info!("competition data: id={}, tenant_id={}, titile = {}, now={}",id.clone(), v.tenant_id,title.clone(),now);
+    info!(
+        "competition data: id={}, tenant_id={}, titile = {}, now={}",
+        id.clone(),
+        v.tenant_id,
+        title.clone(),
+        now
+    );
 
     sqlx::query::<Sqlite>("INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
     .bind(id.clone())
@@ -1090,7 +1098,7 @@ async fn competition_finish_handler(
     info!("competition finish handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
             message: "organizer role required".to_string(),
         });
@@ -1099,7 +1107,7 @@ async fn competition_finish_handler(
     info!("connected tenant db");
     let id = form.into_inner().competition_id;
     if id.is_empty() {
-        return Err(MyError{
+        return Err(MyError {
             status: 400,
             message: "competition id required".to_string(),
         });
@@ -1108,7 +1116,7 @@ async fn competition_finish_handler(
     let _ = match retrieve_competition(tenant_db.clone(), id.clone()).await {
         Ok(c) => c,
         Err(sqlx::Error::RowNotFound) => {
-            return Err(MyError{
+            return Err(MyError {
                 status: 404,
                 message: "competition not found".to_string(),
             });
@@ -1158,7 +1166,7 @@ async fn competition_score_handler(
     info!("compeittion score handler now");
     let v = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
             message: "organizer role required".to_string(),
         });
@@ -1167,7 +1175,7 @@ async fn competition_score_handler(
     info!("connected tenant db");
     let competition_id = form.competition_id.clone();
     if competition_id.is_empty() {
-        return Err(MyError{
+        return Err(MyError {
             status: 400,
             message: "competition id required".to_string(),
         });
@@ -1175,7 +1183,7 @@ async fn competition_score_handler(
     let comp = match retrieve_competition(tenant_db.clone(), competition_id.clone()).await {
         Ok(c) => c,
         Err(sqlx::Error::RowNotFound) => {
-            return Err(MyError{
+            return Err(MyError {
                 status: 404,
                 message: "competition not found".to_string(),
             });
@@ -1209,7 +1217,7 @@ async fn competition_score_handler(
     let mut header = rdr.records();
     // check if header is "player_id", "score"
     if header.next().unwrap().unwrap() != vec!["player_id", "score"] {
-        return Err(MyError{
+        return Err(MyError {
             status: 400,
             message: "invalid csv format".to_string(),
         });
@@ -1235,7 +1243,7 @@ async fn competition_score_handler(
         let _ = match retrieve_player(tenant_db.clone(), player_id.clone()).await {
             Ok(c) => c,
             Err(sqlx::Error::RowNotFound) => {
-                return Err(MyError{
+                return Err(MyError {
                     status: 404,
                     message: "player not found".to_string(),
                 });
@@ -1244,10 +1252,12 @@ async fn competition_score_handler(
         };
         let score: i64 = match score_str.parse() {
             Ok(s) => s,
-            _ => return Err(MyError{
-                status: 400,
-                message: "error parse score_str".to_string(),
-            }),
+            _ => {
+                return Err(MyError {
+                    status: 400,
+                    message: "error parse score_str".to_string(),
+                })
+            }
         };
         let id = dispense_id(pool.clone()).await.unwrap();
         let now: i64 = SystemTime::now()
@@ -1309,7 +1319,7 @@ async fn billing_handler(
     info!("billing handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
             message: "role organizer required".to_string(),
         });
@@ -1360,11 +1370,11 @@ async fn player_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
     from: web::Query<PlayerHandlerQueryParam>,
-) -> actix_web::Result<HttpResponse,MyError> {
+) -> actix_web::Result<HttpResponse, MyError> {
     info!("player handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_PLAYER {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
             message: "role player required".to_string(),
         });
@@ -1376,20 +1386,18 @@ async fn player_handler(
         .unwrap();
     let player_id = from.into_inner().player_id;
     if player_id.is_empty() {
-        return Err(MyError{
+        return Err(MyError {
             status: 400,
             message: "player_id is required".to_string(),
         });
-
     };
     let p = match retrieve_player(tenant_db.clone(), player_id).await {
         Ok(p) => p,
         Err(sqlx::Error::RowNotFound) => {
-            return Err(MyError{
+            return Err(MyError {
                 status: 404,
                 message: "player not found".to_string(),
             });
-
         }
         _ => {
             panic!("panic at retrieve_player")
@@ -1472,7 +1480,7 @@ async fn competition_ranking_handler(
     info!("compeititon ranking handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_PLAYER {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
             message: "role player required".to_string(),
         });
@@ -1481,7 +1489,7 @@ async fn competition_ranking_handler(
     info!("connected tenant db now");
     let competition_id = form.clone().competition_id;
     if competition_id.is_empty() {
-        return Err(MyError{
+        return Err(MyError {
             status: 400,
             message: "competition_id  required".to_string(),
         });
@@ -1490,7 +1498,7 @@ async fn competition_ranking_handler(
     let competition = match retrieve_competition(tenant_db.clone(), competition_id.clone()).await {
         Ok(c) => c,
         Err(sqlx::Error::RowNotFound) => {
-            return Err(MyError{
+            return Err(MyError {
                 status: 404,
                 message: "competition not found".to_string(),
             });
@@ -1601,7 +1609,7 @@ async fn player_competitions_handler(
     info!("player compeititons handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_PLAYER {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
             message: "role player required".to_string(),
         });
@@ -1622,7 +1630,7 @@ async fn organizer_competitions_handler(
     info!("organizer competitions handler now");
     let v: Viewer = parse_viewer(pool.clone(), request).await?;
     if v.role != ROLE_ORGANIZER {
-        return Err(MyError{
+        return Err(MyError {
             status: 403,
             message: "role organizer required".to_string(),
         });
