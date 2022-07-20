@@ -1232,7 +1232,7 @@ async fn competition_score_handler(
             Ok(c) => c,
             Err(sqlx::Error::RowNotFound) => {
                 return Err(MyError {
-                    status: 404,
+                    status: 400,
                     message: "player not found".to_string(),
                 });
             }
