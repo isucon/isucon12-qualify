@@ -327,8 +327,10 @@ func (sc *Scenario) PlayerAddCountPrint() {
 		defer sc.batchwg.Done()
 		sc.PlayerAddCountMu.Lock()
 		defer sc.PlayerAddCountMu.Unlock()
-		ContestantLogger.Printf("Playerが%d人増えました", sc.PlayerAddCount)
-		sc.PlayerAddCount = 0
+		if sc.PlayerAddCount != 0 {
+			ContestantLogger.Printf("Playerが%d人増えました", sc.PlayerAddCount)
+			sc.PlayerAddCount = 0
+		}
 	}()
 }
 
