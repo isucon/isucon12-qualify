@@ -102,7 +102,7 @@ async function dispenseID(): Promise<string> {
       break
     } catch (error: any) {
       // deadlock
-        if (error.errno && error.errno === 1213) {
+      if (error.errno && error.errno === 1213) {
         lastErr = error
       }
     }
@@ -598,9 +598,7 @@ async function billingReportByCompetition(
       billing_yen: 100 * counts.player + 10 * counts.visitor,
     }
   } catch (error) {
-    throw new Error(
-      `error Select count player_score: tenantId=${tenantId}, competitionId=${comp.id}, ${error}`
-    )
+    throw new Error(`error Select count player_score: tenantId=${tenantId}, competitionId=${comp.id}, ${error}`)
   } finally {
     unlock()
   }
@@ -707,7 +705,6 @@ app.get(
       }
 
       const pds: PlayerDetail[] = []
-
       const tenantDB = await connectToTenantDB(viewer.tenantId)
       try {
         const pls = await tenantDB.all<PlayerRow[]>(
@@ -715,13 +712,13 @@ app.get(
           viewer.tenantId
         )
 
-        pls.forEach((player) => {
-          pds.push({
+        pds.push(
+          ...pls.map((player) => ({
             id: player.id,
             display_name: player.display_name,
             is_disqualified: !!player.is_disqualified,
-          })
-        })
+          }))
+        )
       } catch (error) {
         throw new Error(`error Select player, tenant_id=${viewer.tenantId}: ${error}`)
       } finally {
@@ -1167,14 +1164,11 @@ async function competitionsHandler(req: Request, res: Response, viewer: Viewer, 
       viewer.tenantId
     )
 
-    const cds: CompetitionDetail[] = []
-    for (const comp of competitions) {
-      cds.push({
-        id: comp.id,
-        title: comp.title,
-        is_finished: !!comp.finished_at,
-      })
-    }
+    const cds: CompetitionDetail[] = competitions.map((comp) => ({
+      id: comp.id,
+      title: comp.title,
+      is_finished: !!comp.finished_at,
+    }))
 
     const data: CompetitionsResult = {
       competitions: cds,
