@@ -74,7 +74,6 @@ impl ResponseError for MyError {
 
 // 環境変数を取得する, なければデフォルト値を返す
 fn get_env(key: &str, default: &str) -> String {
-    info!("get_env now");
     match std::env::var(key) {
         Ok(val) => val,
         Err(_) => default.to_string(),
@@ -83,7 +82,6 @@ fn get_env(key: &str, default: &str) -> String {
 
 // テナントDBのパスを返す
 fn tenant_db_path(id: i64) -> PathBuf {
-    info!("tenant_db_path now");
     let tenant_db_dir = get_env("ISUCON_TENANT_DB_DIR", "../tenant_db");
     PathBuf::from(tenant_db_dir).join(format!("{}.db", id))
 }
@@ -121,7 +119,6 @@ async fn create_tenant_db(id: i64) {
 
 // システム全体で一意なIDを生成する
 async fn dispense_id(pool: web::Data<sqlx::MySqlPool>) -> Result<String, sqlx::Error> {
-    info!("dispense id now");
     let mut id: i64 = 0;
     for _ in 1..100 {
         let ret = match sqlx::query("REPLACE INTO id_generator (stub) VALUES (?);")
@@ -132,7 +129,6 @@ async fn dispense_id(pool: web::Data<sqlx::MySqlPool>) -> Result<String, sqlx::E
             Ok(ret) => ret,
             _ => break,
         };
-        info!("last_insert_id = {:?}", ret.last_insert_id());
         id = ret.last_insert_id().try_into().unwrap();
         break;
     }
@@ -376,7 +372,6 @@ async fn retrieve_tenant_row_from_header(
     // check if jwt tenant name and host header's tenant name is the same
     let base_host = get_env("ISUCON_BASE_HOSTNAME", ".t.isucon.dev");
 
-    info!("{:?}", request.headers());
     let tenant_name = request
         .headers()
         .get("Host")
@@ -428,7 +423,6 @@ struct PlayerRow {
 
 // 参加者を取得する
 async fn retrieve_player(tenant_db: SqlitePool, id: String) -> Result<PlayerRow, sqlx::Error> {
-    info!("retrieve player now");
     let row: PlayerRow = match sqlx::query_as("SELECT * FROM player WHERE id = ?")
         .bind(id)
         .fetch_one(&tenant_db)
@@ -478,7 +472,6 @@ async fn retrieve_competition(
     tenant_db: SqlitePool,
     id: String,
 ) -> Result<CompetitionRow, sqlx::Error> {
-    info!("retrieve competition now");
     let row: CompetitionRow = match sqlx::query_as("SELECT * FROM competition WHERE id = ?")
         .bind(id)
         .fetch_one(&tenant_db)
@@ -504,7 +497,6 @@ struct PlayerScoreRow {
 
 // 排他ロックのためのファイル名を生成する
 fn lock_file_path(id: i64) -> PathBuf {
-    info!("lock file path now");
     let tenant_db_dir = get_env("ISUCON_TENANT_DB_DIR", "../tenant_db");
     PathBuf::from(tenant_db_dir).join(format!("{}.lock", id))
 }
@@ -665,7 +657,6 @@ async fn billing_report_by_competition(
     tenant_id: i64,
     competition_id: String,
 ) -> sqlx::Result<BillingReport> {
-    info!("billing report by competition now");
     let comp: CompetitionRow = retrieve_competition(tenant_db.clone(), competition_id).await?;
     let vhs: Vec<VisitHistorySummaryRow> = sqlx::query_as(
         "SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id")
@@ -913,7 +904,6 @@ async fn players_add_handler(
 
     for display_name in display_names {
         let id = dispense_id(pool.clone()).await.unwrap();
-        info!("dispense_id = {}", id);
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -925,8 +915,9 @@ async fn players_add_handler(
             .bind(false)
             .bind(now)
             .bind(now)
-            .execute( &tenant_db)
-            .await.unwrap();
+            .execute(&tenant_db)
+            .await
+            .unwrap();
 
         let p = retrieve_player(tenant_db.clone(), id).await.unwrap();
         pds.push(PlayerDetail {
