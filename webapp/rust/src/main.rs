@@ -1507,8 +1507,8 @@ async fn competition_ranking_handler(
         .fetch_all(&mut tenant_db)
         .await
         .unwrap();
-    let mut ranks = Vec::<CompetitionRank>::new();
-    let mut scored_player_set = HashSet::new();
+    let mut ranks = Vec::with_capacity(pss.len());
+    let mut scored_player_set = HashSet::with_capacity(pss.len());
 
     for ps in pss {
         // player_scoreが同一player_id内ではrow_numの降順でソートされているので
@@ -1523,8 +1523,8 @@ async fn competition_ranking_handler(
         ranks.push(CompetitionRank {
             rank: 0,
             score: ps.score,
-            player_id: p.id.clone(),
-            player_display_name: p.display_name.clone(),
+            player_id: p.id,
+            player_display_name: p.display_name,
             row_num: ps.row_num,
         })
     }
@@ -1535,7 +1535,7 @@ async fn competition_ranking_handler(
             b.score.cmp(&a.score)
         }
     });
-    let mut paged_ranks = Vec::new();
+    let mut paged_ranks = Vec::with_capacity(100);
     for (i, rank) in ranks.into_iter().enumerate() {
         let i = i as i64;
         if i < rank_after {
