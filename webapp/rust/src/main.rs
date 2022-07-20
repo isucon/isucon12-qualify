@@ -10,8 +10,8 @@ use log::{error, info};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::mysql::{MySqlConnectOptions, MySqlDatabaseError};
-use sqlx::sqlite::SqliteConnectOptions;
-use sqlx::{Sqlite, SqlitePool};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
+use sqlx::Connection as _;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::path::PathBuf;
@@ -30,9 +30,6 @@ const ROLE_PLAYER: &str = "player";
 lazy_static! {
     // 正しいテナント名の正規表現
     static ref TENANT_NAME_REGEXP: Regex = Regex::new(r"^[a-z][a-z0-9-]{0,61}[a-z0-9]$").unwrap();
-    // TODO: static ref ADMIN_DB:
-
-    static ref SQLITE_DRIBER_NAME: String = "sqlite3".to_string();
 }
 use std::fmt::{Formatter, Result as FmtResult};
 #[derive(Debug, Serialize)]
@@ -87,14 +84,14 @@ fn tenant_db_path(id: i64) -> PathBuf {
 }
 
 // テナントDBに接続する
-async fn connect_to_tenant_db(id: i64) -> sqlx::Result<SqlitePool> {
+async fn connect_to_tenant_db(id: i64) -> sqlx::Result<SqliteConnection> {
     info!("connect to tenant db now: id = {:?}", id);
     let p = tenant_db_path(id);
 
-    let pool = SqlitePool::connect_with(SqliteConnectOptions::new().filename(p)).await?;
-    Ok(pool)
-    // TODO: sqliteDriverNameを使ってないのをなおす
+    let conn = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(p)).await?;
+    Ok(conn)
 }
+
 // テナントDBを新規に作成する
 async fn create_tenant_db(id: i64) {
     info!("create_tenant_db now");
@@ -422,10 +419,13 @@ struct PlayerRow {
 }
 
 // 参加者を取得する
-async fn retrieve_player(tenant_db: SqlitePool, id: String) -> Result<PlayerRow, sqlx::Error> {
+async fn retrieve_player(
+    tenant_db: &mut SqliteConnection,
+    id: &str,
+) -> Result<PlayerRow, sqlx::Error> {
     let row: PlayerRow = match sqlx::query_as("SELECT * FROM player WHERE id = ?")
         .bind(id)
-        .fetch_one(&tenant_db)
+        .fetch_one(tenant_db)
         .await
     {
         Ok(row) => row,
@@ -436,7 +436,7 @@ async fn retrieve_player(tenant_db: SqlitePool, id: String) -> Result<PlayerRow,
 
 // 参加者を認可する
 // 参加者向けAPIで呼ばれる
-async fn authorize_player(tenant_db: SqlitePool, id: String) -> Result<(), MyError> {
+async fn authorize_player(tenant_db: &mut SqliteConnection, id: &str) -> Result<(), MyError> {
     info!("authorize player now");
     let player = match retrieve_player(tenant_db, id).await {
         Ok(player) => player,
@@ -469,12 +469,12 @@ struct CompetitionRow {
 
 // 大会を取得する
 async fn retrieve_competition(
-    tenant_db: SqlitePool,
-    id: String,
+    tenant_db: &mut SqliteConnection,
+    id: &str,
 ) -> Result<CompetitionRow, sqlx::Error> {
     let row: CompetitionRow = match sqlx::query_as("SELECT * FROM competition WHERE id = ?")
         .bind(id)
-        .fetch_one(&tenant_db)
+        .fetch_one(tenant_db)
         .await
     {
         Ok(row) => row,
@@ -653,11 +653,11 @@ struct VisitHistorySummaryRow {
 // 大会ごとの課金レポートを計算する
 async fn billing_report_by_competition(
     admin_db: &sqlx::MySqlPool,
-    tenant_db: SqlitePool,
+    tenant_db: &mut SqliteConnection,
     tenant_id: i64,
-    competition_id: String,
+    competition_id: &str,
 ) -> sqlx::Result<BillingReport> {
-    let comp: CompetitionRow = retrieve_competition(tenant_db.clone(), competition_id).await?;
+    let comp: CompetitionRow = retrieve_competition(tenant_db, competition_id).await?;
     let vhs: Vec<VisitHistorySummaryRow> = sqlx::query_as(
         "SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id")
         .bind(tenant_id)
@@ -681,7 +681,7 @@ async fn billing_report_by_competition(
     )
     .bind(tenant_id)
     .bind(&comp.id)
-    .fetch_all(&tenant_db)
+    .fetch_all(tenant_db)
     .await?
     .into_iter()
     .for_each(|(ps,): (String,)| {
@@ -790,19 +790,19 @@ async fn tenants_billing_handler(
             display_name: t.display_name,
             billing_yen: 0,
         };
-        let tenant_db = connect_to_tenant_db(t.id).await.unwrap();
+        let mut tenant_db = connect_to_tenant_db(t.id).await.unwrap();
 
         let cs: Vec<CompetitionRow> =
             match sqlx::query_as("SELECT * FROM competition WHERE tenant_id=?")
                 .bind(t.id)
-                .fetch_all(&tenant_db)
+                .fetch_all(&mut tenant_db)
                 .await
             {
                 Ok(cs) => cs,
                 Err(_e) => Vec::<CompetitionRow>::new(),
             };
         for comp in cs {
-            let report = billing_report_by_competition(&pool, tenant_db.clone(), t.id, comp.id)
+            let report = billing_report_by_competition(&pool, &mut tenant_db, t.id, &comp.id)
                 .await
                 .unwrap();
             tb.billing_yen += report.billing_yen;
@@ -848,12 +848,12 @@ async fn players_list_handler(
             message: "organizer role required".to_string(),
         });
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant_db");
     let pls: Vec<PlayerRow> =
         sqlx::query_as("SELECT * FROM player WHERE tenant_id=? ORDER BY created_at DESC")
             .bind(v.tenant_id)
-            .fetch_all(&tenant_db)
+            .fetch_all(&mut tenant_db)
             .await
             .unwrap();
     let mut pds: Vec<PlayerDetail> = Vec::<PlayerDetail>::new();
@@ -892,7 +892,7 @@ async fn players_add_handler(
             message: "organizer role required".to_string(),
         });
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
     let display_names: std::collections::HashSet<String> = form_param
         .into_inner()
@@ -915,11 +915,11 @@ async fn players_add_handler(
             .bind(false)
             .bind(now)
             .bind(now)
-            .execute(&tenant_db)
+            .execute(&mut tenant_db)
             .await
             .unwrap();
 
-        let p = retrieve_player(tenant_db.clone(), id).await.unwrap();
+        let p = retrieve_player(&mut tenant_db, &id).await.unwrap();
         pds.push(PlayerDetail {
             id: p.id,
             display_name: p.display_name,
@@ -953,7 +953,7 @@ async fn player_disqualified_handler(
             message: "organizer role required".to_string(),
         });
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     let (player_id,) = params.into_inner();
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -963,10 +963,10 @@ async fn player_disqualified_handler(
         .bind(true)
         .bind(now)
         .bind(&player_id)
-        .execute(&tenant_db)
+        .execute(&mut tenant_db)
         .await
         .unwrap();
-    let p = match retrieve_player(tenant_db, player_id).await {
+    let p = match retrieve_player(&mut tenant_db, &player_id).await {
         Ok(p) => p,
         Err(sqlx::Error::RowNotFound) => {
             // 存在しないプレイヤー
@@ -1024,7 +1024,7 @@ async fn competitions_add_handler(
             message: "organizer role required".to_string(),
         });
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
     let title = form.title.clone();
     let now: i64 = SystemTime::now()
@@ -1040,15 +1040,16 @@ async fn competitions_add_handler(
         now
     );
 
-    sqlx::query::<Sqlite>("INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(id.clone())
-    .bind(v.tenant_id)
-    .bind(title.clone())
-    .bind(Option::<i64>::None)
-    .bind(now)
-    .bind(now)
-    .execute( &tenant_db)
-    .await.unwrap();
+    sqlx::query("INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(&id)
+        .bind(v.tenant_id)
+        .bind(&title)
+        .bind(Option::<i64>::None)
+        .bind(now)
+        .bind(now)
+        .execute(&mut tenant_db)
+        .await
+        .unwrap();
 
     let res = CompetitionsAddHandlerResult {
         competition: CompetitionDetail {
@@ -1083,7 +1084,7 @@ async fn competition_finish_handler(
             message: "organizer role required".to_string(),
         });
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
     let id = form.into_inner().competition_id;
     if id.is_empty() {
@@ -1093,7 +1094,7 @@ async fn competition_finish_handler(
         });
     }
 
-    let _ = match retrieve_competition(tenant_db.clone(), id.clone()).await {
+    let _ = match retrieve_competition(&mut tenant_db, &id).await {
         Ok(c) => c,
         Err(sqlx::Error::RowNotFound) => {
             return Err(MyError {
@@ -1110,11 +1111,11 @@ async fn competition_finish_handler(
         .unwrap()
         .as_secs() as i64;
 
-    sqlx::query::<Sqlite>("UPDATE competition SET finished_at = ?, updated_at=? WHERE id = ?")
+    sqlx::query("UPDATE competition SET finished_at = ?, updated_at=? WHERE id = ?")
         .bind(now)
         .bind(now)
         .bind(id)
-        .execute(&tenant_db)
+        .execute(&mut tenant_db)
         .await
         .unwrap();
 
@@ -1151,10 +1152,10 @@ async fn competition_score_handler(
             message: "organizer role required".to_string(),
         });
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
     let (competition_id,) = params.into_inner();
-    let comp = match retrieve_competition(tenant_db.clone(), competition_id.clone()).await {
+    let comp = match retrieve_competition(&mut tenant_db, &competition_id).await {
         Ok(c) => c,
         Err(sqlx::Error::RowNotFound) => {
             // 存在しない大会
@@ -1216,7 +1217,7 @@ async fn competition_score_handler(
         };
         let player_id: String = row.clone()[0].to_string();
         let score_str: String = row[1].to_string();
-        let _ = match retrieve_player(tenant_db.clone(), player_id.clone()).await {
+        match retrieve_player(&mut tenant_db, &player_id).await {
             Ok(c) => c,
             Err(sqlx::Error::RowNotFound) => {
                 return Err(MyError {
@@ -1254,28 +1255,28 @@ async fn competition_score_handler(
     sqlx::query("DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?")
         .bind(v.tenant_id)
         .bind(&competition_id)
-        .execute(&tenant_db)
+        .execute(&mut tenant_db)
         .await
         .unwrap();
 
-    for ps in &player_score_rows {
+    let rows = player_score_rows.len() as i64;
+    for ps in player_score_rows {
         sqlx::query("INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(&ps.id)
-        .bind(ps.tenant_id)
-        .bind(&ps.player_id)
-        .bind(&ps.competition_id)
-        .bind(ps.score)
-        .bind(ps.row_num)
-        .bind(ps.created_at)
-        .bind(ps.updated_at)
-        .execute(&tenant_db)
-        .await.unwrap();
+            .bind(ps.id)
+            .bind(ps.tenant_id)
+            .bind(ps.player_id)
+            .bind(ps.competition_id)
+            .bind(ps.score)
+            .bind(ps.row_num)
+            .bind(ps.created_at)
+            .bind(ps.updated_at)
+            .execute(&mut tenant_db)
+            .await
+            .unwrap();
     }
     let res = SuccessResult {
         status: true,
-        data: Some(ScoreHandlerResult {
-            rows: player_score_rows.len() as i64,
-        }),
+        data: Some(ScoreHandlerResult { rows }),
     };
     Ok(HttpResponse::Ok().json(res))
 }
@@ -1300,18 +1301,18 @@ async fn billing_handler(
             message: "role organizer required".to_string(),
         });
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at DESC")
             .bind(v.tenant_id)
-            .fetch_all(&tenant_db)
+            .fetch_all(&mut tenant_db)
             .await
             .unwrap();
     let mut tbrs = Vec::<BillingReport>::new();
     for comp in cs {
         let report: BillingReport =
-            billing_report_by_competition(&pool, tenant_db.clone(), v.tenant_id, comp.id)
+            billing_report_by_competition(&pool, &mut tenant_db, v.tenant_id, &comp.id)
                 .await
                 .unwrap();
         tbrs.push(report);
@@ -1355,9 +1356,9 @@ async fn player_handler(
             message: "role player required".to_string(),
         });
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db");
-    authorize_player(tenant_db.clone(), v.player_id)
+    authorize_player(&mut tenant_db, &v.player_id)
         .await
         .unwrap();
     let player_id = from.into_inner().player_id;
@@ -1367,7 +1368,7 @@ async fn player_handler(
             message: "player_id is required".to_string(),
         });
     };
-    let p = match retrieve_player(tenant_db.clone(), player_id).await {
+    let p = match retrieve_player(&mut tenant_db, &player_id).await {
         Ok(p) => p,
         Err(sqlx::Error::RowNotFound) => {
             return Err(MyError {
@@ -1381,7 +1382,7 @@ async fn player_handler(
     };
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition ORDER BY created_at ASC")
-            .fetch_all(&tenant_db)
+            .fetch_all(&mut tenant_db)
             .await
             .unwrap();
     // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
@@ -1394,14 +1395,14 @@ async fn player_handler(
             .bind(v.tenant_id)
             .bind(c.id.clone())
             .bind(p.id.clone())
-            .fetch_one(&tenant_db)
+            .fetch_one(&mut tenant_db)
             .await
             .unwrap();
         pss.push(ps);
     }
     let mut psds = Vec::<PlayerScoreDetail>::new();
     for ps in pss {
-        let comp = retrieve_competition(tenant_db.clone(), ps.competition_id.clone())
+        let comp = retrieve_competition(&mut tenant_db, &ps.competition_id)
             .await
             .unwrap();
         psds.push(PlayerScoreDetail {
@@ -1460,11 +1461,11 @@ async fn competition_ranking_handler(
             message: "role player required".to_string(),
         });
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     let (competition_id,) = params.into_inner();
 
     // 大会の存在確認
-    let competition = match retrieve_competition(tenant_db.clone(), competition_id.clone()).await {
+    let competition = match retrieve_competition(&mut tenant_db, &competition_id).await {
         Ok(c) => c,
         Err(sqlx::Error::RowNotFound) => {
             return Err(MyError {
@@ -1500,7 +1501,7 @@ async fn competition_ranking_handler(
         "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC")
         .bind(tenant.id)
         .bind(&competition_id)
-        .fetch_all(&tenant_db)
+        .fetch_all(&mut tenant_db)
         .await
         .unwrap();
     let mut ranks = Vec::<CompetitionRank>::new();
@@ -1512,7 +1513,7 @@ async fn competition_ranking_handler(
         if scored_player_set.contains(&ps.player_id) {
             continue;
         }
-        let p = retrieve_player(tenant_db.clone(), ps.player_id.clone())
+        let p = retrieve_player(&mut tenant_db, &ps.player_id)
             .await
             .unwrap();
         scored_player_set.insert(ps.player_id);
@@ -1583,10 +1584,10 @@ async fn player_competitions_handler(
             message: "role player required".to_string(),
         });
     };
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db now");
-    authorize_player(tenant_db.clone(), v.player_id.clone()).await?;
-    return competitions_handler(Some(v), tenant_db.clone()).await;
+    authorize_player(&mut tenant_db, &v.player_id).await?;
+    return competitions_handler(Some(v), tenant_db).await;
 }
 
 // 主催者向けAPI
@@ -1606,18 +1607,18 @@ async fn organizer_competitions_handler(
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db now");
-    return competitions_handler(Some(v), tenant_db.clone()).await;
+    return competitions_handler(Some(v), tenant_db).await;
 }
 
 async fn competitions_handler(
     v: Option<Viewer>,
-    tenant_db: SqlitePool,
+    mut tenant_db: SqliteConnection,
 ) -> actix_web::Result<actix_web::HttpResponse, MyError> {
     info!("competiitons handler now");
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC")
             .bind(v.map(|v| v.tenant_id).unwrap())
-            .fetch_all(&tenant_db)
+            .fetch_all(&mut tenant_db)
             .await
             .unwrap();
     let mut cds = Vec::<CompetitionDetail>::new();
@@ -1696,9 +1697,9 @@ async fn me_handler(
             }),
         }));
     }
-    let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
+    let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
     info!("connected tenant db now");
-    let p = match retrieve_player(tenant_db.clone(), v.player_id.clone()).await {
+    let p = match retrieve_player(&mut tenant_db, &v.player_id).await {
         Ok(p) => p,
         Err(sqlx::Error::RowNotFound) => {
             return Ok(HttpResponse::Ok().json(SuccessResult {
