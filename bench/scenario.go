@@ -66,6 +66,8 @@ type Scenario struct {
 
 	CompetitionAddLog *CompactLogger
 	TenantAddLog      *CompactLogger
+	PlayerAddLog      *CompactLogger
+	WorkerAddLog      *CompactLogger
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -97,6 +99,8 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 
 	sc.CompetitionAddLog = NewCompactLog(ContestantLogger)
 	sc.TenantAddLog = NewCompactLog(ContestantLogger)
+	sc.PlayerAddLog = NewCompactLog(ContestantLogger)
+	sc.WorkerAddLog = NewCompactLog(AdminLogger)
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(sc.Option.TargetURL)
@@ -273,6 +277,8 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		case <-logTicker.C:
 			sc.CompetitionAddLog.Log()
 			sc.TenantAddLog.Log()
+			sc.WorkerAddLog.Log()
+			sc.PlayerAddLog.Log()
 		}
 
 		if ConstMaxError <= errorCount {
@@ -305,7 +311,7 @@ func (sc Scenario) CountWorker(name string) {
 		sc.WorkerCountMap[name] = 0
 	}
 	sc.WorkerCountMap[name]++
-	AdminLogger.Printf("workerを増やします [%s](%d)", name, sc.WorkerCountMap[name])
+	sc.WorkerAddLog.Printf("workerを増やします [%s](%d)", name, sc.WorkerCountMap[name])
 }
 
 func (sc Scenario) CountdownWorker(ctx context.Context, name string) {

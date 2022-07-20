@@ -8,7 +8,7 @@ const (
 	ConstNewTenantScenarioPlayerWorkerNum = 20 // 作成するplayer worker数
 
 	// PopularTenantScenario
-	ConstPopularTenantScenarioScoreRepeat = 2   // 一周のスコア入稿回数
+	ConstPopularTenantScenarioScoreRepeat = 2   // 初期の一周のスコア入稿回数
 	ConstPopularTenantScenarioAddScoreNum = 100 // 1度のスコア入稿で増える数
 
 	// PlayerScenario

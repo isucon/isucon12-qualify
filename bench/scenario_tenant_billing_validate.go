@@ -157,7 +157,6 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 				})
 			}
 			csv := scores.CSV()
-			AdminLogger.Printf("[%s] [tenant:%s] CSV入稿 (rows:%d, len:%d)", scTag, tenant.Name, len(scores), len(csv))
 			res, err, txt := PostOrganizerCompetitionScoreAction(ctx, comp.ID, []byte(csv), orgAg)
 			msg := fmt.Sprintf("%s %s", orgAc, txt)
 			v := ValidateResponseWithMsg("大会結果CSV入稿", step, res, err, msg, WithStatusCode(200),

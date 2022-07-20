@@ -162,7 +162,6 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			}
 			csv := score.CSV()
 			scoredPlayerIDs = score.PlayerIDs()
-			AdminLogger.Printf("[%s] [tenant:%s] CSV入稿 %d回目 (rows:%d, len:%d)", conf.scTag, conf.tenantName, count+1, len(score)-1, len(csv))
 
 			res, err, txt := PostOrganizerCompetitionScoreAction(ctx, comp.ID, []byte(csv), orgAg)
 			msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
