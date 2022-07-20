@@ -7,8 +7,6 @@ use futures_util::stream::StreamExt as _;
 use jsonwebtoken;
 use lazy_static::lazy_static;
 use log::info;
-use nix::fcntl::{flock, open, FlockArg, OFlag};
-use nix::sys::stat::Mode;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::mysql::MySqlConnectOptions;
@@ -17,7 +15,7 @@ use sqlx::{Sqlite, SqlitePool};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::result::Result;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -507,27 +505,37 @@ struct PlayerScoreRow {
 }
 
 // 排他ロックのためのファイル名を生成する
-fn lock_file_path(id: i64) -> String {
+fn lock_file_path(id: i64) -> PathBuf {
     info!("lock file path now");
     let tenant_db_dir = get_env("ISUCON_TENANT_DB_DIR", "../tenant_db");
-    return Path::new(&tenant_db_dir)
-        .join(format!("{}.lock", id))
-        .to_str()
-        .unwrap()
-        .to_string();
+    PathBuf::from(tenant_db_dir).join(format!("{}.lock", id))
+}
+
+#[derive(Debug)]
+struct Flock {
+    fd: std::os::unix::io::RawFd,
 }
 
 // 排他ロックする
-fn flock_by_tenant_id(tenant_id: i64) -> Result<i32, ()> {
-    info!("flock by tennat id now");
+fn flock_by_tenant_id(tenant_id: i64) -> Result<Flock, nix::Error> {
     let p = lock_file_path(tenant_id);
-    let lock_file = open(p.as_str(), OFlag::empty(), Mode::empty()).unwrap();
-    match flock(lock_file, FlockArg::LockExclusiveNonblock) {
-        Ok(()) => Ok(lock_file),
-        Err(_) => {
-            println!("existing process!");
-            Err(())
+    let fd = nix::fcntl::open(
+        &p,
+        nix::fcntl::OFlag::O_CREAT | nix::fcntl::OFlag::O_RDONLY,
+        nix::sys::stat::Mode::from_bits_truncate(0o600),
+    )?;
+    match nix::fcntl::flock(fd, nix::fcntl::FlockArg::LockExclusive) {
+        Ok(()) => Ok(Flock { fd }),
+        Err(e) => {
+            let _ = nix::unistd::close(fd);
+            Err(e)
         }
+    }
+}
+
+impl Drop for Flock {
+    fn drop(&mut self) {
+        let _ = nix::unistd::close(self.fd);
     }
 }
 
@@ -1395,7 +1403,7 @@ async fn player_handler(
             .await
             .unwrap();
     // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-    let _fl = flock_by_tenant_id(v.tenant_id);
+    let _fl = flock_by_tenant_id(v.tenant_id).unwrap();
     info!("flocked now");
     let mut pss = Vec::<PlayerScoreRow>::new();
     for c in cs {
@@ -1511,7 +1519,7 @@ async fn competition_ranking_handler(
     // TODO: 数字以外の文字列を入力した場合はエラーにする
 
     // player_scoreを読んでいる時に更新が走ると不整合が走るのでロックを取得する
-    let _fl = flock_by_tenant_id(v.tenant_id);
+    let _fl = flock_by_tenant_id(v.tenant_id).unwrap();
     info!("flocked now");
     let pss: Vec<PlayerScoreRow> = sqlx::query_as(
         "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC")
