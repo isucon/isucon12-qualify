@@ -650,35 +650,28 @@ struct VisitHistorySummaryRow {
     min_created_at: i64,
 }
 
-#[derive(Debug, sqlx::FromRow)]
-struct RowString {
-    value: String,
-}
-
 // 大会ごとの課金レポートを計算する
 async fn billing_report_by_competition(
+    admin_db: &sqlx::MySqlPool,
     tenant_db: SqlitePool,
     tenant_id: i64,
     competition_id: String,
-) -> Result<BillingReport, sqlx::Error> {
+) -> sqlx::Result<BillingReport> {
     info!("billing report by competition now");
     let comp: CompetitionRow = retrieve_competition(tenant_db.clone(), competition_id).await?;
-    let vhs: Vec<VisitHistorySummaryRow> = match sqlx::query_as(
+    let vhs: Vec<VisitHistorySummaryRow> = sqlx::query_as(
         "SELECT player_id, MIN(created_at) AS min_created_at FROM visit_history WHERE tenant_id = ? AND competition_id = ? GROUP BY player_id")
         .bind(tenant_id)
-        .bind(comp.id.clone())
-        .fetch_all(&tenant_db).await{
-            Ok(vhs) => vhs,
-            _ => return Err(sqlx::Error::RowNotFound),
-        };
+        .bind(&comp.id)
+        .fetch_all(admin_db).await?;
 
-    let mut billing_map: HashMap<String, String> = HashMap::new();
+    let mut billing_map = HashMap::new();
     for vh in vhs {
         // competition.finished_atよりも後の場合は, 終了後に訪問したとみなして大会開催内アクセス済みと見做さない
         if comp.finished_at.is_some() && comp.finished_at.unwrap() < vh.min_created_at {
             continue;
         }
-        billing_map.insert(vh.player_id, "visitor".to_string());
+        billing_map.insert(vh.player_id, "visitor");
     }
     // player_scoreを読んでいる時に更新が走ると不整合が起こるのでロックを取得する
     let _fl = flock_by_tenant_id(tenant_id).unwrap();
@@ -688,13 +681,12 @@ async fn billing_report_by_competition(
         "SELECT DISTINCT(player_id) FROM player_score WHERE tenant_id = ? AND competition_id = ?",
     )
     .bind(tenant_id)
-    .bind(comp.id.clone())
+    .bind(&comp.id)
     .fetch_all(&tenant_db)
-    .await
-    .unwrap()
+    .await?
     .into_iter()
-    .for_each(|ps: RowString| {
-        billing_map.insert(ps.value, "player".to_string());
+    .for_each(|(ps,): (String,)| {
+        billing_map.insert(ps, "player");
     });
 
     // 大会が終了している場合のみ請求金額が確定するので計算する
@@ -702,15 +694,15 @@ async fn billing_report_by_competition(
     let mut visitor_count = 0;
     if comp.finished_at.is_some() {
         for (_, category) in billing_map {
-            if category == *"player" {
+            if category == "player" {
                 player_count += 1;
-            } else if category == *"visitor" {
+            } else if category == "visitor" {
                 visitor_count += 1;
             }
         }
     }
     Ok(BillingReport {
-        competition_id: comp.id.clone(),
+        competition_id: comp.id,
         competition_title: comp.title,
         player_count,
         visitor_count,
@@ -811,7 +803,7 @@ async fn tenants_billing_handler(
                 Err(_e) => Vec::<CompetitionRow>::new(),
             };
         for comp in cs {
-            let report = billing_report_by_competition(tenant_db.clone(), t.id, comp.id)
+            let report = billing_report_by_competition(&pool, tenant_db.clone(), t.id, comp.id)
                 .await
                 .unwrap();
             tb.billing_yen += report.billing_yen;
@@ -1329,7 +1321,7 @@ async fn billing_handler(
     let mut tbrs = Vec::<BillingReport>::new();
     for comp in cs {
         let report: BillingReport =
-            billing_report_by_competition(tenant_db.clone(), v.tenant_id, comp.id)
+            billing_report_by_competition(&pool, tenant_db.clone(), v.tenant_id, comp.id)
                 .await
                 .unwrap();
         tbrs.push(report);
