@@ -16,4 +16,4 @@ RUN curl -sLO https://github.com/cli/cli/releases/download/v2.13.0/gh_2.13.0_lin
   install gh_2.13.0_linux_amd64/bin/gh /usr/local/bin
 
 WORKDIR /home/isucon/webapp/java
-# CMD ["./gradlew", "bootRun"]
+CMD ["./gradlew", "bootRun"]

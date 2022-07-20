@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -163,6 +164,7 @@ public class Application {
         try {
             Process p = new ProcessBuilder().command("sh", "-c", String.format("sqlite3 %s < %s", tenantDBPath, TENANT_DB_SCHEMA_FILE_PATH)).start();
             int exitCode = p.waitFor();
+            p.destroy();
             if (exitCode != 0) {
                 InputStreamReader inputStreamReader = new InputStreamReader(p.getErrorStream());
                 Stream<String> streamOfString = new BufferedReader(inputStreamReader).lines();
@@ -413,21 +415,20 @@ public class Application {
     private FileLock flockByTenantID(long tenantId) throws FileLockException {
         String p = this.lockFilePath(tenantId);
         File lockfile = new File(p);
-        try {
-            FileChannel fc = FileChannel.open(lockfile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+        try (FileChannel fc = FileChannel.open(lockfile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE);) {
             FileLock lock = fc.tryLock();
             if (lock == null) {
                 throw new FileLockException(String.format("error FileChannel.tryLock: path=%s, ", p));
             }
             return lock;
-        } catch (IOException e) {
+        } catch (IOException | OverlappingFileLockException e) {
             throw new FileLockException(String.format("error flockByTenantID: path=%s, ", p), e);
         }
     }
 
     private void releaseFileLock(FileLock fl) {
         try {
-            if (fl != null) {
+            if (fl != null && fl.isValid()) {
                 fl.release();
             }
         } catch (IOException e) {
@@ -525,7 +526,7 @@ public class Application {
         Map<String, String> billingMap = new HashMap<>();
         for (VisitHistorySummaryRow vh : vhs) {
             // competition.finished_atよりもあとの場合は、終了後に訪問したとみなして大会開催内アクセス済みとみなさない
-            if (comp.getFinishedAt() != null && comp.getFinishedAt().before(vh.getMinCreatedAt())) {
+            if (this.isValidFinishedAt(comp.getFinishedAt()) && comp.getFinishedAt().before(vh.getMinCreatedAt())) {
                 continue;
             }
             billingMap.put(vh.getPlayerId(), "visitor");
@@ -553,7 +554,7 @@ public class Application {
 
             // 大会が終了している場合のみ請求金額が確定するので計算する
             long playerCount = 0, visitorCount = 0;
-            if (comp.getFinishedAt() != null) {
+            if (this.isValidFinishedAt(comp.getFinishedAt())) {
                 for (Map.Entry<String, String> entry : billingMap.entrySet()) {
                     switch (entry.getValue()) {
                     case "player":
@@ -896,8 +897,8 @@ public class Application {
                 throw new WebException(HttpStatus.NOT_FOUND, "competition not found ");
             }
 
-            if (comp.getFinishedAt() != null) {
-                throw new WebException(HttpStatus.BAD_REQUEST, "competition is finished");
+            if (this.isValidFinishedAt(comp.getFinishedAt())) {
+                throw new WebException(HttpStatus.BAD_REQUEST, String.format("competition is finished: %s", comp.getFinishedAt()));
             }
 
             if (multipartFile.isEmpty()) {
@@ -944,22 +945,26 @@ public class Application {
                 playerScoreRows.add(new PlayerScoreRow(v.getTenantId(), id, playerId, competitionId, score, rowNum, now, now));
             }
 
-            PreparedStatement ps = tenantDb.prepareStatement("DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?");
-            ps.setLong(1, v.getTenantId());
-            ps.setString(2, competitionId);
-            ps.execute();
+            {
+                PreparedStatement ps = tenantDb.prepareStatement("DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?");
+                ps.setLong(1, v.getTenantId());
+                ps.setString(2, competitionId);
+                ps.execute();
+            }
 
-            for (PlayerScoreRow psr : playerScoreRows) {
-                tenantDb.prepareStatement("INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                ps.setString(1, psr.getId());
-                ps.setLong(2, psr.getTenantId());
-                ps.setString(3, psr.getPlayerId());
-                ps.setString(4, psr.getCompetitionId());
-                ps.setLong(5, psr.getScore());
-                ps.setLong(6, psr.getRowNum());
-                ps.setDate(7, new java.sql.Date(psr.getCreatedAt().getTime()));
-                ps.setDate(8, new java.sql.Date(psr.getUpdatedAt().getTime()));
-                ps.executeUpdate();
+            {
+                for (PlayerScoreRow psr : playerScoreRows) {
+                    PreparedStatement ps = tenantDb.prepareStatement("INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                    ps.setString(1, psr.getId());
+                    ps.setLong(2, psr.getTenantId());
+                    ps.setString(3, psr.getPlayerId());
+                    ps.setString(4, psr.getCompetitionId());
+                    ps.setLong(5, psr.getScore());
+                    ps.setLong(6, psr.getRowNum());
+                    ps.setDate(7, new java.sql.Date(psr.getCreatedAt().getTime()));
+                    ps.setDate(8, new java.sql.Date(psr.getUpdatedAt().getTime()));
+                    ps.executeUpdate();
+                }
             }
 
             return new SuccessResult(true, new ScoreHandlerResult((long) playerScoreRows.size()));
@@ -991,8 +996,8 @@ public class Application {
     @GetMapping("/api/organizer/billing")
     public SuccessResult billingHandler(HttpServletRequest req) {
         Viewer v = this.parseViewer(req);
-        if (!v.getRole().equals(ROLE_PLAYER)) {
-            throw new WebException(HttpStatus.FORBIDDEN, "role player required");
+        if (!v.getRole().equals(ROLE_ORGANIZER)) {
+            throw new WebException(HttpStatus.FORBIDDEN, "role organizer required");
         }
 
         Connection tenantDb = null;
@@ -1048,7 +1053,7 @@ public class Application {
         FileLock fl = null;
         try {
             tenantDb = this.connectToTenantDB(v.getTenantId());
-            this.authorizePlayer(tenantDb, playerId);
+            this.authorizePlayer(tenantDb, v.getPlayerId());
 
             PlayerRow p = this.retrievePlayer(tenantDb, playerId);
             if (p == null) {
@@ -1127,7 +1132,7 @@ public class Application {
     // GET /api/player/competition/{competitionId}/ranking
     // 大会ごとのランキングを取得する
     @GetMapping("/api/player/competition/{competitionId}/ranking")
-    public SuccessResult competitionRankingHandler(HttpServletRequest req, @PathVariable("competitionId") String competitionId, @RequestParam(name = "rank_after", required = false) Long rankAfter) {
+    public SuccessResult competitionRankingHandler(HttpServletRequest req, @PathVariable("competitionId") String competitionId, @RequestParam(name = "rank_after", required = false, defaultValue = "0") Long rankAfter) {
         Viewer v = this.parseViewer(req);
         if (!v.getRole().equals(ROLE_PLAYER)) {
             throw new WebException(HttpStatus.FORBIDDEN, "role player required");
@@ -1181,15 +1186,17 @@ public class Application {
                 ps.setLong(1, tenant.getId());
                 ps.setString(2, competitionId);
                 ResultSet rs = ps.executeQuery();
-                pss.add(new PlayerScoreRow(
-                        rs.getLong("tenant_id"),
-                        rs.getString("id"),
-                        rs.getString("player_id"),
-                        rs.getString("competition_id"),
-                        rs.getLong("score"),
-                        rs.getLong("row_num"),
-                        new Date(rs.getLong("created_at")),
-                        new Date(rs.getLong("updated_at"))));
+                while (rs.next()) {
+                    pss.add(new PlayerScoreRow(
+                            rs.getLong("tenant_id"),
+                            rs.getString("id"),
+                            rs.getString("player_id"),
+                            rs.getString("competition_id"),
+                            rs.getLong("score"),
+                            rs.getLong("row_num"),
+                            new Date(rs.getLong("created_at")),
+                            new Date(rs.getLong("updated_at"))));
+                }
             }
 
             List<CompetitionRank> ranks = new ArrayList<>();
@@ -1209,7 +1216,7 @@ public class Application {
                     competitionRank.setPlayerDisplayName(p.getDisplayName());
                     competitionRank.setRowNum(ps.getRowNum());
 
-                    ranks.add(new CompetitionRank());
+                    ranks.add(competitionRank);
                 }
             }
 
@@ -1217,7 +1224,7 @@ public class Application {
                 @Override
                 public int compare(CompetitionRank o1, CompetitionRank o2) {
                     if (o1.getScore().longValue() == o2.getScore().longValue()) {
-                        return Long.compare(o1.getScore(), o2.getScore());
+                        return Long.compare(o1.getRowNum(), o2.getRowNum());
                     }
                     return Long.compare(o2.getScore(), o1.getScore());
                 }
@@ -1242,7 +1249,7 @@ public class Application {
                 }
             }
 
-            return new SuccessResult(true, new CompetitionRankingHandlerResult(new CompetitionDetail(comp.getId(), comp.getTitle(), comp.getFinishedAt() != null), pagedRanks));
+            return new SuccessResult(true, new CompetitionRankingHandlerResult(new CompetitionDetail(comp.getId(), comp.getTitle(), this.isValidFinishedAt(comp.getFinishedAt())), pagedRanks));
         } catch (DataAccessException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error admindb SQL: ", e);
         } catch (DatabaseException e) {
@@ -1329,7 +1336,7 @@ public class Application {
 
             List<CompetitionDetail> cds = new ArrayList<>();
             for (CompetitionRow comp : cs) {
-                cds.add(new CompetitionDetail(comp.getId(), comp.getTitle(), comp.getFinishedAt() != null));
+                cds.add(new CompetitionDetail(comp.getId(), comp.getTitle(), this.isValidFinishedAt(comp.getFinishedAt())));
             }
             return new SuccessResult(true, new CompetitionsHandlerResult(cds));
         } catch (SQLException e) {
@@ -1384,6 +1391,13 @@ public class Application {
         }
     }
 
+    private boolean isValidFinishedAt(Date finishedAt) {
+        if (finishedAt == null) {
+            return false;
+        }
+        return !finishedAt.equals(new Date(0L));
+    }
+
     /*
      * ベンチマーカー向けAPI POST /initialize ベンチマーカーが起動したときに最初に呼ぶ
      * データベースの初期化などが実行されるため、スキーマを変更した場合などは適宜改変すること
@@ -1391,7 +1405,10 @@ public class Application {
     @PostMapping("/initialize")
     public SuccessResult initializeHandler() {
         try {
-            Runtime.getRuntime().exec(INITIALIZE_SCRIPT);
+            Process p = Runtime.getRuntime().exec(INITIALIZE_SCRIPT);
+            p.waitFor();
+            p.destroy();
+
             InitializeHandlerResult res = new InitializeHandlerResult();
             res.setLang("java");
             // 頑張ったポイントやこだわりポイントがあれば書いてください
@@ -1399,7 +1416,7 @@ public class Application {
             res.setAppeal("");
 
             return new SuccessResult(true, res);
-        } catch (IOException e) {
+        } catch (IOException | InterruptedException e) {
             throw new RuntimeException(String.format("error Runtime.exec: %s", e.getMessage()));
         }
     }
