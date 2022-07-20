@@ -42,17 +42,18 @@ job_xxx
 
 ## シナリオ一覧
 
-- SaaS管理者: admin
-- 新規テナント: organizer_new_tenant
-- 既存巨大テナント(id=1): organizer_large_tenant
-- 既存人気テナント 破壊的操作NG(id=2~99 20個程度): organizer_popular_tenant
-- 既存のんびりテナント 破壊的操作OK(id=2~99 20個程度): organizer_peaceful_tenant
+- SaaS管理者: AdminBilling
+- 新規テナント: OrganizerNewTenant
+- 既存巨大テナント(id=1): PopularTenant(heavry)
+- 既存人気テナント: PopularTenant
+- 既存のんびりテナント 破壊的操作OK: PeacefulTenant
+- 管理者請求額確認: AdminBillingValidate
+- テナント請求額確認: TenantBillingValidate
 
 ## CSV入稿について
 
 benchから入稿されるCSVは、入稿される度に後ろに行数が増えていく
 最後に入稿されたCSVが有効
-１人あたり平均100個(ブレ有り)程度
 
 # メモ
 
