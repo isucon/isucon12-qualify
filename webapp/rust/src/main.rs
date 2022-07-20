@@ -9,7 +9,7 @@ use lazy_static::lazy_static;
 use log::info;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use sqlx::mysql::MySqlConnectOptions;
+use sqlx::mysql::{MySqlConnectOptions, MySqlDatabaseError};
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::{Sqlite, SqlitePool};
 use std::collections::HashMap;
@@ -544,74 +544,74 @@ struct TenantsAddHandlerResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct FormInfo {
+struct TenantsAddHandlerForm {
     name: String,
     display_name: String,
 }
+
 // SaaS管理者用API
 // テナントを追加する
 // POST /api/admin/tenants/add
 async fn tenants_add_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
-    form: web::Form<FormInfo>,
+    form: web::Form<TenantsAddHandlerForm>,
 ) -> actix_web::Result<HttpResponse, MyError> {
-    info!("tenants_add_handler now");
+    let form = form.into_inner();
     let v: Viewer = parse_viewer(&pool, request).await?;
-    info!("parse viewer ok");
-    if v.tenant_name != *"admin" {
+    if v.tenant_name != "admin" {
         // admin: SaaS管理者用の特別なテナント名
         return Err(MyError {
             status: 404,
-            message: "you dont have this API".to_string(),
+            message: format!("{} has not this API", v.tenant_name),
         });
     }
-    info!("tenant_name ok");
     if v.role != ROLE_ADMIN {
         return Err(MyError {
             status: 403,
             message: "admin role required".to_string(),
         });
     }
-    info!("admin role ok");
-    let display_name = &form.display_name;
-    let name = &form.name;
-    validate_tenant_name(name.to_string())
-        .map_err(|e| actix_web::error::ErrorBadRequest(e))
-        .unwrap();
+    validate_tenant_name(&form.name)?;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("error now()")
         .as_secs() as i64;
 
-    let insert_res = match sqlx::query(
+    let insert_res = sqlx::query(
         "INSERT INTO tenant (name, display_name, created_at, updated_at) VALUES (?, ?, ?, ?)",
     )
-    .bind(name)
-    .bind(display_name)
+    .bind(&form.name)
+    .bind(&form.display_name)
     .bind(now)
     .bind(now)
-    .execute(pool.as_ref())
-    .await
-    {
-        Ok(insert_res) => insert_res,
-        // TODO: duplicate entry  error handling ここを変えないと, duplication がOKになっちゃう
-        _ => {
-            return Err(MyError {
-                status: 400,
-                message: "duplicate tenant".to_string(),
-            })
+    .execute(&**pool)
+    .await;
+    if let Err(e) = insert_res {
+        if let Some(database_error) = e.as_database_error() {
+            if let Some(merr) = database_error.try_downcast_ref::<MySqlDatabaseError>() {
+                if merr.number() == 1062 {
+                    // duplicate entry
+                    return Err(MyError {
+                        status: 400,
+                        message: "duplicate tenant".to_owned(),
+                    });
+                }
+            }
         }
-    };
+        return Err(MyError {
+            status: 500,
+            message: e.to_string(),
+        });
+    }
 
-    let id = insert_res.last_insert_id();
-    create_tenant_db(id.try_into().expect("error: try_into()")).await;
-    info!("insert tenant ok");
+    let id = insert_res.unwrap().last_insert_id();
+    create_tenant_db(id as i64).await;
     let res = TenantsAddHandlerResult {
         tenant: TenantWithBilling {
             id: id.to_string(),
-            name: ToString::to_string(&name),
-            display_name: display_name.to_string(),
+            name: form.name,
+            display_name: form.display_name,
             billing_yen: 0,
         },
     };
@@ -622,12 +622,14 @@ async fn tenants_add_handler(
 }
 
 // テナント名が規則に従っているかチェックする
-fn validate_tenant_name(name: String) -> Result<(), String> {
-    info!("validate_tenant_name now");
-    if TENANT_NAME_REGEXP.is_match(name.as_str()) {
+fn validate_tenant_name(name: &str) -> Result<(), MyError> {
+    if TENANT_NAME_REGEXP.is_match(name) {
         Ok(())
     } else {
-        Err(format!("invalid tenant name: {}", name))
+        Err(MyError {
+            status: 400,
+            message: format!("invalid tenant name: {}", name),
+        })
     }
 }
 
