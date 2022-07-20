@@ -33,6 +33,7 @@ var (
 	// 100 ~ : prepare validate tenant
 
 	ConstPopularTenantScenarioIDRange        = []int{1, 29}
+	ConstValidateScenarioAdminBillingIDRange = []int{12, 29}
 	ConstPlayerValidateScenarioIDRange       = []int{30, 49}
 	ConstAdminBillingValidateScenarioIDRange = []int{50, 69}
 	ConstPeacefulTenantScenarioIDRange       = []int{70, 99}
