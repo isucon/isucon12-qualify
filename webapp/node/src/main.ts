@@ -493,6 +493,9 @@ app.post(
         )
       }
 
+      // NOTE: 先にadminDBに書き込まれることでこのAPIの処理中に
+      //       /api/admin/tenants/billingにアクセスされるとエラーになりそう
+      //       ロックなどで対処したほうが良さそう
       const error = await createTenantDB(id)
       if (error) {
         throw new Error(`error createTenantDB: id=${id} name=${name}, ${error}`)
