@@ -737,6 +737,7 @@ struct TenantWithBilling {
     id: String,
     name: String,
     display_name: String,
+    #[serde(rename = "billing")]
     billing_yen: i64,
 }
 
@@ -747,11 +748,11 @@ struct TenantsBillingHandlerResult {
 
 #[derive(serde_derive::Serialize, serde_derive::Deserialize)]
 struct BillingQuery {
-    before: String,
+    before: Option<i64>,
 }
 // SaaS管理者用API
 // テナントごとの課金レポートを最大10件, テナントのid降順で取得する
-// POST /api/admin/tenants/billing
+// GET /api/admin/tenants/billing
 // URL引数beforeを指定した場合, 指定した値よりもidが小さいテナントの課金レポートを取得する
 async fn tenants_billing_handler(
     pool: web::Data<sqlx::MySqlPool>,
@@ -773,35 +774,20 @@ async fn tenants_billing_handler(
             message: "admin role required".to_string(),
         });
     };
-    let before = &query.before;
-    info!("before = {}", before);
-    let mut before_id = 0;
-    if !before.is_empty() {
-        before_id = if let Ok(id) = before.parse::<i64>() {
-            id
-        } else {
-            return Err(MyError {
-                status: 400,
-                message: "failed to parse query parameter 'before'".to_string(),
-            });
-        };
-    }
+    let before_id = query.before.unwrap_or(0);
     // テナントごとに
     //   大会ごとに
-    //     scoreに登録されているplayerでアクセスした人 * 100
-    //     scoreに登録されているplayerでアクセスしていない人 * 50
-    //     scoreに登録されていないplayerでアクセスした人 * 10
+    //     scoreが登録されているplayer * 100
+    //     scoreが登録されていないplayerでアクセスした人 * 10
     //   を合計したものを
     // テナントの課金とする
     let ts: Vec<TenantRow> = sqlx::query_as("SELECT * FROM tenant ORDER BY id DESC")
-        .fetch_all(pool.as_ref())
+        .fetch_all(&**pool)
         .await
         .unwrap();
 
-    let mut tenant_billings = Vec::<TenantWithBilling>::new();
-
+    let mut tenant_billings = Vec::with_capacity(ts.len());
     for t in ts {
-        info!("tenantRow = {:?}", t);
         if before_id != 0 && before_id <= t.id {
             continue;
         }
@@ -813,15 +799,11 @@ async fn tenants_billing_handler(
         };
         let mut tenant_db = connect_to_tenant_db(t.id).await.unwrap();
 
-        let cs: Vec<CompetitionRow> =
-            match sqlx::query_as("SELECT * FROM competition WHERE tenant_id=?")
-                .bind(t.id)
-                .fetch_all(&mut tenant_db)
-                .await
-            {
-                Ok(cs) => cs,
-                Err(_e) => Vec::<CompetitionRow>::new(),
-            };
+        let cs: Vec<CompetitionRow> = sqlx::query_as("SELECT * FROM competition WHERE tenant_id=?")
+            .bind(t.id)
+            .fetch_all(&mut tenant_db)
+            .await
+            .unwrap();
         for comp in cs {
             let report = billing_report_by_competition(&pool, &mut tenant_db, t.id, &comp.id)
                 .await
