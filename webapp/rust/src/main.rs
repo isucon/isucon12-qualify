@@ -524,20 +524,24 @@ struct Flock {
 }
 
 // 排他ロックする
-fn flock_by_tenant_id(tenant_id: i64) -> Result<Flock, nix::Error> {
+async fn flock_by_tenant_id(tenant_id: i64) -> Result<Flock, nix::Error> {
     let p = lock_file_path(tenant_id);
     let fd = nix::fcntl::open(
         &p,
         nix::fcntl::OFlag::O_CREAT | nix::fcntl::OFlag::O_RDONLY,
         nix::sys::stat::Mode::from_bits_truncate(0o600),
     )?;
-    match nix::fcntl::flock(fd, nix::fcntl::FlockArg::LockExclusive) {
-        Ok(()) => Ok(Flock { fd }),
-        Err(e) => {
-            let _ = nix::unistd::close(fd);
-            Err(e)
+    tokio::task::spawn_blocking(move || {
+        match nix::fcntl::flock(fd, nix::fcntl::FlockArg::LockExclusive) {
+            Ok(()) => Ok(Flock { fd }),
+            Err(e) => {
+                let _ = nix::unistd::close(fd);
+                Err(e)
+            }
         }
-    }
+    })
+    .await
+    .unwrap()
 }
 
 impl Drop for Flock {
@@ -690,7 +694,7 @@ async fn billing_report_by_competition(
         billing_map.insert(vh.player_id, "visitor");
     }
     // player_scoreを読んでいる時に更新が走ると不整合が起こるのでロックを取得する
-    let _fl = flock_by_tenant_id(tenant_id).unwrap();
+    let _fl = flock_by_tenant_id(tenant_id).await.unwrap();
 
     // スコアを登録した参加者のIDを取得する
     sqlx::query_as(
@@ -1155,7 +1159,6 @@ async fn competition_score_handler(
     params: web::Path<(String,)>,
     mut payload: Multipart,
 ) -> actix_web::Result<HttpResponse, MyError> {
-    info!("compeittion score handler now");
     let v = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
@@ -1164,7 +1167,6 @@ async fn competition_score_handler(
         });
     };
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    info!("connected tenant db");
     let (competition_id,) = params.into_inner();
     let comp = match retrieve_competition(&mut tenant_db, &competition_id).await {
         Ok(c) => c,
@@ -1219,7 +1221,7 @@ async fn competition_score_handler(
     }
 
     // DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
-    let _fl = flock_by_tenant_id(v.tenant_id).unwrap();
+    let _fl = flock_by_tenant_id(v.tenant_id).await.unwrap();
     let mut player_score_rows = Vec::<PlayerScoreRow>::new();
     for (row_num, row) in rdr.into_records().enumerate() {
         let row = row.unwrap();
@@ -1386,8 +1388,7 @@ async fn player_handler(
             .await
             .unwrap();
     // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-    let _fl = flock_by_tenant_id(v.tenant_id).unwrap();
-    info!("flocked now");
+    let _fl = flock_by_tenant_id(v.tenant_id).await.unwrap();
     let mut pss = Vec::<PlayerScoreRow>::new();
     for c in cs {
         let ps: PlayerScoreRow = sqlx::query_as(
@@ -1499,7 +1500,7 @@ async fn competition_ranking_handler(
     let rank_after = query.rank_after.unwrap_or(0);
 
     // player_scoreを読んでいる時に更新が走ると不整合が走るのでロックを取得する
-    let _fl = flock_by_tenant_id(v.tenant_id).unwrap();
+    let _fl = flock_by_tenant_id(v.tenant_id).await.unwrap();
     let pss: Vec<PlayerScoreRow> = sqlx::query_as(
         "SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC")
         .bind(tenant.id)
