@@ -115,12 +115,12 @@ async fn create_tenant_db(id: i64) {
 }
 
 // システム全体で一意なIDを生成する
-async fn dispense_id(pool: web::Data<sqlx::MySqlPool>) -> Result<String, sqlx::Error> {
+async fn dispense_id(pool: &sqlx::MySqlPool) -> Result<String, sqlx::Error> {
     let mut id: i64 = 0;
     for _ in 1..100 {
         let ret = match sqlx::query("REPLACE INTO id_generator (stub) VALUES (?);")
             .bind("a")
-            .execute(pool.as_ref())
+            .execute(pool)
             .await
         {
             Ok(ret) => ret,
@@ -903,7 +903,7 @@ async fn players_add_handler(
     info!("display_names = {:?}", display_names);
 
     for display_name in display_names {
-        let id = dispense_id(pool.clone()).await.unwrap();
+        let id = dispense_id(&pool).await.unwrap();
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -1031,7 +1031,7 @@ async fn competitions_add_handler(
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
-    let id = dispense_id(pool.clone()).await.unwrap();
+    let id = dispense_id(&pool).await.unwrap();
     info!(
         "competition data: id={}, tenant_id={}, titile = {}, now={}",
         id.clone(),
@@ -1236,7 +1236,7 @@ async fn competition_score_handler(
                 })
             }
         };
-        let id = dispense_id(pool.clone()).await.unwrap();
+        let id = dispense_id(&pool).await.unwrap();
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
