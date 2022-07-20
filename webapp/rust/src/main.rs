@@ -116,25 +116,30 @@ async fn create_tenant_db(id: i64) {
 
 // システム全体で一意なIDを生成する
 async fn dispense_id(pool: &sqlx::MySqlPool) -> Result<String, sqlx::Error> {
-    let mut id: i64 = 0;
+    let mut last_err = None;
     for _ in 1..100 {
-        let ret = match sqlx::query("REPLACE INTO id_generator (stub) VALUES (?);")
+        match sqlx::query("REPLACE INTO id_generator (stub) VALUES (?);")
             .bind("a")
             .execute(pool)
             .await
         {
-            Ok(ret) => ret,
-            _ => break,
-        };
-        id = ret.last_insert_id().try_into().unwrap();
-        break;
+            Ok(ret) => return Ok(format!("{:x}", ret.last_insert_id())),
+            Err(e) => {
+                if let Some(database_error) = e.as_database_error() {
+                    if let Some(merr) = database_error.try_downcast_ref::<MySqlDatabaseError>() {
+                        if merr.number() == 1213 {
+                            // deadlock
+                            last_err = Some(e);
+                            continue;
+                        }
+                    }
+                }
+                return Err(e);
+            }
+        }
     }
 
-    if id != 0 {
-        Ok(id.to_string())
-    } else {
-        Err(sqlx::Error::RowNotFound)
-    }
+    Err(last_err.unwrap())
 }
 
 #[actix_web::main]
