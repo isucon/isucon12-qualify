@@ -84,6 +84,14 @@ def dispense_id() -> str:
     raise RuntimeError from last_err
 
 
+@app.after_request
+def add_header(response):
+    """全APIにCache-Control: privateを設定する"""
+    if 'Cache-Control' not in response.headers:
+        response.headers['Cache-Control'] = 'private'
+    return response
+
+
 def run():
     global admin_db
     admin_db = connect_admin_db()
@@ -131,6 +139,8 @@ def parse_viewer() -> Viewer:
         token = jwt.decode(token_str, key, audience=tenant.name, algorithms=["RS256"])
     except jwt.ExpiredSignatureError:
         abort(401, "Signature has expire")
+    except Exception:
+        abort(401, "error jwt.decode")
 
     if not token.get("sub"):
         abort(401, f"invalid token: subject is not found in token: {token_str}")
@@ -140,7 +150,7 @@ def parse_viewer() -> Viewer:
         abort(401, f"invalid token: role is not found: {token_str}")
 
     if role not in [ROLE_ADMIN, ROLE_ORGANIZER, ROLE_PLAYER]:
-        abort(401, f"invalid token: role is not found: {token_str}")
+        abort(401, f"invalid token: invalid role: {token_str}")
 
     aud = token.get("aud")
     if len(aud) != 1:
@@ -305,6 +315,9 @@ def tenants_add_handler():
     except IntegrityError:  # duplicate entry
         abort(400, "duplicate tenant")
 
+    # NOTE: 先にadminDBに書き込まれることでこのAPIの処理中に
+	#       /api/admin/tenants/billingにアクセスされるとエラーになりそう
+	#       ロックなどで対処したほうが良さそう
     create_tenant_db(id)
 
     return jsonify(
@@ -434,9 +447,8 @@ def tenants_billing_handler():
 
     # テナントごとに
     #   大会ごとに
-    #     scoreに登録されているplayerでアクセスした人 * 100
-    #     scoreに登録されているplayerでアクセスしていない人 * 50
-    #     scoreに登録されていないplayerでアクセスした人 * 10
+    #     scoreが登録されているplayer * 100
+    #     scoreが登録されていないplayerでアクセスした人 * 10
     #   を合計したものを
     # テナントの課金とする
     tenant_rows = admin_db.execute("SELECT * FROM tenant ORDER BY id DESC").fetchall()
