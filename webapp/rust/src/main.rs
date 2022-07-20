@@ -183,7 +183,7 @@ pub async fn main() -> std::io::Result<()> {
             .route("players", web::get().to(players_list_handler))
             .route("players/add", web::post().to(players_add_handler))
             .route(
-                "player/{player_id}",
+                "player/{player_id}/disqualified",
                 web::post().to(player_disqualified_handler),
             )
             .route("competitions/add", web::post().to(competitions_add_handler))
@@ -947,19 +947,14 @@ struct PlayerDisqualifiedHandlerResult {
     player: PlayerDetail,
 }
 
-#[derive(serde_derive::Deserialize)]
-struct DisqualifiedFormQuery {
-    player_id: String,
-}
 // テナント管理者向けAPI
 // POST /api/organizer/player/:player_id/disqualified
 // 参加者を失格にする
 async fn player_disqualified_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
-    form_param: web::Query<DisqualifiedFormQuery>,
+    params: web::Path<(String,)>,
 ) -> actix_web::Result<HttpResponse, MyError> {
-    info!("player disqualified handler nwo");
     let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
@@ -968,22 +963,22 @@ async fn player_disqualified_handler(
         });
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    info!("connected tenant db");
-    let player_id = form_param.into_inner().player_id;
-    let now: i64 = SystemTime::now()
+    let (player_id,) = params.into_inner();
+    let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
-    sqlx::query::<Sqlite>("UPDATE player SET is_disqualified = ?, updated_at=? WHERE id = ?")
+    sqlx::query("UPDATE player SET is_disqualified = ?, updated_at=? WHERE id = ?")
         .bind(true)
         .bind(now)
-        .bind(player_id.clone())
+        .bind(&player_id)
         .execute(&tenant_db)
         .await
         .unwrap();
-    let p: PlayerRow = match retrieve_player(tenant_db, player_id).await {
+    let p = match retrieve_player(tenant_db, player_id).await {
         Ok(p) => p,
         Err(sqlx::Error::RowNotFound) => {
+            // 存在しないプレイヤー
             return Err(MyError {
                 status: 404,
                 message: "player not found".to_string(),
