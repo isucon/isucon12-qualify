@@ -309,7 +309,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 	return nil
 }
 
-func (sc Scenario) CountWorker(name string) {
+func (sc *Scenario) CountWorker(name string) {
 	// lockするし急ぎではないので後回し
 	sc.batchwg.Add(1)
 	go func(name string) {
@@ -317,29 +317,34 @@ func (sc Scenario) CountWorker(name string) {
 		sc.WorkerCountMutex.Lock()
 		defer sc.WorkerCountMutex.Unlock()
 		if _, ok := sc.WorkerCountMap[name]; !ok {
-			sc.WorkerCountMap[name] = 0
+			sc.WorkerCountMap[name] = 1
+		} else {
+			sc.WorkerCountMap[name]++
 		}
-		sc.WorkerCountMap[name]++
 
-		if count, ok := sc.addedWorkerCountMap[name]; !ok {
+		if _, ok := sc.addedWorkerCountMap[name]; !ok {
 			sc.addedWorkerCountMap[name] = 1
 		} else {
-			sc.addedWorkerCountMap[name] = count + 1
+			sc.addedWorkerCountMap[name]++
 		}
 	}(name)
 }
 
-func (sc Scenario) CountdownWorker(ctx context.Context, name string) {
+func (sc *Scenario) CountdownWorker(ctx context.Context, name string) {
 	// ctxが切られたら減算しない
 	if ctx.Err() != nil {
 		return
 	}
 	sc.WorkerCountMutex.Lock()
 	defer sc.WorkerCountMutex.Unlock()
-	sc.WorkerCountMap[name]--
+	if _, ok := sc.WorkerCountMap[name]; ok {
+		sc.WorkerCountMap[name]--
+	}
 }
 
 func (sc *Scenario) PrintWorkerCount() {
+	sc.WorkerCountMutex.Lock()
+	defer sc.WorkerCountMutex.Unlock()
 	AdminLogger.Printf("WorkerCount: %s", pp.Sprint(sc.WorkerCountMap))
 }
 
