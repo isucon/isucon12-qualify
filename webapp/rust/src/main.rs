@@ -1081,19 +1081,14 @@ async fn competitions_add_handler(
     }))
 }
 
-#[derive(Debug, serde_derive::Serialize, serde_derive::Deserialize)]
-struct CompetitionFinishFormQuery {
-    competition_id: String,
-}
 // テナント管理者向けAPI
 // POST /api/organizer/competitions/:competition_id/finish
 // 大会を終了する
 async fn competition_finish_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
-    form: web::Form<CompetitionFinishFormQuery>,
+    params: web::Path<(String,)>,
 ) -> actix_web::Result<HttpResponse, MyError> {
-    info!("competition finish handler now");
     let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
@@ -1102,8 +1097,7 @@ async fn competition_finish_handler(
         });
     };
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    info!("connected tenant db");
-    let id = form.into_inner().competition_id;
+    let (id,) = params.into_inner();
     if id.is_empty() {
         return Err(MyError {
             status: 400,
@@ -1138,7 +1132,7 @@ async fn competition_finish_handler(
 
     let res = SuccessResult {
         status: true,
-        data: Option::<CompetitionFinishFormQuery>::None, // TODO: Option::<!>::None を使いたいが..
+        data: Option::<()>::None,
     };
     Ok(HttpResponse::Ok().json(res))
 }
@@ -1353,19 +1347,14 @@ struct PlayerHandlerResult {
     scores: Vec<PlayerScoreDetail>,
 }
 
-#[derive(Debug, serde_derive::Serialize, serde_derive::Deserialize)]
-struct PlayerHandlerQueryParam {
-    player_id: String,
-}
 // 参加者向けAPI
 // GET /api/player/player/:player_id
 // 参加者の詳細情報を取得する
 async fn player_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
-    from: web::Query<PlayerHandlerQueryParam>,
+    params: web::Path<(String,)>,
 ) -> actix_web::Result<HttpResponse, MyError> {
-    info!("player handler now");
     let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_PLAYER {
         return Err(MyError {
@@ -1378,13 +1367,7 @@ async fn player_handler(
     authorize_player(&mut tenant_db, &v.player_id)
         .await
         .unwrap();
-    let player_id = from.into_inner().player_id;
-    if player_id.is_empty() {
-        return Err(MyError {
-            status: 400,
-            message: "player_id is required".to_string(),
-        });
-    };
+    let (player_id,) = params.into_inner();
     let p = match retrieve_player(&mut tenant_db, &player_id).await {
         Ok(p) => p,
         Err(sqlx::Error::RowNotFound) => {
