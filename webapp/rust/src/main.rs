@@ -270,10 +270,7 @@ struct Claims {
 }
 
 // parse request header and return Viewer
-async fn parse_viewer(
-    pool: web::Data<sqlx::MySqlPool>,
-    request: HttpRequest,
-) -> Result<Viewer, MyError> {
+async fn parse_viewer(pool: &sqlx::MySqlPool, request: HttpRequest) -> Result<Viewer, MyError> {
     info!("parse viewer now");
     let cookie = request
         .headers()
@@ -373,7 +370,7 @@ async fn parse_viewer(
 }
 
 async fn retrieve_tenant_row_from_header(
-    pool: web::Data<sqlx::MySqlPool>,
+    pool: &sqlx::MySqlPool,
     request: HttpRequest,
 ) -> Result<TenantRow, sqlx::Error> {
     info!("retrieve_tenant_row_from_header now");
@@ -403,7 +400,7 @@ async fn retrieve_tenant_row_from_header(
     // テナントの存在確認
     match sqlx::query_as("SELECT * FROM tenant WHERE name = ?")
         .bind(tenant_name)
-        .fetch_one(pool.as_ref())
+        .fetch_one(pool)
         .await
     {
         Ok(tenant) => Ok(tenant),
@@ -560,7 +557,7 @@ async fn tenants_add_handler(
     form: web::Form<FormInfo>,
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("tenants_add_handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await?;
+    let v: Viewer = parse_viewer(&pool, request).await?;
     info!("parse viewer ok");
     if v.tenant_name != *"admin" {
         // admin: SaaS管理者用の特別なテナント名
@@ -756,7 +753,7 @@ async fn tenants_billing_handler(
             message: "invalid hostname".to_string(),
         });
     };
-    let v = parse_viewer(pool.clone(), request).await?;
+    let v = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ADMIN {
         return Err(MyError {
             status: 403,
@@ -852,7 +849,7 @@ async fn players_list_handler(
     request: actix_web::HttpRequest,
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("players list handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await?;
+    let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
             status: 403,
@@ -896,7 +893,7 @@ async fn players_add_handler(
     form_param: web::Form<Vec<(String, String)>>,
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("players add handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await?;
+    let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
             status: 403,
@@ -962,7 +959,7 @@ async fn player_disqualified_handler(
     form_param: web::Query<DisqualifiedFormQuery>,
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("player disqualified handler nwo");
-    let v: Viewer = parse_viewer(pool.clone(), request).await?;
+    let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
             status: 403,
@@ -1033,7 +1030,7 @@ async fn competitions_add_handler(
     form: web::Form<CompetitionAddHandlerFormQuery>,
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("competitions add handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await?;
+    let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
             status: 403,
@@ -1092,7 +1089,7 @@ async fn competition_finish_handler(
     form: web::Form<CompetitionFinishFormQuery>,
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("competition finish handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await?;
+    let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
             status: 403,
@@ -1160,7 +1157,7 @@ async fn competition_score_handler(
     mut payload: Multipart,
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("compeittion score handler now");
-    let v = parse_viewer(pool.clone(), request).await?;
+    let v = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
             status: 403,
@@ -1313,7 +1310,7 @@ async fn billing_handler(
     request: HttpRequest,
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("billing handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await?;
+    let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
             status: 403,
@@ -1368,7 +1365,7 @@ async fn player_handler(
     from: web::Query<PlayerHandlerQueryParam>,
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("player handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await?;
+    let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_PLAYER {
         return Err(MyError {
             status: 403,
@@ -1474,7 +1471,7 @@ async fn competition_ranking_handler(
     form: web::Form<CompetitionRankingHandlerQueryParam>,
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("compeititon ranking handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await?;
+    let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_PLAYER {
         return Err(MyError {
             status: 403,
@@ -1603,7 +1600,7 @@ async fn player_competitions_handler(
     request: HttpRequest,
 ) -> actix_web::Result<actix_web::HttpResponse, MyError> {
     info!("player compeititons handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await?;
+    let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_PLAYER {
         return Err(MyError {
             status: 403,
@@ -1624,7 +1621,7 @@ async fn organizer_competitions_handler(
     request: HttpRequest,
 ) -> actix_web::Result<actix_web::HttpResponse, MyError> {
     info!("organizer competitions handler now");
-    let v: Viewer = parse_viewer(pool.clone(), request).await?;
+    let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
             status: 403,
@@ -1684,19 +1681,18 @@ async fn me_handler(
     request: HttpRequest,
 ) -> actix_web::Result<HttpResponse, MyError> {
     info!("me handler now");
-    let tenant: TenantRow =
-        match retrieve_tenant_row_from_header(pool.clone(), request.clone()).await {
-            Ok(t) => t,
-            _ => {
-                info!("{:?}", request);
-                panic!("retrieve_tenant_row_from_header")
-            }
-        };
+    let tenant: TenantRow = match retrieve_tenant_row_from_header(&pool, request.clone()).await {
+        Ok(t) => t,
+        _ => {
+            info!("{:?}", request);
+            panic!("retrieve_tenant_row_from_header")
+        }
+    };
     let td = TenantDetail {
         name: tenant.name,
         display_name: tenant.display_name,
     };
-    let v: Viewer = match parse_viewer(pool.clone(), request).await {
+    let v: Viewer = match parse_viewer(&pool, request).await {
         Ok(v) => v,
         Err(e) if e.status == 401 => {
             return Ok(HttpResponse::Ok().json(SuccessResult {
