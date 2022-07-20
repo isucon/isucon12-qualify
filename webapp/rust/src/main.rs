@@ -158,7 +158,9 @@ async fn dispense_id(pool: web::Data<sqlx::MySqlPool>) -> Result<String, sqlx::E
 
 #[actix_web::main]
 pub async fn main() -> std::io::Result<()> {
-    std::env::set_var("RUST_LOG", "info");
+    if std::env::var_os("RUST_LOG").is_none() {
+        std::env::set_var("RUST_LOG", "info");
+    }
     env_logger::init();
 
     // sqliteのクエリログを出力する設定
