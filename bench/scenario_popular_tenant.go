@@ -101,14 +101,14 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 
 		// player数を増やし、スコアを大きくする
 		// TODO: スコアはドカンと増える
-		addPlayerNum := 100
+		addPlayerNum := randomRange([]int{80, 120})
 		playerDisplayNames := make([]string, addPlayerNum)
 		for i := 0; i < addPlayerNum; i++ {
 			playerDisplayNames = append(playerDisplayNames, data.RandomString(16))
 		}
 
 		{
-			sc.PlayerAddLog.Printf("[%s] [tenant:%s] Playerを追加します players: %d", scTag, tenantName, addPlayerNum)
+			sc.PlayerAddCountAdd(len(playerDisplayNames))
 			res, err, txt := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
 			msg := fmt.Sprintf("%s %s", orgAc, txt)
 			v := ValidateResponseWithMsg("大会参加者追加", step, res, err, msg, WithStatusCode(200))

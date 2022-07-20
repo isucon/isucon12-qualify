@@ -66,7 +66,8 @@ type Scenario struct {
 
 	CompetitionAddLog *CompactLogger
 	TenantAddLog      *CompactLogger
-	PlayerAddLog      *CompactLogger
+	PlayerAddCountMu  sync.Mutex
+	PlayerAddCount    int
 
 	addedWorkerCountMap map[string]int
 	batchwg             sync.WaitGroup
@@ -102,7 +103,8 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	batchwg := sync.WaitGroup{}
 	sc.CompetitionAddLog = NewCompactLog(ContestantLogger, batchwg)
 	sc.TenantAddLog = NewCompactLog(ContestantLogger, batchwg)
-	sc.PlayerAddLog = NewCompactLog(ContestantLogger, batchwg)
+	sc.PlayerAddCountMu = sync.Mutex{}
+	sc.PlayerAddCount = 0
 	sc.batchwg = batchwg
 	sc.addedWorkerCountMap = make(map[string]int)
 
@@ -281,8 +283,8 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		case <-logTicker.C:
 			sc.CompetitionAddLog.Log()
 			sc.TenantAddLog.Log()
-			sc.PlayerAddLog.Log()
 			sc.workerAddLogPrint()
+			sc.PlayerAddCountPrint()
 		}
 
 		if ConstMaxError <= errorCount {
@@ -307,6 +309,27 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 	sc.batchwg.Wait()
 
 	return nil
+}
+
+func (sc *Scenario) PlayerAddCountAdd(num int) {
+	sc.batchwg.Add(1)
+	go func(num int) {
+		defer sc.batchwg.Done()
+		sc.PlayerAddCountMu.Lock()
+		defer sc.PlayerAddCountMu.Unlock()
+		sc.PlayerAddCount += num
+	}(num)
+}
+
+func (sc *Scenario) PlayerAddCountPrint() {
+	sc.batchwg.Add(1)
+	go func() {
+		defer sc.batchwg.Done()
+		sc.PlayerAddCountMu.Lock()
+		defer sc.PlayerAddCountMu.Unlock()
+		ContestantLogger.Printf("Playerが%d人増えました", sc.PlayerAddCount)
+		sc.PlayerAddCount = 0
+	}()
 }
 
 func (sc *Scenario) CountWorker(name string) {
