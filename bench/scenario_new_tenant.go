@@ -141,6 +141,8 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 				return v
 			}
 		}
+		// 3回ずつスコア入稿回数を増やしていく
+		orgJobConf.scoreRepeat += 3
 	}
 
 	return nil

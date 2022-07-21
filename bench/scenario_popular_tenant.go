@@ -69,8 +69,8 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 		orgAc:           orgAc,
 		scTag:           scTag,
 		tenantName:      tenantName,
-		scoreRepeat:     ConstPopularTenantScenarioScoreRepeat,
-		addScoreNum:     ConstPopularTenantScenarioAddScoreNum,
+		scoreRepeat:     3,
+		addScoreNum:     100,
 		scoreInterval:   1000, // 結果の検証時には3s、負荷かける用は1s
 		playerWorkerNum: 5,    // CSV入稿と同時に立つworker数
 		maxScoredPlayer: 1000,
@@ -120,6 +120,9 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 				return v
 			}
 		}
+
+		// 3回ずつスコア入稿回数を増やしていく
+		orgJobConf.scoreRepeat += 3
 	}
 
 	return nil

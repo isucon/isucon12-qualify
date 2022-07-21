@@ -7,8 +7,6 @@ const (
 	// NewTenantScenario
 
 	// PopularTenantScenario
-	ConstPopularTenantScenarioScoreRepeat = 3   // 初期の一周のスコア入稿回数
-	ConstPopularTenantScenarioAddScoreNum = 100 // 1度のスコア入稿で増える数
 
 	// PlayerScenario
 	ConstPlayerScenarioCompetitionLoopCount = 10 // 一周でいくつ大会を見るか
