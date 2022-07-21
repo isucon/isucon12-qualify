@@ -125,7 +125,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 				sc.AddErrorCount()
 				return v
 			}
-			sleepms := rand.Intn(5000)
+			sleepms := randomRange([]int{1000, 2000})
 			SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 		}
 	}
