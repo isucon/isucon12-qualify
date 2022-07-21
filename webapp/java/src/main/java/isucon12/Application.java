@@ -32,6 +32,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -111,6 +113,7 @@ import isucon12.model.VisitHistorySummaryRow;
 public class Application {
     @Autowired
     private NamedParameterJdbcTemplate adminDb;
+    public static ConcurrentHashMap<Long, java.util.concurrent.locks.ReentrantLock> lock = new ConcurrentHashMap<>();
 
     Logger logger = LoggerFactory.getLogger(Application.class);
 
@@ -415,6 +418,17 @@ public class Application {
         }
     }
 
+    private void lockByTenantId(long tenantId) {
+        lock.putIfAbsent(tenantId, new ReentrantLock(true));
+        lock.get(tenantId).lock();
+    }
+
+    private void unlockByTenantId(long tenantId) {
+        if (lock.containsKey(tenantId) && lock.get(tenantId).isLocked() && lock.get(tenantId).isHeldByCurrentThread()) {
+            lock.get(tenantId).unlock();
+        }
+    }
+
     @PostMapping("/api/admin/tenants/add")
     public SuccessResult tenantsAddHandler(HttpServletRequest req, @RequestParam(name = "name") String name, @RequestParam(name = "display_name") String displayName) {
         Viewer v = this.parseViewer(req);
@@ -516,7 +530,7 @@ public class Application {
 
         try {
             // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-            this.flockByTenantID(tenantId);
+            this.lockByTenantId(tenantId);
 
             // スコアを登録した参加者のIDを取得する
             List<String> scoredPlayerIDs = new ArrayList<>();
@@ -556,10 +570,12 @@ public class Application {
             br.setBillingVisitorYen(10 * visitorCount); // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
             br.setBillingYen(100 * playerCount + 10 * visitorCount);
             return br;
-        } catch (FileLockException e) {
-            throw new BillingReportByCompetitionException(String.format("error Select visit_history: tenantID=%d, competitionID=%s", tenantId, comp.getId()), e);
+            //        } catch (FileLockException e) {
+            //            throw new BillingReportByCompetitionException(String.format("error Select visit_history: tenantID=%d, competitionID=%s", tenantId, comp.getId()), e);
         } catch (SQLException e) {
             throw new BillingReportByCompetitionException(String.format("error Select count player_score: tenantID=%d, competitionID=%s, ", tenantId, competitionId), e);
+        } finally {
+            this.unlockByTenantId(tenantId);
         }
     }
 
@@ -870,7 +886,7 @@ public class Application {
             }
 
             // DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
-            this.flockByTenantID(v.getTenantId());
+            this.lockByTenantId(v.getTenantId());
 
             String line = null;
             long rowNum = 0L;
@@ -929,14 +945,16 @@ public class Application {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrieveCompetition: ", e);
         } catch (IOException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error new BufferdReader: ", e);
-        } catch (FileLockException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error flockByTenantId: ", e);
+            //        } catch (FileLockException e) {
+            //            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error flockByTenantId: ", e);
         } catch (RetrievePlayerException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrievePlayer: ", e);
         } catch (NumberFormatException e) {
             throw new WebException(HttpStatus.BAD_REQUEST, "error Long.valueOf(scoreStr): ", e);
         } catch (DispenseIdException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error dispenseID: ", e);
+        } finally {
+            this.unlockByTenantId(v.getTenantId());
         }
     }
 
@@ -1019,7 +1037,7 @@ public class Application {
             }
 
             // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-            this.flockByTenantID(v.getTenantId());
+            this.lockByTenantId(v.getTenantId());
 
             List<PlayerScoreRow> pss = new ArrayList<>();
             for (CompetitionRow c : cs) {
@@ -1057,14 +1075,16 @@ public class Application {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error tenantdb SQL: ", e);
         } catch (NumberFormatException e) {
             throw new WebException(HttpStatus.BAD_REQUEST, "error Long.valueOf(scoreStr): ", e);
-        } catch (FileLockException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error flockByTenantId: ", e);
+            //        } catch (FileLockException e) {
+            //            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error flockByTenantId: ", e);
         } catch (RetrievePlayerException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrievePlayer: ", e);
         } catch (AuthorizePlayerException e) {
             throw new WebException(e.getHttpStatus(), e);
         } catch (RetrieveCompetitionException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrieveCompetition: ", e);
+        } finally {
+            this.unlockByTenantId(v.getTenantId());
         }
     }
 
@@ -1116,7 +1136,7 @@ public class Application {
             }
 
             // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-            this.flockByTenantID(v.getTenantId());
+            this.lockByTenantId(v.getTenantId());
             List<PlayerScoreRow> pss = new ArrayList<>();
             {
                 PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC");
@@ -1193,14 +1213,16 @@ public class Application {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDb: ", e);
         } catch (SQLException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error tenantdb SQL: ", e);
-        } catch (FileLockException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error flockByTenantId: ", e);
+            //        } catch (FileLockException e) {
+            //            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error flockByTenantId: ", e);
         } catch (RetrievePlayerException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrievePlayer: ", e);
         } catch (AuthorizePlayerException e) {
             throw new WebException(e.getHttpStatus(), e);
         } catch (RetrieveCompetitionException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrieveCompetition: ", e);
+        } finally {
+            this.unlockByTenantId(v.getTenantId());
         }
     }
 
