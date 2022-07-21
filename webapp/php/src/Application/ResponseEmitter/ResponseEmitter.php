@@ -25,8 +25,7 @@ class ResponseEmitter extends SlimResponseEmitter
                 'X-Requested-With, Content-Type, Accept, Origin, Authorization',
             )
             ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-            ->withHeader('Cache-Control', 'private')
-            ->withHeader('Pragma', 'no-cache');
+            ->withHeader('Cache-Control', 'private');
 
         if (ob_get_contents()) {
             ob_clean();

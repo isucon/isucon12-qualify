@@ -66,6 +66,14 @@ type Scenario struct {
 
 	CompetitionAddLog *CompactLogger
 	TenantAddLog      *CompactLogger
+	PlayerAddCountMu  sync.Mutex
+	PlayerAddCount    int
+
+	addedWorkerCountMap map[string]int
+	batchwg             sync.WaitGroup
+
+	kickedWorkerPlayerIDMap map[string]struct{}
+	kickedWorkerMu          sync.Mutex
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -95,8 +103,16 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 
 	sc.HeavyTenantCount = 0
 
-	sc.CompetitionAddLog = NewCompactLog(ContestantLogger)
-	sc.TenantAddLog = NewCompactLog(ContestantLogger)
+	batchwg := sync.WaitGroup{}
+	sc.CompetitionAddLog = NewCompactLog(ContestantLogger, batchwg)
+	sc.TenantAddLog = NewCompactLog(ContestantLogger, batchwg)
+	sc.PlayerAddCountMu = sync.Mutex{}
+	sc.PlayerAddCount = 0
+	sc.batchwg = batchwg
+	sc.addedWorkerCountMap = make(map[string]int)
+
+	sc.kickedWorkerPlayerIDMap = make(map[string]struct{})
+	sc.kickedWorkerMu = sync.Mutex{}
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(sc.Option.TargetURL)
@@ -214,6 +230,15 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		sc.WorkerCh <- wkr
 	}
 
+	// 初期から回る新規テナントシナリオ
+	{
+		wkr, err := sc.NewTenantScenarioWorker(step, nil, 1)
+		if err != nil {
+			return err
+		}
+		sc.WorkerCh <- wkr
+	}
+
 	// Tenant Billingの整合性をチェックするシナリオ
 	{
 		wkr, err := sc.TenantBillingValidateWorker(step, 1)
@@ -257,8 +282,8 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 			// if w.String() != "AdminBillingValidateWorker" {
 			// 	continue
 			// }
-			wg.Add(1)
 			sc.CountWorker(w.String())
+			wg.Add(1)
 			go func(w Worker) {
 				defer wg.Done()
 				wkr := w
@@ -273,6 +298,8 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		case <-logTicker.C:
 			sc.CompetitionAddLog.Log()
 			sc.TenantAddLog.Log()
+			sc.workerAddLogPrint()
+			sc.PlayerAddCountPrint()
 		}
 
 		if ConstMaxError <= errorCount {
@@ -294,30 +321,105 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 	}
 	step.Cancel()
 	wg.Wait()
+	sc.batchwg.Wait()
 
 	return nil
 }
 
-func (sc Scenario) CountWorker(name string) {
-	sc.WorkerCountMutex.Lock()
-	defer sc.WorkerCountMutex.Unlock()
-	if _, ok := sc.WorkerCountMap[name]; !ok {
-		sc.WorkerCountMap[name] = 0
-	}
-	sc.WorkerCountMap[name]++
-	AdminLogger.Printf("workerを増やします [%s](%d)", name, sc.WorkerCountMap[name])
+func (sc *Scenario) PlayerAddCountAdd(num int) {
+	sc.batchwg.Add(1)
+	go func(num int) {
+		defer sc.batchwg.Done()
+		sc.PlayerAddCountMu.Lock()
+		defer sc.PlayerAddCountMu.Unlock()
+		sc.PlayerAddCount += num
+	}(num)
 }
 
-func (sc Scenario) CountdownWorker(ctx context.Context, name string) {
+func (sc *Scenario) PlayerAddCountPrint() {
+	sc.batchwg.Add(1)
+	go func() {
+		defer sc.batchwg.Done()
+		sc.PlayerAddCountMu.Lock()
+		defer sc.PlayerAddCountMu.Unlock()
+		if sc.PlayerAddCount != 0 {
+			ContestantLogger.Printf("Playerが%d人増えました", sc.PlayerAddCount)
+			sc.PlayerAddCount = 0
+		}
+	}()
+}
+
+func (sc *Scenario) CountWorker(name string) {
+	// lockするし急ぎではないので後回し
+	sc.batchwg.Add(1)
+	go func(name string) {
+		defer sc.batchwg.Done()
+		sc.WorkerCountMutex.Lock()
+		defer sc.WorkerCountMutex.Unlock()
+		if _, ok := sc.WorkerCountMap[name]; !ok {
+			sc.WorkerCountMap[name] = 1
+		} else {
+			sc.WorkerCountMap[name]++
+		}
+
+		if _, ok := sc.addedWorkerCountMap[name]; !ok {
+			sc.addedWorkerCountMap[name] = 1
+		} else {
+			sc.addedWorkerCountMap[name]++
+		}
+	}(name)
+}
+
+func (sc *Scenario) CountdownWorker(ctx context.Context, name string) {
 	// ctxが切られたら減算しない
 	if ctx.Err() != nil {
 		return
 	}
 	sc.WorkerCountMutex.Lock()
 	defer sc.WorkerCountMutex.Unlock()
-	sc.WorkerCountMap[name]--
+	if _, ok := sc.WorkerCountMap[name]; ok {
+		sc.WorkerCountMap[name]--
+	}
 }
 
 func (sc *Scenario) PrintWorkerCount() {
+	sc.WorkerCountMutex.Lock()
+	defer sc.WorkerCountMutex.Unlock()
 	AdminLogger.Printf("WorkerCount: %s", pp.Sprint(sc.WorkerCountMap))
+}
+
+func (sc *Scenario) workerAddLogPrint() {
+	// lockするし急ぎではないので後回し
+	sc.batchwg.Add(1)
+	go func() {
+		defer sc.batchwg.Done()
+		sc.WorkerCountMutex.Lock()
+		defer sc.WorkerCountMutex.Unlock()
+
+		for k, v := range sc.addedWorkerCountMap {
+			AdminLogger.Printf("workerを追加しました [%s](num:%d)", k, v)
+		}
+		sc.addedWorkerCountMap = make(map[string]int)
+	}()
+}
+
+func (sc *Scenario) playerWorkerKick(tenantName, playerID string) {
+	sc.batchwg.Add(1)
+	go func() {
+		defer sc.batchwg.Done()
+		sc.kickedWorkerMu.Lock()
+		defer sc.kickedWorkerMu.Unlock()
+		key := fmt.Sprintf("%s_%s", tenantName, playerID)
+		if _, ok := sc.kickedWorkerPlayerIDMap[key]; !ok {
+			sc.kickedWorkerPlayerIDMap[key] = struct{}{}
+		}
+	}()
+}
+
+func (sc *Scenario) checkPlayerWorkerKicked(tenantName, playerID string) bool {
+	key := fmt.Sprintf("%s_%s", tenantName, playerID)
+	sc.kickedWorkerMu.Lock()
+	defer sc.kickedWorkerMu.Unlock()
+	_, ok := sc.kickedWorkerPlayerIDMap[key]
+	return ok
 }

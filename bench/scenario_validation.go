@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/isucon/isucandar"
+	"github.com/isucon/isucon12-qualify/data"
 	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 	"golang.org/x/sync/errgroup"
 )
@@ -33,8 +34,9 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	ContestantLogger.Println("整合性チェックを開始します")
 	defer ContestantLogger.Printf("整合性チェックを終了します")
 
-	tenantName := "valid-tenantid"
-	tenantDisplayName := "valid-Tenantname"
+	tenant := data.CreateTenant(data.TenantTagGeneral)
+	tenantName := tenant.Name
+	tenantDisplayName := tenant.DisplayName
 
 	// SaaS管理者のagent作成
 	adminAc, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
@@ -104,17 +106,16 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		AdminLogger.Println("billingAPISuccessCheck done")
 		return nil
 	})
-	/*
-		TODO: staticのアクセスにvhostがないので付ける
-		eg.Go(func() error {
-			if err := staticFileCheck(ctx, sc, step); err != nil {
-				AdminLogger.Println("staticFileCheck failed")
-				return err
-			}
-			AdminLogger.Println("staticFileCheck done")
-			return nil
-		})
-	*/
+
+	// eg.Go(func() error {
+	// 	if err := staticFileCheck(ctx, sc, step); err != nil {
+	// 		AdminLogger.Println("staticFileCheck failed")
+	// 		return err
+	// 	}
+	// 	AdminLogger.Println("staticFileCheck done")
+	// 	return nil
+	// })
+
 	err = eg.Wait()
 	if err != nil {
 		AdminLogger.Printf("validation error: %s", err)
@@ -701,9 +702,11 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 
 // ランキングの結果の整合性を確認
 func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
-	tenantName := "rankingcheck-tenantid"
-	tenantDisplayName := "rankingCheck-Tenantname"
-	competitionName := "ranking_check_competition"
+	tenant := data.CreateTenant(data.TenantTagGeneral)
+	tenantName := tenant.Name
+	tenantDisplayName := tenant.DisplayName
+
+	competitionName := data.FakeCompetitionName()
 	var competitionID string
 
 	// SaaS管理者のagent作成
@@ -1113,7 +1116,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	// テナント追加 不正リクエストチェック
 	{
 		invalidNames := map[string]int{
-			"valid-tenantid":   http.StatusBadRequest, // 重複するname
+			tenantName:         http.StatusBadRequest, // 重複するname
 			"INVALID_TENANTID": http.StatusBadRequest, // 不正なname
 		}
 		for name, code := range invalidNames {
@@ -1137,7 +1140,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	}
 
 	// 大会作成(正常リクエスト)
-	competitionTitle := "badrequest_check_competition"
+	competitionTitle := data.FakeCompetitionName()
 	var competitionID string
 	{
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, competitionTitle, orgAg)
@@ -1314,8 +1317,9 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 
 // 不正リクエスト 無効なJWT
 func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
-	tenantName := "invalid-jwt-tenant"
-	tenantDisplayName := "invalid-jwt-Tenantname"
+	tenant := data.CreateTenant(data.TenantTagGeneral)
+	tenantName := tenant.Name
+	tenantDisplayName := tenant.DisplayName
 
 	// exp切れ
 	{
