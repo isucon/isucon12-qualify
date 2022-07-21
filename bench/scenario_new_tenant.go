@@ -77,7 +77,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 
 	// player作成
 	// 参加者登録 addPlayerNum
-	addPlayerNum := 100
+	addPlayerNum := randomRange([]int{80, 120})
 	players := make(map[string]*PlayerData, addPlayerNum)
 	playerDisplayNames := make([]string, addPlayerNum)
 	for i := 0; i < addPlayerNum; i++ {
@@ -108,18 +108,18 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	orgJobConf := &OrganizerJobConfig{
-		orgAc:              orgAc,
-		scTag:              scTag,
-		tenantName:         tenant.Name,
-		scoreRepeat:        3,
-		addScoreNum:        100,  // 1度のスコア入稿で増える行数
-		scoreInterval:      3000, // 結果の検証時には3s、負荷かける用は1s
-		playerWorkerNum:    5,
-		newPlayerWorkerNum: ConstNewTenantScenarioPlayerWorkerNum,
+		orgAc:           orgAc,
+		scTag:           scTag,
+		tenantName:      tenant.Name,
+		scoreRepeat:     3,
+		addScoreNum:     100,  // 1度のスコア入稿で増える行数
+		scoreInterval:   3000, // 結果の検証時には3s、負荷かける用は1s
+		playerWorkerNum: 5,
 	}
 
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
 	for {
+		orgJobConf.newPlayerWorkerNum = randomRange([]int{80, 120})
 		if _, err := sc.OrganizerJob(ctx, step, orgJobConf); err != nil {
 			return err
 		}

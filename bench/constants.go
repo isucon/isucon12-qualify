@@ -5,12 +5,10 @@ const (
 	ConstMaxCriticalError = 10
 
 	// NewTenantScenario
-	ConstNewTenantScenarioPlayerWorkerNum = 10 // 作成するplayer worker数
 
 	// PopularTenantScenario
-	ConstPopularTenantScenarioPlayerWorkerNum = 10  // 作成するplayer worker数
-	ConstPopularTenantScenarioScoreRepeat     = 3   // 初期の一周のスコア入稿回数
-	ConstPopularTenantScenarioAddScoreNum     = 100 // 1度のスコア入稿で増える数
+	ConstPopularTenantScenarioScoreRepeat = 3   // 初期の一周のスコア入稿回数
+	ConstPopularTenantScenarioAddScoreNum = 100 // 1度のスコア入稿で増える数
 
 	// PlayerScenario
 	ConstPlayerScenarioCompetitionLoopCount = 10 // 一周でいくつ大会を見るか
