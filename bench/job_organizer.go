@@ -90,7 +90,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 			return nil, v
 		}
-		sc.CompetitionAddLog.Printf("大会「%s」を作成しました", comp.Title)
+		sc.CompetitionAddLog.Printf("大会「%s」を作成しました。参加者が増えます。", comp.Title)
 	}
 
 	scoredPlayerIDs := []string{}
@@ -200,6 +200,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 	// checkPlayerWorkerKickedがlockをとるのでbatchへ逃がすが、エラーを取りたいのでerrGroupを流用
 	eg.Go(func() error {
 		i := 0
+		added := 0
 		for _, playerID := range qualifyPlayerIDs {
 			if conf.newPlayerWorkerNum < i {
 				break
@@ -208,13 +209,14 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 				continue
 			}
 			i++
-			// batchに逃がす関係で仕方なくエラーを握りつぶす
 			wkr, err := sc.PlayerScenarioWorker(step, 1, conf.tenantName, playerID)
 			if err != nil {
 				return err
 			}
 			sc.WorkerCh <- wkr
+			added++
 		}
+		sc.PlayerAddCountAdd(added)
 		return nil
 	})
 

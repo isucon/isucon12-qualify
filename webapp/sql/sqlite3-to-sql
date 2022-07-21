@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -e
+if [ "$1" = "" ]; then
+  echo "Usage: $0 path/to/foo.db"
+  echo
+  echo "Dump the sqlite3 database file to generic SQL statements."
+  exit 1
+fi
+
+echo .dump | sqlite3 "$1" | \
+	perl -pE 's/PRAGMA foreign_keys=OFF;//; s/^CREATE TABLE /CREATE TABLE IF NOT EXISTS /; s/BEGIN TRANSACTION/BEGIN/g'

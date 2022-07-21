@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -107,14 +108,14 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 		return nil
 	})
 
-	// eg.Go(func() error {
-	// 	if err := staticFileCheck(ctx, sc, step); err != nil {
-	// 		AdminLogger.Println("staticFileCheck failed")
-	// 		return err
-	// 	}
-	// 	AdminLogger.Println("staticFileCheck done")
-	// 	return nil
-	// })
+	eg.Go(func() error {
+		if err := staticFileCheck(ctx, sc, step); err != nil {
+			AdminLogger.Println("staticFileCheck failed")
+			return err
+		}
+		AdminLogger.Println("staticFileCheck done")
+		return nil
+	})
 
 	err = eg.Wait()
 	if err != nil {
@@ -130,7 +131,12 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 }
 
 func staticFileCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
-	ag, err := sc.Option.NewAgent(sc.Option.TargetURL, false)
+
+	base, _ := url.Parse(sc.Option.TargetURL)
+	subdomain := "isucon"
+	targetURL := base.Scheme + "://" + subdomain + "." + base.Host
+
+	ag, err := sc.Option.NewAgent(targetURL, false)
 	if err != nil {
 		return err
 	}
