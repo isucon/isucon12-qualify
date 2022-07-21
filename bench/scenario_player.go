@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -74,22 +75,39 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			return v
 		}
 
-		// NOTE: worker発火直後はcompetitionsが無いので登録されるまで待つ
 		if len(competitions) != 0 {
 			break
 		}
+
+		// NOTE: worker発火直後はcompetitionsが無いので登録されるまで待つ
 		sleepms := 500 + rand.Intn(500)
 		SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 	}
 
 	for i := 0; i < ConstPlayerScenarioCompetitionLoopCount; i++ {
 		// 大会を一つ選ぶ
-		compIndex := rand.Intn(len(competitions))
-		comp := competitions[compIndex]
-		playerIDs := []string{}
+		// 開催中の大会があれば90%でそれを選ぶ
+		compIndex := -1
+		if rand.Intn(100) < 90 {
+			for i, comp := range competitions {
+				if !comp.IsFinished {
+					compIndex = i
+					break
+				}
+			}
+		}
 
-		{
-			res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", playerAg)
+		// なければなんでも良いので一つ選ぶ
+		if compIndex < 0 {
+			compIndex = rand.Intn(len(competitions))
+		}
+		comp := competitions[compIndex]
+
+		playerIDs := []string{}
+		rankAfterCheck := rand.Intn(100) < 20
+		rankAfter := ""
+		for {
+			res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, rankAfter, playerAg)
 			msg := fmt.Sprintf("%s %s", playerAc, txt)
 			v := ValidateResponseWithMsg("大会内のランキング取得", step, res, err, msg, WithStatusCode(200),
 				WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
@@ -105,6 +123,12 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 				sc.AddErrorCount()
 				return v
 			}
+			if !rankAfterCheck || len(playerIDs) == 0 {
+				break
+			}
+			rankAfterCheck = false // rankAfterCheckは一回だけで良い
+			rankAfter = strconv.Itoa(rand.Intn(len(playerIDs) - 1))
+			AdminLogger.Println("DEBUG: ranking after check", rankAfter)
 		}
 
 		if len(playerIDs) == 0 {
