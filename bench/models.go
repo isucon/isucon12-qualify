@@ -1,6 +1,7 @@
 package bench
 
 import (
+	crand "crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"sync"
 	"time"
 
@@ -32,8 +34,9 @@ type Account struct {
 	TenantName string // JWTのaudience adminの場合は空（あるいは無視）
 	PlayerID   string // JWTのsubject
 
-	// Option.TargetURL: http://t.isucon.dev Role: adminなら
-	// GetRequestURLは http://admin.t.isucon.dev
+	// Invalid JWT用 セットされていなければ有効な鍵がセットされる
+	InvalidRSAKey  bool
+	InvalidKeyArgo bool
 }
 
 func (ac *Account) String() string {
@@ -74,7 +77,20 @@ func (ac *Account) SetJWT(rawkey *rsa.PrivateKey, isValidExp bool) error {
 	token.Set("role", ac.Role)
 	token.Set("exp", expTime.Unix())
 
-	signedToken, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, rawkey))
+	signOpts := []jwt.SignOption{}
+	if ac.InvalidRSAKey {
+		key, err := rsa.GenerateKey(crand.Reader, 2048)
+		if err != nil {
+			return fmt.Errorf("rsa.GenerateKey: %s", err)
+		}
+		signOpts = append(signOpts, jwt.WithKey(jwa.RS256, key))
+	} else if ac.InvalidKeyArgo {
+		signOpts = append(signOpts, jwt.WithKey(jwa.RS512, rawkey))
+	} else {
+		signOpts = append(signOpts, jwt.WithKey(jwa.RS256, rawkey))
+	}
+
+	signedToken, err := jwt.Sign(token, signOpts...)
 	if err != nil {
 		return fmt.Errorf("error jwt.Sign: %w", err)
 	}
@@ -152,19 +168,21 @@ func (idrs InitialDataRows) Choise() *InitialDataRow {
 }
 
 type InitialDataTenantRow data.BenchmarkerTenantSource
-type InitialDataTenantMap map[int64]*InitialDataTenantRow
+type InitialDataTenantRows []*InitialDataTenantRow
 
-func GetInitialDataTenant() (InitialDataTenantMap, error) {
+func GetInitialDataTenant() (InitialDataTenantRows, error) {
 	data, err := LoadFromJSONFile[InitialDataTenantRow]("./benchmarker_tenant.json")
 	if err != nil {
 		return nil, err
 	}
-	dataMap := InitialDataTenantMap{}
-	for _, data := range data {
-		dataMap[data.TenantID] = data
+	if len(data) < 100 {
+		return nil, fmt.Errorf("初期テナントデータの量が足りません (want:%d got:%d)", 100, len(data))
 	}
 
-	return dataMap, nil
+	sort.Slice(data, func(i, j int) bool {
+		return data[i].TenantID < data[j].TenantID
+	})
+	return data, nil
 }
 
 type ScoreRow struct {

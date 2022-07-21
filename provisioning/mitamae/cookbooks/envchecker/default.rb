@@ -23,13 +23,13 @@ remote_file "/etc/systemd/system/isucon-env-checker.service" do
   group "root"
   mode "0644"
   source "isucon-env-checker.service"
-  only_if { !File.exist?("/.dockerenv") }
+  not_if { File.exist?("/.dockerenv") }
 end
 
 execute "systemctl daemon-reload" do
-  only_if { !File.exist?("/.dockerenv") }
+  not_if { File.exist?("/.dockerenv") }
 end
 
 execute "systemctl enable isucon-env-checker" do
-  only_if { !File.exist?("/.dockerenv") }
+  not_if { File.exist?("/.dockerenv") }
 end

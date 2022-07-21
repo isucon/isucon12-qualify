@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	httpdate "github.com/Songmu/go-httpdate"
 
 	"github.com/isucon/isucandar/agent"
 )
@@ -202,7 +205,9 @@ func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID string
 	}
 
 	msg := fmt.Sprintf("competitionID:%s rankAfter:%s", competitionID, rankAfter)
-	res, err := ag.Do(ctx, req)
+	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 	return res, err, msg
 }
 
@@ -212,8 +217,22 @@ func GetPlayerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Re
 		return nil, err, ""
 	}
 
-	res, err := ag.Do(ctx, req)
+	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
 	return res, err, ""
+}
+
+func GetFile(ctx context.Context, ag *agent.Agent, path string) (*http.Response, error) {
+	req, err := ag.GET(path)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
+		return ag.Do(ctx, req)
+	})
+	return res, err
 }
 
 // 429 Too Many Requestsの場合にretry after分待ってretryする
@@ -233,24 +252,27 @@ func RequestWithRetry(ctx context.Context, fn func() (*http.Response, error)) (*
 
 		ra := res.Header.Get("retry-after")
 
-		if len(ra) != 1 {
-			err = fmt.Errorf("invalid retry-after header")
-			break
-		}
+		var delaySec int
 
-		var sec int
-		sec, err = strconv.Atoi(string(ra[0]))
+		// Retry-Afterヘッダーはdelay-secondsかhttp-date
+		delaySec, err = strconv.Atoi(ra)
 		if err != nil {
+			var timeAfter time.Time
+			timeAfter, err = httpdate.Str2Time(ra, nil)
+			if err != nil {
+				err = fmt.Errorf("invalid retry-after header %s", err.Error())
+				break
+			}
+
+			delaySec = int(math.Ceil(time.Until(timeAfter).Seconds()))
+		}
+
+		if delaySec < 0 {
+			err = fmt.Errorf("invalid retry-after header delay second(%d)", delaySec)
 			break
 		}
 
-		if sec < 0 {
-			err = fmt.Errorf("invalid retry-after header")
-			break
-		}
-
-		AdminLogger.Printf("RequestWithRetry retry: %ds %v", sec, res.Request.URL.Path)
-		SleepWithCtx(ctx, time.Second*time.Duration(sec))
+		SleepWithCtx(ctx, time.Second*time.Duration(delaySec))
 	}
 	return res, err
 }

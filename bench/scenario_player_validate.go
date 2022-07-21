@@ -48,7 +48,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 
 	// 初期データからテナントを選ぶ
 	index := randomRange(ConstPlayerValidateScenarioIDRange)
-	tenant := sc.InitialDataTenant[int64(index)]
+	tenant := sc.InitialDataTenant[index]
 
 	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenant.TenantName, "organizer")
 	if err != nil {

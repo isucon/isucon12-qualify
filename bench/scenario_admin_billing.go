@@ -3,10 +3,12 @@ package bench
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
+	"github.com/isucon/isucon12-qualify/data"
 )
 
 type adminBillingScenarioWorker struct {
@@ -22,7 +24,7 @@ func (w *adminBillingScenarioWorker) Process(ctx context.Context) { w.worker.Pro
 // 指定回数エラーが出るまで繰り返し、並列動作はしない
 
 func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p int32) (Worker, error) {
-	scTag := ScenarioTagAdmin
+	scTag := ScenarioTagAdminBilling
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.AdminBillingScenario(ctx, step, scTag); err != nil {
 			sc.ScenarioError(scTag, err)
@@ -64,7 +66,11 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 	}
 
 	// 1ページ目から最後まで辿る
-	beforeTenantID := "" // 最初はbeforeが空
+	// 最初はbeforeが空, ただし初回のみテナント追加と最新の取得がかぶらないように初期データのIDを入れる
+	beforeTenantID := ""
+	if sc.HeavyTenantCount == 0 {
+		beforeTenantID = "100"
+	}
 	completed := false
 	for !completed {
 		res, err, txt := GetAdminTenantsBillingAction(ctx, beforeTenantID, adminAg)
@@ -75,28 +81,75 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 					completed = true
 					return nil
 				}
+
+				// IDは降順である必要がある
+				beforeID := int64(0)
+				for _, tenant := range r.Data.Tenants {
+					id, err := strconv.ParseInt(tenant.ID, 10, 64)
+					if err != nil {
+						return fmt.Errorf("tenant IDの形が違います %s", tenant.ID)
+					}
+
+					if beforeID != 0 && beforeID < id {
+						return fmt.Errorf("tenant IDが降順ではありません (before:%d got:%d)", beforeID, id)
+					}
+					beforeID = id
+
+				}
+
 				beforeTenantID = r.Data.Tenants[len(r.Data.Tenants)-1].ID
 				return nil
 			}),
 		)
+
+		// 無限forになるのでcontext打ち切りを確認する
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
+		} else if v.Canceled {
+			// contextの打ち切りでloopを抜ける
+			return nil
 		} else {
+			// ErrorCountで打ち切りがあるので、ここでreturn ValidateErrorはせずリトライする
+			// ただしsleepを挟む
 			sc.AddErrorCount()
-			return v
-		}
-		// id=1が重いので、light modeなら一回で終わる
-		if sc.Option.LoadType == LoadTypeLight {
-			completed = true
+			SleepWithCtx(ctx, time.Millisecond*100)
 		}
 
 	}
 	// Billingが見終わったら新規テナントを追加する
-	newTenantWorker, err := sc.NewTenantScenarioWorker(step, 1)
+	tenant := data.CreateTenant(data.TenantTagGeneral)
+	{
+		res, err, txt := PostAdminTenantsAddAction(ctx, tenant.Name, tenant.DisplayName, adminAg)
+		msg := fmt.Sprintf("%s %s", adminAc, txt)
+		v := ValidateResponseWithMsg("新規テナント作成", step, res, err, msg, WithStatusCode(200),
+			WithSuccessResponse(func(r ResponseAPITenantsAdd) error {
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+		sc.TenantAddLog.Printf("テナント「%s」を作成しました", tenant.DisplayName)
+	}
+
+	newTenantWorker, err := sc.NewTenantScenarioWorker(step, tenant, 1)
 	if err != nil {
 		return err
 	}
 	sc.WorkerCh <- newTenantWorker
+
+	// 重いテナント(id=1)を見るworker
+	if sc.HeavyTenantCount == 0 {
+		wkr, err := sc.PopularTenantScenarioWorker(step, 1, true)
+		if err != nil {
+			return err
+		}
+		sc.WorkerCh <- wkr
+		sc.HeavyTenantCount++
+	}
 
 	return nil
 }

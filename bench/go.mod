@@ -14,6 +14,7 @@ require (
 )
 
 require (
+	github.com/Songmu/go-httpdate v1.0.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/go-sql-driver/mysql v1.6.0 // indirect

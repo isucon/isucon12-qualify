@@ -25,7 +25,6 @@ const (
 	DefaultRequestTimeout           = time.Second * 30
 	DefaultInitializeRequestTimeout = time.Second * 30
 	DefaultDuration                 = time.Minute
-	DefaultLoadType                 = bench.LoadTypeDefault
 	DefaultStrictPrepare            = true
 )
 
@@ -46,7 +45,6 @@ func main() {
 	flag.BoolVar(&option.SkipPrepare, "skip-prepare", false, "Skip prepare")
 	flag.StringVar(&option.DataDir, "data-dir", "data", "Data directory")
 	flag.BoolVar(&option.Debug, "debug", false, "Debug mode")
-	flag.StringVar(&option.LoadType, "load-type", DefaultLoadType, fmt.Sprintf("load type [%s,%s] Default: %s", bench.LoadTypeDefault, bench.LoadTypeLight, DefaultLoadType))
 	flag.BoolVar(&option.StrictPrepare, "strict-prepare", DefaultStrictPrepare, "strict prepare mode. default: true")
 
 	// コマンドライン引数のパースを実行
@@ -89,6 +87,7 @@ func main() {
 	// ベンチマーク開始
 	result := benchmark.Start(ctx)
 
+	result.Errors.Wait()
 	time.Sleep(time.Second) // 結果が揃うまでちょっと待つ
 
 	// エラーの原因を集計する
