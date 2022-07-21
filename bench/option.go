@@ -21,23 +21,16 @@ type Option struct {
 	SkipPrepare              bool
 	DataDir                  string
 	Debug                    bool
-	LoadType                 string
 	StrictPrepare            bool
 }
 
-const (
-	LoadTypeLight   = "light"
-	LoadTypeDefault = "default"
-)
-
 func (o Option) String() string {
 	return fmt.Sprintf(
-		"TargetURL: %s, TargetAddr: %s, RequestTimeout: %s, InitializeRequestTimeout: %s, LoadType: %s, StrictPrepare: %v",
+		"TargetURL: %s, TargetAddr: %s, RequestTimeout: %s, InitializeRequestTimeout: %s, StrictPrepare: %v",
 		o.TargetURL,
 		o.TargetAddr,
 		o.RequestTimeout.String(),
 		o.InitializeRequestTimeout.String(),
-		o.LoadType,
 		o.StrictPrepare,
 	)
 }

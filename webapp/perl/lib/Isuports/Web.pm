@@ -8,7 +8,7 @@ use Kossy;
 use HTTP::Status qw(:constants);
 use Crypt::JWT qw(decode_jwt);
 use Crypt::PK::RSA;
-use Fcntl qw(LOCK_EX LOCK_NB LOCK_UN O_RDWR O_CREAT);
+use Fcntl qw(LOCK_EX LOCK_UN O_RDWR O_CREAT);
 use Text::CSV_XS;
 use DBIx::Sunny;
 use Cpanel::JSON::XS;
@@ -291,7 +291,7 @@ sub flock_by_tenant_id($tenant_id) {
 
     sysopen(my $fh, $p, O_RDWR|O_CREAT) or die sprintf("cannot open lock file: %s, %s", $p, $!);
 
-    flock($fh, LOCK_EX|LOCK_NB) or die sprintf("error flock lock: path=%s, %s", $p, $!);
+    flock($fh, LOCK_EX) or die sprintf("error flock lock: path=%s, %s", $p, $!);
 
     return $fh;
 }

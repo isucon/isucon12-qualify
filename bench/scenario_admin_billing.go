@@ -115,11 +115,6 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 			SleepWithCtx(ctx, time.Millisecond*100)
 		}
 
-		// id=1が重いので、light modeなら一回で終わる
-		if sc.Option.LoadType == LoadTypeLight {
-			completed = true
-		}
-
 	}
 	// Billingが見終わったら新規テナントを追加する
 	tenant := data.CreateTenant(data.TenantTagGeneral)
