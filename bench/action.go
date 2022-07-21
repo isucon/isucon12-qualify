@@ -27,19 +27,21 @@ func PostInitializeAction(ctx context.Context, ag *agent.Agent) (*http.Response,
 }
 
 func PostAdminTenantsAddAction(ctx context.Context, name, displayName string, ag *agent.Agent) (*http.Response, error, string) {
-	form := url.Values{}
-	form.Set("name", name)
-	form.Set("display_name", displayName)
-	req, err := ag.POST("/api/admin/tenants/add", strings.NewReader(form.Encode()))
-	if err != nil {
-		return nil, err, ""
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
 	msg := fmt.Sprintf("name:%s displayName:%s", name, displayName)
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := RequestWithRetry(ctx,
+		func() (*http.Request, error) {
+			form := url.Values{}
+			form.Set("name", name)
+			form.Set("display_name", displayName)
+
+			req, err := ag.POST("/api/admin/tenants/add", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			return req, err
+		},
+		func(req *http.Request) (*http.Response, error) {
+			return ag.Do(ctx, req)
+		},
+	)
 	return res, err, msg
 }
 
@@ -97,18 +99,22 @@ func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, playerID stri
 }
 
 func PostOrganizerCompetitionsAddAction(ctx context.Context, title string, ag *agent.Agent) (*http.Response, error, string) {
-	form := url.Values{}
-	form.Set("title", title)
-	req, err := ag.POST("/api/organizer/competitions/add", strings.NewReader(form.Encode()))
-	if err != nil {
-		return nil, err, ""
-	}
-
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	msg := "title:" + title
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := RequestWithRetry(ctx,
+		func() (*http.Request, error) {
+			form := url.Values{}
+			form.Set("title", title)
+			req, err := ag.POST("/api/organizer/competitions/add", strings.NewReader(form.Encode()))
+			if err != nil {
+				return nil, err
+			}
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			return req, err
+		},
+		func(req *http.Request) (*http.Response, error) {
+			return ag.Do(ctx, req)
+		},
+	)
 	return res, err, msg
 }
 
@@ -212,12 +218,18 @@ func GetFile(ctx context.Context, ag *agent.Agent, path string) (*http.Response,
 }
 
 // 429 Too Many Requestsの場合にretry after分待ってretryする
-func RequestWithRetry(ctx context.Context, fn func() (*http.Response, error)) (*http.Response, error) {
+func RequestWithRetry(ctx context.Context, reqFn func() (*http.Request, error), doFn func(*http.Request) (*http.Response, error)) (*http.Response, error) {
+	var req *http.Request
 	var res *http.Response
 	var err error
 
 	for {
-		res, err = fn()
+		req, err = reqFn()
+		if err != nil {
+			break
+		}
+
+		res, err = doFn(req)
 		if err != nil {
 			break
 		}
