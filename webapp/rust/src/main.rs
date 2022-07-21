@@ -6,7 +6,7 @@ use bytes::BytesMut;
 use futures_util::stream::StreamExt as _;
 use futures_util::stream::TryStreamExt as _;
 use lazy_static::lazy_static;
-use log::{error, info};
+use log::error;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::mysql::{MySqlConnectOptions, MySqlDatabaseError};
@@ -85,7 +85,6 @@ fn tenant_db_path(id: i64) -> PathBuf {
 
 // テナントDBに接続する
 async fn connect_to_tenant_db(id: i64) -> sqlx::Result<SqliteConnection> {
-    info!("connect to tenant db now: id = {:?}", id);
     let p = tenant_db_path(id);
 
     let conn = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(p)).await?;
@@ -94,7 +93,6 @@ async fn connect_to_tenant_db(id: i64) -> sqlx::Result<SqliteConnection> {
 
 // テナントDBを新規に作成する
 async fn create_tenant_db(id: i64) {
-    info!("create_tenant_db now");
     let p = tenant_db_path(id);
     tokio::process::Command::new("sh")
         .arg("-c")
@@ -153,7 +151,6 @@ pub async fn main() -> std::io::Result<()> {
     // 環境変数 ISUCON_SQLITE_TRACE_FILEを設定すると, そのファイルにクエリログをJSON形式で出力する
     // 未設定なら出力しない
     // sqltrace.rsを参照
-    info!("start");
 
     let mysql_config = MySqlConnectOptions::new()
         .host(&get_env("ISUCON_DB_HOST", "127.0.0.1"))
@@ -165,13 +162,11 @@ pub async fn main() -> std::io::Result<()> {
                 .parse::<u16>()
                 .expect("failed to parse port number"),
         );
-    info!("mysql config are set");
     let pool = sqlx::mysql::MySqlPoolOptions::new()
         .max_connections(10)
         .connect_with(mysql_config)
         .await
         .expect("failed to connect mysql db");
-    info!("pool is set");
     let server = actix_web::HttpServer::new(move || {
         let logger = Logger::default();
         let admin_api = web::scope("/admin/tenants")
@@ -382,7 +377,6 @@ async fn retrieve_tenant_row_from_header(
     pool: &sqlx::MySqlPool,
     request: HttpRequest,
 ) -> Result<TenantRow, sqlx::Error> {
-    info!("retrieve_tenant_row_from_header now");
     // check if jwt tenant name and host header's tenant name is the same
     let base_host = get_env("ISUCON_BASE_HOSTNAME", ".t.isucon.dev");
 
@@ -404,7 +398,6 @@ async fn retrieve_tenant_row_from_header(
             updated_at: 0,
         });
     }
-    info!("tenant name = {}", tenant_name);
     // テナントの存在確認
     match sqlx::query_as("SELECT * FROM tenant WHERE name = ?")
         .bind(tenant_name)
@@ -454,7 +447,6 @@ async fn retrieve_player(
 // 参加者を認可する
 // 参加者向けAPIで呼ばれる
 async fn authorize_player(tenant_db: &mut SqliteConnection, id: &str) -> Result<(), MyError> {
-    info!("authorize player now");
     let player = match retrieve_player(tenant_db, id).await {
         Ok(player) => player,
         Err(sqlx::Error::RowNotFound) => {
@@ -760,7 +752,6 @@ async fn tenants_billing_handler(
     query: web::Query<BillingQuery>,
     conn: actix_web::dev::ConnectionInfo,
 ) -> actix_web::Result<HttpResponse, MyError> {
-    info!("tenants billing handler now");
     if conn.host() != get_env("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
         return Err(MyError {
             status: 404,
@@ -843,7 +834,6 @@ async fn players_list_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: actix_web::HttpRequest,
 ) -> actix_web::Result<HttpResponse, MyError> {
-    info!("players list handler now");
     let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
@@ -852,7 +842,6 @@ async fn players_list_handler(
         });
     };
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    info!("connected tenant_db");
     let pls: Vec<PlayerRow> =
         sqlx::query_as("SELECT * FROM player WHERE tenant_id=? ORDER BY created_at DESC")
             .bind(v.tenant_id)
@@ -887,7 +876,6 @@ async fn players_add_handler(
     request: HttpRequest,
     form_param: web::Form<Vec<(String, String)>>,
 ) -> actix_web::Result<HttpResponse, MyError> {
-    info!("players add handler now");
     let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
@@ -896,14 +884,12 @@ async fn players_add_handler(
         });
     };
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    info!("connected tenant db");
     let display_names: std::collections::HashSet<String> = form_param
         .into_inner()
         .into_iter()
         .filter_map(|(key, val)| (key == "display_name[]").then(|| val))
         .collect();
     let mut pds = Vec::<PlayerDetail>::new();
-    info!("display_names = {:?}", display_names);
 
     for display_name in display_names {
         let id = dispense_id(&pool).await.unwrap();
@@ -1019,7 +1005,6 @@ async fn competitions_add_handler(
     request: HttpRequest,
     form: web::Form<CompetitionAddHandlerFormQuery>,
 ) -> actix_web::Result<HttpResponse, MyError> {
-    info!("competitions add handler now");
     let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
@@ -1028,20 +1013,12 @@ async fn competitions_add_handler(
         });
     };
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    info!("connected tenant db");
     let title = form.title.clone();
     let now: i64 = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
     let id = dispense_id(&pool).await.unwrap();
-    info!(
-        "competition data: id={}, tenant_id={}, titile = {}, now={}",
-        id.clone(),
-        v.tenant_id,
-        title.clone(),
-        now
-    );
 
     sqlx::query("INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
         .bind(&id)
@@ -1288,7 +1265,6 @@ async fn billing_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
 ) -> actix_web::Result<HttpResponse, MyError> {
-    info!("billing handler now");
     let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
@@ -1297,7 +1273,6 @@ async fn billing_handler(
         });
     };
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    info!("connected tenant db");
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at DESC")
             .bind(v.tenant_id)
@@ -1347,7 +1322,6 @@ async fn player_handler(
         });
     };
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    info!("connected tenant db");
     authorize_player(&mut tenant_db, &v.player_id).await?;
     let (player_id,) = params.into_inner();
     let p = match retrieve_player(&mut tenant_db, &player_id).await {
@@ -1563,7 +1537,6 @@ async fn player_competitions_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
 ) -> actix_web::Result<actix_web::HttpResponse, MyError> {
-    info!("player compeititons handler now");
     let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_PLAYER {
         return Err(MyError {
@@ -1572,7 +1545,6 @@ async fn player_competitions_handler(
         });
     };
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    info!("connected tenant db now");
     authorize_player(&mut tenant_db, &v.player_id).await?;
     return competitions_handler(Some(v), tenant_db).await;
 }
@@ -1584,7 +1556,6 @@ async fn organizer_competitions_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
 ) -> actix_web::Result<actix_web::HttpResponse, MyError> {
-    info!("organizer competitions handler now");
     let v: Viewer = parse_viewer(&pool, request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(MyError {
@@ -1593,7 +1564,6 @@ async fn organizer_competitions_handler(
         });
     };
     let tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    info!("connected tenant db now");
     return competitions_handler(Some(v), tenant_db).await;
 }
 
@@ -1601,7 +1571,6 @@ async fn competitions_handler(
     v: Option<Viewer>,
     mut tenant_db: SqliteConnection,
 ) -> actix_web::Result<actix_web::HttpResponse, MyError> {
-    info!("competiitons handler now");
     let cs: Vec<CompetitionRow> =
         sqlx::query_as("SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC")
             .bind(v.map(|v| v.tenant_id).unwrap())
@@ -1644,11 +1613,9 @@ async fn me_handler(
     pool: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
 ) -> actix_web::Result<HttpResponse, MyError> {
-    info!("me handler now");
     let tenant: TenantRow = match retrieve_tenant_row_from_header(&pool, request.clone()).await {
         Ok(t) => t,
         _ => {
-            info!("{:?}", request);
             panic!("retrieve_tenant_row_from_header")
         }
     };
@@ -1685,7 +1652,6 @@ async fn me_handler(
         }));
     }
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
-    info!("connected tenant db now");
     let p = match retrieve_player(&mut tenant_db, &v.player_id).await {
         Ok(p) => p,
         Err(sqlx::Error::RowNotFound) => {
@@ -1729,7 +1695,6 @@ struct InitializeHandlerResult {
 // ベンチマーカーが起動した時に最初に呼ぶ
 // データベースの初期化などが実行されるため, スキーマを変更した場合などは適宜改変すること
 async fn initialize_handler() -> actix_web::Result<HttpResponse> {
-    info!("initialize handler now");
     let _output = tokio::process::Command::new(INITIALIZE_SCRIPT)
         .output()
         .await
