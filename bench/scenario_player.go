@@ -162,17 +162,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			for j := 0; j < playerCount; j++ {
 				playerIndex := rand.Intn(len(playerIDs))
 
-				requestTime := time.Now()
 				res, err, txt := GetPlayerAction(ctx, playerIDs[playerIndex], playerAg)
-				// 表示に1.2秒以上3回かかったら離脱する
-				if (time.Millisecond * 1200) < time.Since(requestTime) {
-					SlowResponseCount++
-					if 3 <= SlowResponseCount {
-						sc.PlayerDelCountAdd(1)
-						return nil
-					}
-				}
-
 				msg := fmt.Sprintf("%s %s", playerAc, txt)
 				v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(200),
 					WithSuccessResponse(func(r ResponseAPIPlayer) error {
