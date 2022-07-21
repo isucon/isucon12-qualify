@@ -34,7 +34,6 @@ func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32,
 			if err := sc.PlayerScenario(ctx, step, scTag, tenantName, playerID); err != nil {
 				sc.ScenarioError(scTag, err)
 				SleepWithCtx(ctx, SleepOnError)
-				AdminLogger.Println("PlayerAPIのエラーにより参加者が減りました")
 			}
 		},
 		worker.WithLoopCount(1),
@@ -58,6 +57,8 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 	if err != nil {
 		return err
 	}
+
+	SlowResponseCount := 0
 
 	for {
 		var competitions []isuports.CompetitionDetail
@@ -118,10 +119,13 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 				requestTime := time.Now()
 				res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, rankAfter, playerAg)
 
-				// ranking表示に1秒以上かかったら離脱する
-				if time.Second < time.Since(requestTime) {
-					sc.PlayerDelCountAdd(1)
-					return nil
+				// ranking表示に1.2秒以上3回かかったら離脱する
+				if (time.Millisecond * 1200) < time.Since(requestTime) {
+					SlowResponseCount++
+					if 2 <= SlowResponseCount {
+						sc.PlayerDelCountAdd(1)
+						return nil
+					}
 				}
 
 				msg := fmt.Sprintf("%s %s", playerAc, txt)
