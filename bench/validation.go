@@ -114,9 +114,7 @@ func ValidateResponseWithMsg(title string, step *isucandar.BenchmarkStep, res *h
 func WithCacheControlPrivate() ResponseValidator {
 	return func(r *Response) error {
 		if !strings.Contains(r.Response.Header.Get("Cache-Control"), "private") {
-			// TODO: 一通り対応が終わったら有効化します
-			// return fmt.Errorf("Cache-Control: private が含まれていません")
-			ContestantLogger.Printf("validate error: Cache-Control: private が含まれていません path:%s", r.Response.Request.URL.Path)
+			return fmt.Errorf("Cache-Control: private が含まれていません")
 		}
 		return nil
 	}

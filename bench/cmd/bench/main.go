@@ -187,9 +187,6 @@ func main() {
 	sort.Slice(tags, func(i, j int) bool {
 		return tags[i] < tags[j]
 	})
-	for _, tag := range tags {
-		fmt.Println(tag)
-	}
 	bench.AdminLogger.Printf("%s", pp.Sprint(AllTagBreakdown(result)))
 
 	// supervisorから起動された場合はreportを送信
