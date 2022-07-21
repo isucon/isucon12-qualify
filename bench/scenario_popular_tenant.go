@@ -71,13 +71,13 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 		tenantName:      tenantName,
 		scoreRepeat:     1,
 		addScoreNum:     100,
-		scoreInterval:   1000, // 結果の検証時には3s、負荷かける用は1s
-		playerWorkerNum: 5,    // CSV入稿と同時に立つworker数
+		scoreInterval:   500, // 結果の検証時には3s、負荷かける用は1s
+		playerWorkerNum: 5,   // CSV入稿と同時に立つworker数
 		maxScoredPlayer: 1000,
 	}
 
 	for {
-		orgJobConf.newPlayerWorkerNum = randomRange([]int{80, 120})
+		orgJobConf.newPlayerWorkerNum = randomRange([]int{40, 50})
 		if _, err := sc.OrganizerJob(ctx, step, orgJobConf); err != nil {
 			return err
 		}
@@ -120,9 +120,6 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 				return v
 			}
 		}
-
-		// 3回ずつスコア入稿回数を増やしていく
-		orgJobConf.scoreRepeat += 3
 	}
 
 	return nil
