@@ -85,7 +85,6 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 	}
 
 	{
-		sc.PlayerAddCountAdd(len(playerDisplayNames))
 		res, err, txt := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
 		v := ValidateResponseWithMsg("大会参加者追加", step, res, err, msg, WithStatusCode(200),

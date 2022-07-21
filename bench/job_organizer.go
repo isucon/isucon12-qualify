@@ -221,6 +221,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
+	sc.PlayerAddCountAdd(conf.newPlayerWorkerNum)
 
 	// 大会結果確定 x 1
 	{

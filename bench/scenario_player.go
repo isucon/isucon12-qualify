@@ -119,10 +119,10 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 				requestTime := time.Now()
 				res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, rankAfter, playerAg)
 
-				// ranking表示に1.2秒以上3回かかったら離脱する
+				// 表示に1.2秒以上3回かかったら離脱する
 				if (time.Millisecond * 1200) < time.Since(requestTime) {
 					SlowResponseCount++
-					if 2 <= SlowResponseCount {
+					if 3 <= SlowResponseCount {
 						sc.PlayerDelCountAdd(1)
 						return nil
 					}
@@ -158,10 +158,21 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 				continue
 			}
 
-			playerCount := randomRange([]int{5, 10})
+			playerCount := randomRange([]int{3, 5})
 			for j := 0; j < playerCount; j++ {
 				playerIndex := rand.Intn(len(playerIDs))
+
+				requestTime := time.Now()
 				res, err, txt := GetPlayerAction(ctx, playerIDs[playerIndex], playerAg)
+				// 表示に1.2秒以上3回かかったら離脱する
+				if (time.Millisecond * 1200) < time.Since(requestTime) {
+					SlowResponseCount++
+					if 3 <= SlowResponseCount {
+						sc.PlayerDelCountAdd(1)
+						return nil
+					}
+				}
+
 				msg := fmt.Sprintf("%s %s", playerAc, txt)
 				v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(200),
 					WithSuccessResponse(func(r ResponseAPIPlayer) error {

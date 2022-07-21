@@ -348,7 +348,7 @@ func (sc *Scenario) PlayerAddCountPrint() {
 		sc.PlayerAddCountMu.Lock()
 		defer sc.PlayerAddCountMu.Unlock()
 		if sc.PlayerAddCount != 0 {
-			ContestantLogger.Printf("Playerが%d人増えました", sc.PlayerAddCount)
+			ContestantLogger.Printf("参加者が%d人増えました", sc.PlayerAddCount)
 			sc.PlayerAddCount = 0
 		}
 	}()
