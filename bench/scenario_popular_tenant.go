@@ -73,7 +73,7 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 		addScoreNum:     100,
 		scoreInterval:   500, // 結果の検証時には3s、負荷かける用は1s
 		playerWorkerNum: 5,   // CSV入稿と同時に立つworker数
-		maxScoredPlayer: 1000,
+		maxScoredPlayer: 300,
 	}
 
 	for {
@@ -119,6 +119,12 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 				sc.AddCriticalCount()
 				return v
 			}
+		}
+		if orgJobConf.maxScoredPlayer <= 1000 {
+			orgJobConf.maxScoredPlayer += 200
+		}
+		if 1000 < orgJobConf.maxScoredPlayer {
+			orgJobConf.maxScoredPlayer = 1000
 		}
 	}
 
