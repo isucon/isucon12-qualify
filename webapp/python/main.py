@@ -87,8 +87,8 @@ def dispense_id() -> str:
 @app.after_request
 def add_header(response):
     """全APIにCache-Control: privateを設定する"""
-    if 'Cache-Control' not in response.headers:
-        response.headers['Cache-Control'] = 'private'
+    if "Cache-Control" not in response.headers:
+        response.headers["Cache-Control"] = "private"
     return response
 
 
@@ -316,8 +316,8 @@ def tenants_add_handler():
         abort(400, "duplicate tenant")
 
     # NOTE: 先にadminDBに書き込まれることでこのAPIの処理中に
-	#       /api/admin/tenants/billingにアクセスされるとエラーになりそう
-	#       ロックなどで対処したほうが良さそう
+    #       /api/admin/tenants/billingにアクセスされるとエラーになりそう
+    #       ロックなどで対処したほうが良さそう
     create_tenant_db(id)
 
     return jsonify(
