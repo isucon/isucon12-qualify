@@ -11,4 +11,5 @@ User=isucon
 Group=isucon
 WorkingDirectory=/home/isucon/webapp
 ExecStart=docker compose -f docker-compose-go.yml up --build
+ExecStop=docker compose -f docker-compose-go.yml down
 Restart=always
