@@ -128,7 +128,7 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
 		} else {
-			sc.AddErrorCount()
+			sc.AddCriticalCount()
 			return v
 		}
 		sc.TenantAddLog.Printf("テナント「%s」を作成しました", tenant.DisplayName)
