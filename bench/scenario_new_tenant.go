@@ -112,14 +112,14 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		scTag:           scTag,
 		tenantName:      tenant.Name,
 		scoreRepeat:     1,
-		addScoreNum:     100,  // 1度のスコア入稿で増える行数
-		scoreInterval:   3000, // 結果の検証時には3s、負荷かける用は1s
+		addScoreNum:     100, // 1度のスコア入稿で増える行数
+		scoreInterval:   500,
 		playerWorkerNum: 5,
 	}
 
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
 	for {
-		orgJobConf.newPlayerWorkerNum = randomRange([]int{80, 120})
+		orgJobConf.newPlayerWorkerNum = randomRange([]int{40, 50})
 		if _, err := sc.OrganizerJob(ctx, step, orgJobConf); err != nil {
 			return err
 		}
@@ -141,8 +141,6 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 				return v
 			}
 		}
-		// 3回ずつスコア入稿回数を増やしていく
-		orgJobConf.scoreRepeat += 3
 	}
 
 	return nil
