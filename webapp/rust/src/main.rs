@@ -14,7 +14,6 @@ use sqlx::Connection as _;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::path::PathBuf;
-use std::result::Result;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
 use tracing::error;
