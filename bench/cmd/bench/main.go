@@ -25,12 +25,25 @@ const (
 	DefaultRequestTimeout           = time.Second * 30
 	DefaultInitializeRequestTimeout = time.Second * 30
 	DefaultDuration                 = time.Minute
-	DefaultLoadType                 = bench.LoadTypeDefault
 	DefaultStrictPrepare            = true
 )
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
+	pp.SetColorScheme(pp.ColorScheme{
+		Bool:            pp.NoColor,
+		Integer:         pp.NoColor,
+		Float:           pp.NoColor,
+		String:          pp.NoColor,
+		StringQuotation: pp.NoColor,
+		EscapedChar:     pp.NoColor,
+		FieldName:       pp.NoColor,
+		PointerAdress:   pp.NoColor,
+		Nil:             pp.NoColor,
+		Time:            pp.NoColor,
+		StructName:      pp.NoColor,
+		ObjectLength:    pp.NoColor,
+	})
 
 	// ベンチマークオプションの生成
 	option := bench.Option{}
@@ -46,7 +59,6 @@ func main() {
 	flag.BoolVar(&option.SkipPrepare, "skip-prepare", false, "Skip prepare")
 	flag.StringVar(&option.DataDir, "data-dir", "data", "Data directory")
 	flag.BoolVar(&option.Debug, "debug", false, "Debug mode")
-	flag.StringVar(&option.LoadType, "load-type", DefaultLoadType, fmt.Sprintf("load type [%s,%s] Default: %s", bench.LoadTypeDefault, bench.LoadTypeLight, DefaultLoadType))
 	flag.BoolVar(&option.StrictPrepare, "strict-prepare", DefaultStrictPrepare, "strict prepare mode. default: true")
 
 	// コマンドライン引数のパースを実行

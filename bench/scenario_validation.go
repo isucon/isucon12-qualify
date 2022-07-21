@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/isucon/isucandar"
+	"github.com/isucon/isucon12-qualify/data"
 	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 	"golang.org/x/sync/errgroup"
 )
@@ -33,8 +35,9 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 	ContestantLogger.Println("整合性チェックを開始します")
 	defer ContestantLogger.Printf("整合性チェックを終了します")
 
-	tenantName := "valid-tenantid"
-	tenantDisplayName := "valid-Tenantname"
+	tenant := data.CreateTenant(data.TenantTagGeneral)
+	tenantName := tenant.Name
+	tenantDisplayName := tenant.DisplayName
 
 	// SaaS管理者のagent作成
 	adminAc, adminAg, err := sc.GetAccountAndAgent(AccountRoleAdmin, "admin", "admin")
@@ -127,7 +130,12 @@ func (sc *Scenario) ValidationScenario(ctx context.Context, step *isucandar.Benc
 }
 
 func staticFileCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
-	ag, err := sc.Option.NewAgent(sc.Option.TargetURL, false)
+
+	base, _ := url.Parse(sc.Option.TargetURL)
+	subdomain := "isucon"
+	targetURL := base.Scheme + "://" + subdomain + "." + base.Host
+
+	ag, err := sc.Option.NewAgent(targetURL, false)
 	if err != nil {
 		return err
 	}
@@ -699,9 +707,11 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 
 // ランキングの結果の整合性を確認
 func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
-	tenantName := "rankingcheck-tenantid"
-	tenantDisplayName := "rankingCheck-Tenantname"
-	competitionName := "ranking_check_competition"
+	tenant := data.CreateTenant(data.TenantTagGeneral)
+	tenantName := tenant.Name
+	tenantDisplayName := tenant.DisplayName
+
+	competitionName := data.FakeCompetitionName()
 	var competitionID string
 
 	// SaaS管理者のagent作成
@@ -1111,7 +1121,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	// テナント追加 不正リクエストチェック
 	{
 		invalidNames := map[string]int{
-			"valid-tenantid":   http.StatusBadRequest, // 重複するname
+			tenantName:         http.StatusBadRequest, // 重複するname
 			"INVALID_TENANTID": http.StatusBadRequest, // 不正なname
 		}
 		for name, code := range invalidNames {
@@ -1135,7 +1145,7 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 	}
 
 	// 大会作成(正常リクエスト)
-	competitionTitle := "badrequest_check_competition"
+	competitionTitle := data.FakeCompetitionName()
 	var competitionID string
 	{
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, competitionTitle, orgAg)
@@ -1312,8 +1322,9 @@ func badRequestCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 
 // 不正リクエスト 無効なJWT
 func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkStep) error {
-	tenantName := "invalid-jwt-tenant"
-	tenantDisplayName := "invalid-jwt-Tenantname"
+	tenant := data.CreateTenant(data.TenantTagGeneral)
+	tenantName := tenant.Name
+	tenantDisplayName := tenant.DisplayName
 
 	// exp切れ
 	{
@@ -1453,7 +1464,7 @@ func billingAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.B
 	}
 	{
 		// ページングで初期データ範囲のBillingが正しいか確認
-		checkTenantCursor := int64(randomRange([]int{12, 99})) // 初期データに当たらない範囲で調べる
+		checkTenantCursor := int64(randomRange(ConstValidateScenarioAdminBillingIDRange))
 		res, err, txt := GetAdminTenantsBillingAction(ctx, fmt.Sprintf("%d", checkTenantCursor), adminAg)
 		msg := fmt.Sprintf("%s %s", adminAc, txt)
 		v := ValidateResponseWithMsg("テナント別の請求ダッシュボード: 初期データチェック", step, res, err, msg, WithStatusCode(200),

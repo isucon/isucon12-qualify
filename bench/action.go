@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	httpdate "github.com/Songmu/go-httpdate"
 
 	"github.com/isucon/isucandar/agent"
 )
@@ -51,9 +54,7 @@ func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantID string, ag
 	}
 
 	msg := "beforeTenantID:" + beforeTenantID
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -63,9 +64,7 @@ func GetOrganizerPlayersListAction(ctx context.Context, ag *agent.Agent) (*http.
 		return nil, err, ""
 	}
 
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, ""
 }
 
@@ -81,9 +80,7 @@ func PostOrganizerPlayersAddAction(ctx context.Context, playerDisplayNames []str
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	msg := fmt.Sprintf("playerDisplayNames length:%d", len(playerDisplayNames))
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -95,9 +92,7 @@ func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, playerID stri
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	msg := "playerID:" + playerID
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -124,9 +119,7 @@ func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionID str
 	}
 
 	msg := "competitionID:" + competitionID
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -148,9 +141,7 @@ func PostOrganizerCompetitionScoreAction(ctx context.Context, competitionID stri
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	msg := fmt.Sprintf("competitionID:%s  CSV length:%dbytes", competitionID, len(csv))
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -160,9 +151,7 @@ func GetOrganizerBillingAction(ctx context.Context, ag *agent.Agent) (*http.Resp
 		return nil, err, ""
 	}
 
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, ""
 }
 
@@ -172,9 +161,7 @@ func GetOrganizerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http
 		return nil, err, ""
 	}
 
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, ""
 }
 
@@ -185,9 +172,7 @@ func GetPlayerAction(ctx context.Context, playerID string, ag *agent.Agent) (*ht
 	}
 
 	msg := "playerID:" + playerID
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -202,9 +187,7 @@ func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID string
 	}
 
 	msg := fmt.Sprintf("competitionID:%s rankAfter:%s", competitionID, rankAfter)
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -214,9 +197,7 @@ func GetPlayerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Re
 		return nil, err, ""
 	}
 
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, ""
 }
 
@@ -226,9 +207,7 @@ func GetFile(ctx context.Context, ag *agent.Agent, path string) (*http.Response,
 		return nil, err
 	}
 
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err
 }
 
@@ -249,24 +228,27 @@ func RequestWithRetry(ctx context.Context, fn func() (*http.Response, error)) (*
 
 		ra := res.Header.Get("retry-after")
 
-		if len(ra) != 1 {
-			err = fmt.Errorf("invalid retry-after header")
-			break
-		}
+		var delaySec int
 
-		var sec int
-		sec, err = strconv.Atoi(string(ra[0]))
+		// Retry-Afterヘッダーはdelay-secondsかhttp-date
+		delaySec, err = strconv.Atoi(ra)
 		if err != nil {
+			var timeAfter time.Time
+			timeAfter, err = httpdate.Str2Time(ra, nil)
+			if err != nil {
+				err = fmt.Errorf("invalid retry-after header %s", err.Error())
+				break
+			}
+
+			delaySec = int(math.Ceil(time.Until(timeAfter).Seconds()))
+		}
+
+		if delaySec < 0 {
+			err = fmt.Errorf("invalid retry-after header delay second(%d)", delaySec)
 			break
 		}
 
-		if sec < 0 {
-			err = fmt.Errorf("invalid retry-after header")
-			break
-		}
-
-		AdminLogger.Printf("RequestWithRetry retry: %ds %v", sec, res.Request.URL.Path)
-		SleepWithCtx(ctx, time.Second*time.Duration(sec))
+		SleepWithCtx(ctx, time.Second*time.Duration(delaySec))
 	}
 	return res, err
 }

@@ -5,11 +5,8 @@ const (
 	ConstMaxCriticalError = 10
 
 	// NewTenantScenario
-	ConstNewTenantScenarioPlayerWorkerNum = 20 // 作成するplayer worker数
 
 	// PopularTenantScenario
-	ConstPopularTenantScenarioScoreRepeat = 2   // 一周のスコア入稿回数
-	ConstPopularTenantScenarioAddScoreNum = 100 // 1度のスコア入稿で増える数
 
 	// PlayerScenario
 	ConstPlayerScenarioCompetitionLoopCount = 10 // 一周でいくつ大会を見るか
@@ -33,6 +30,7 @@ var (
 	// 100 ~ : prepare validate tenant
 
 	ConstPopularTenantScenarioIDRange        = []int{1, 29}
+	ConstValidateScenarioAdminBillingIDRange = []int{12, 29}
 	ConstPlayerValidateScenarioIDRange       = []int{30, 49}
 	ConstAdminBillingValidateScenarioIDRange = []int{50, 69}
 	ConstPeacefulTenantScenarioIDRange       = []int{70, 99}

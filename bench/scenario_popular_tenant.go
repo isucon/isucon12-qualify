@@ -6,6 +6,7 @@ import (
 
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
+	"github.com/isucon/isucon12-qualify/data"
 )
 
 type popularTenantScenarioWorker struct {
@@ -64,21 +65,19 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
 	orgJobConf := &OrganizerJobConfig{
+		// 入稿サイズ: scoreRepeat * maxScoredPlayer
 		orgAc:           orgAc,
 		scTag:           scTag,
 		tenantName:      tenantName,
-		scoreRepeat:     ConstPopularTenantScenarioScoreRepeat,
-		addScoreNum:     ConstPopularTenantScenarioAddScoreNum,
-		scoreInterval:   1000, // 結果の検証時には3s、負荷かける用は1s
-		playerWorkerNum: 5,
-	}
-
-	// id=1の巨大テナントのスコア入稿プレイヤー数は500を上限とする
-	if isHeavyTenant {
-		orgJobConf.maxScoredPlayer = 500
+		scoreRepeat:     1,
+		addScoreNum:     100,
+		scoreInterval:   500, // 結果の検証時には3s、負荷かける用は1s
+		playerWorkerNum: 5,   // CSV入稿と同時に立つworker数
+		maxScoredPlayer: 300,
 	}
 
 	for {
+		orgJobConf.newPlayerWorkerNum = 5
 		if _, err := sc.OrganizerJob(ctx, step, orgJobConf); err != nil {
 			return err
 		}
@@ -100,11 +99,32 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 				return v
 			}
 		}
-		// TODO もっとリクエストしたい
-		// TODO Player数を増やしてpopularTenantScenarioWorkerは増やして良いかも
-		// ただしHeavyTenantお前はダメ
 
-		orgJobConf.scoreRepeat++
+		// player数を増やし、スコアを大きくする
+		// TODO: スコアはドカンと増える
+		addPlayerNum := randomRange([]int{80, 120})
+		playerDisplayNames := make([]string, addPlayerNum)
+		for i := 0; i < addPlayerNum; i++ {
+			playerDisplayNames = append(playerDisplayNames, data.RandomString(16))
+		}
+
+		{
+			res, err, txt := PostOrganizerPlayersAddAction(ctx, playerDisplayNames, orgAg)
+			msg := fmt.Sprintf("%s %s", orgAc, txt)
+			v := ValidateResponseWithMsg("大会参加者追加", step, res, err, msg, WithStatusCode(200))
+			if v.IsEmpty() {
+				sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
+			} else {
+				sc.AddCriticalCount()
+				return v
+			}
+		}
+		if orgJobConf.maxScoredPlayer <= 1000 {
+			orgJobConf.maxScoredPlayer += 200
+		}
+		if 1000 < orgJobConf.maxScoredPlayer {
+			orgJobConf.maxScoredPlayer = 1000
+		}
 	}
 
 	return nil
