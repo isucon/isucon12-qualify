@@ -107,6 +107,7 @@ build {
 
       # prepare webapp
       "sudo ./mitamae local roles/webapp.rb",
+      "sudo -u isucon /home/isucon/webapp/sql/init.sh",
 
       # Remove authorized_keys for packer
       "sudo truncate -s 0 /home/ubuntu/.ssh/authorized_keys",
