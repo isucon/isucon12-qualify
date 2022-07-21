@@ -40,8 +40,7 @@ struct MyError {
 }
 impl Display for MyError {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
-        let err_json = serde_json::to_string(self).unwrap();
-        write!(f, "{}", err_json)
+        write!(f, "status={}: {}", self.status, self.message)
     }
 }
 
