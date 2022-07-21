@@ -318,7 +318,7 @@ struct Claims {
 }
 
 // リクエストヘッダをパースしてViewerを返す
-async fn parse_viewer(admin_db: &sqlx::MySqlPool, request: HttpRequest) -> Result<Viewer, Error> {
+async fn parse_viewer(admin_db: &sqlx::MySqlPool, request: &HttpRequest) -> Result<Viewer, Error> {
     let cookie = request.cookie(COOKIE_NAME);
     if cookie.is_none() {
         return Err(Error::Custom(
@@ -588,7 +588,7 @@ async fn tenants_add_handler(
     form: web::Form<TenantsAddHandlerForm>,
 ) -> actix_web::Result<HttpResponse, Error> {
     let form = form.into_inner();
-    let v = parse_viewer(&admin_db, request).await?;
+    let v = parse_viewer(&admin_db, &request).await?;
     if v.tenant_name != "admin" {
         // admin: SaaS管理者用の特別なテナント名
         return Err(Error::Custom(
@@ -784,7 +784,7 @@ async fn tenants_billing_handler(
         ));
     };
 
-    let v = parse_viewer(&admin_db, request).await?;
+    let v = parse_viewer(&admin_db, &request).await?;
     if v.role != ROLE_ADMIN {
         return Err(Error::Custom(
             StatusCode::FORBIDDEN,
@@ -857,7 +857,7 @@ async fn players_list_handler(
     admin_db: web::Data<sqlx::MySqlPool>,
     request: actix_web::HttpRequest,
 ) -> actix_web::Result<HttpResponse, Error> {
-    let v = parse_viewer(&admin_db, request).await?;
+    let v = parse_viewer(&admin_db, &request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(Error::Custom(
             StatusCode::FORBIDDEN,
@@ -900,7 +900,7 @@ async fn players_add_handler(
     request: HttpRequest,
     form_param: web::Form<Vec<(String, String)>>,
 ) -> actix_web::Result<HttpResponse, Error> {
-    let v = parse_viewer(&admin_db, request).await?;
+    let v = parse_viewer(&admin_db, &request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(Error::Custom(
             StatusCode::FORBIDDEN,
@@ -964,7 +964,7 @@ async fn player_disqualified_handler(
     request: HttpRequest,
     params: web::Path<(String,)>,
 ) -> actix_web::Result<HttpResponse, Error> {
-    let v = parse_viewer(&admin_db, request).await?;
+    let v = parse_viewer(&admin_db, &request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(Error::Custom(
             StatusCode::FORBIDDEN,
@@ -1034,7 +1034,7 @@ async fn competitions_add_handler(
     request: HttpRequest,
     form: web::Form<CompetitionAddHandlerForm>,
 ) -> actix_web::Result<HttpResponse, Error> {
-    let v = parse_viewer(&admin_db, request).await?;
+    let v = parse_viewer(&admin_db, &request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(Error::Custom(
             StatusCode::FORBIDDEN,
@@ -1083,7 +1083,7 @@ async fn competition_finish_handler(
     request: HttpRequest,
     params: web::Path<(String,)>,
 ) -> actix_web::Result<HttpResponse, Error> {
-    let v: Viewer = parse_viewer(&admin_db, request).await?;
+    let v: Viewer = parse_viewer(&admin_db, &request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(Error::Custom(
             StatusCode::FORBIDDEN,
@@ -1139,7 +1139,7 @@ async fn competition_score_handler(
     params: web::Path<(String,)>,
     mut payload: Multipart,
 ) -> actix_web::Result<HttpResponse, Error> {
-    let v = parse_viewer(&admin_db, request).await?;
+    let v = parse_viewer(&admin_db, &request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(Error::Custom(
             StatusCode::FORBIDDEN,
@@ -1282,7 +1282,7 @@ async fn billing_handler(
     admin_db: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
 ) -> actix_web::Result<HttpResponse, Error> {
-    let v = parse_viewer(&admin_db, request).await?;
+    let v = parse_viewer(&admin_db, &request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(Error::Custom(
             StatusCode::FORBIDDEN,
@@ -1331,7 +1331,7 @@ async fn player_handler(
     request: HttpRequest,
     params: web::Path<(String,)>,
 ) -> actix_web::Result<HttpResponse, Error> {
-    let v = parse_viewer(&admin_db, request).await?;
+    let v = parse_viewer(&admin_db, &request).await?;
     if v.role != ROLE_PLAYER {
         return Err(Error::Custom(
             StatusCode::FORBIDDEN,
@@ -1432,7 +1432,7 @@ async fn competition_ranking_handler(
     params: web::Path<(String,)>,
     query: web::Query<CompetitionRankingHandlerQuery>,
 ) -> actix_web::Result<HttpResponse, Error> {
-    let v = parse_viewer(&admin_db, request).await?;
+    let v = parse_viewer(&admin_db, &request).await?;
     if v.role != ROLE_PLAYER {
         return Err(Error::Custom(
             StatusCode::FORBIDDEN,
@@ -1552,7 +1552,7 @@ async fn player_competitions_handler(
     admin_db: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
 ) -> actix_web::Result<HttpResponse, Error> {
-    let v = parse_viewer(&admin_db, request).await?;
+    let v = parse_viewer(&admin_db, &request).await?;
     if v.role != ROLE_PLAYER {
         return Err(Error::Custom(
             StatusCode::FORBIDDEN,
@@ -1572,7 +1572,7 @@ async fn organizer_competitions_handler(
     admin_db: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
 ) -> actix_web::Result<HttpResponse, Error> {
-    let v = parse_viewer(&admin_db, request).await?;
+    let v = parse_viewer(&admin_db, &request).await?;
     if v.role != ROLE_ORGANIZER {
         return Err(Error::Custom(
             StatusCode::FORBIDDEN,
@@ -1641,7 +1641,7 @@ async fn me_handler(
         name: tenant.name,
         display_name: tenant.display_name,
     };
-    let v = match parse_viewer(&admin_db, request).await {
+    let v = match parse_viewer(&admin_db, &request).await {
         Ok(v) => v,
         Err(e) if e.status_code() == StatusCode::UNAUTHORIZED => {
             return Ok(HttpResponse::Ok().json(SuccessResult {
