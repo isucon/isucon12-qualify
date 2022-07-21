@@ -261,14 +261,10 @@ pub async fn main() -> std::io::Result<()> {
     .await
 }
 
-// エラー処理関数
-// TODO:
-
 #[derive(Debug, Serialize)]
 struct SuccessResult<T> {
     status: bool,
-    #[serde(bound(serialize = "T: Serialize",))]
-    data: Option<T>,
+    data: T,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -641,7 +637,7 @@ async fn tenants_add_handler(
     };
     Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
-        data: Some(res),
+        data: res,
     }))
 }
 
@@ -829,9 +825,9 @@ async fn tenants_billing_handler(
     }
     Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
-        data: Some(TenantsBillingHandlerResult {
+        data: TenantsBillingHandlerResult {
             tenants: tenant_billings,
-        }),
+        },
     }))
 }
 
@@ -879,7 +875,7 @@ async fn players_list_handler(
     let res = PlayersListHandlerResult { players: pds };
     Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
-        data: Some(res),
+        data: res,
     }))
 }
 
@@ -938,7 +934,7 @@ async fn players_add_handler(
     let res = PlayersAddHandlerResult { players: pds };
     Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
-        data: Some(res),
+        data: res,
     }))
 }
 
@@ -997,7 +993,7 @@ async fn player_disqualified_handler(
     };
     Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
-        data: Some(res),
+        data: res,
     }))
 }
 
@@ -1060,7 +1056,7 @@ async fn competitions_add_handler(
     };
     Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
-        data: Some(res),
+        data: res,
     }))
 }
 
@@ -1115,7 +1111,7 @@ async fn competition_finish_handler(
 
     let res = SuccessResult {
         status: true,
-        data: Option::<()>::None,
+        data: (),
     };
     Ok(HttpResponse::Ok().json(res))
 }
@@ -1268,7 +1264,7 @@ async fn competition_score_handler(
     }
     let res = SuccessResult {
         status: true,
-        data: Some(ScoreHandlerResult { rows }),
+        data: ScoreHandlerResult { rows },
     };
     Ok(HttpResponse::Ok().json(res))
 }
@@ -1309,7 +1305,7 @@ async fn billing_handler(
     }
     let res = SuccessResult {
         status: true,
-        data: Some(BillingHandlerResult { reports: tbrs }),
+        data: BillingHandlerResult { reports: tbrs },
     };
     Ok(HttpResponse::Ok().json(res))
 }
@@ -1391,14 +1387,14 @@ async fn player_handler(
 
     let res = SuccessResult {
         status: true,
-        data: Some(PlayerHandlerResult {
+        data: PlayerHandlerResult {
             player: PlayerDetail {
                 id: p.id.clone(),
                 display_name: p.display_name.clone(),
                 is_disqualified: p.is_disqualified,
             },
             scores: psds,
-        }),
+        },
     };
     Ok(HttpResponse::Ok().json(res))
 }
@@ -1532,14 +1528,14 @@ async fn competition_ranking_handler(
     }
     let res = SuccessResult {
         status: true,
-        data: Some(CompetitionRankingHandlerResult {
+        data: CompetitionRankingHandlerResult {
             competition: CompetitionDetail {
                 id: competition.id,
                 title: competition.title,
                 is_finished: competition.finished_at.is_some(),
             },
             ranks: paged_ranks,
-        }),
+        },
     };
 
     Ok(HttpResponse::Ok().json(res))
@@ -1607,7 +1603,7 @@ async fn competitions_handler(
     }
     let res = SuccessResult {
         status: true,
-        data: Some(CompetitionsHandlerResult { competitions: cds }),
+        data: CompetitionsHandlerResult { competitions: cds },
     };
     Ok(HttpResponse::Ok().json(res))
 }
@@ -1648,12 +1644,12 @@ async fn me_handler(
         Err(e) if e.status == 401 => {
             return Ok(HttpResponse::Ok().json(SuccessResult {
                 status: true,
-                data: Some(MeHandlerResult {
+                data: MeHandlerResult {
                     tenant: Some(td),
                     me: None,
                     role: "none".to_string(),
                     logged_in: false,
-                }),
+                },
             }));
         }
         _ => {
@@ -1663,12 +1659,12 @@ async fn me_handler(
     if v.role == ROLE_ADMIN || v.role == ROLE_ORGANIZER {
         return Ok(HttpResponse::Ok().json(SuccessResult {
             status: true,
-            data: Some(MeHandlerResult {
+            data: MeHandlerResult {
                 tenant: Some(td.clone()),
                 me: None,
                 role: v.role,
                 logged_in: true,
-            }),
+            },
         }));
     }
     let mut tenant_db = connect_to_tenant_db(v.tenant_id).await.unwrap();
@@ -1677,12 +1673,12 @@ async fn me_handler(
         Err(sqlx::Error::RowNotFound) => {
             return Ok(HttpResponse::Ok().json(SuccessResult {
                 status: true,
-                data: Some(MeHandlerResult {
+                data: MeHandlerResult {
                     tenant: Some(td.clone()),
                     me: None,
                     role: "none".to_string(),
                     logged_in: true,
-                }),
+                },
             }));
         }
         _ => {
@@ -1692,7 +1688,7 @@ async fn me_handler(
 
     Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
-        data: Some(MeHandlerResult {
+        data: MeHandlerResult {
             tenant: Some(td),
             me: Some(PlayerDetail {
                 id: p.id,
@@ -1701,7 +1697,7 @@ async fn me_handler(
             }),
             role: v.role,
             logged_in: true,
-        }),
+        },
     }))
 }
 
@@ -1725,6 +1721,6 @@ async fn initialize_handler() -> actix_web::Result<HttpResponse> {
 
     Ok(HttpResponse::Ok().json(SuccessResult {
         status: true,
-        data: Some(res),
+        data: res,
     }))
 }
