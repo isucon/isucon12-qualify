@@ -200,6 +200,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 	// checkPlayerWorkerKickedがlockをとるのでbatchへ逃がすが、エラーを取りたいのでerrGroupを流用
 	eg.Go(func() error {
 		i := 0
+		added := 0
 		for _, playerID := range qualifyPlayerIDs {
 			if conf.newPlayerWorkerNum < i {
 				break
@@ -213,14 +214,15 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 				return err
 			}
 			sc.WorkerCh <- wkr
+			added++
 		}
+		sc.PlayerAddCountAdd(added)
 		return nil
 	})
 
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
-	sc.PlayerAddCountAdd(conf.newPlayerWorkerNum)
 
 	// 大会結果確定 x 1
 	{
