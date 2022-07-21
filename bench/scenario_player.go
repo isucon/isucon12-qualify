@@ -115,7 +115,15 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 			rankAfterCheck := rand.Intn(100) < 20
 			rankAfter := ""
 			for {
+				requestTime := time.Now()
 				res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, rankAfter, playerAg)
+
+				// ranking表示に1秒以上かかったら離脱する
+				if time.Second < time.Since(requestTime) {
+					sc.PlayerDelCountAdd(1)
+					return nil
+				}
+
 				msg := fmt.Sprintf("%s %s", playerAc, txt)
 				v := ValidateResponseWithMsg("大会内のランキング取得", step, res, err, msg, WithStatusCode(200),
 					WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {

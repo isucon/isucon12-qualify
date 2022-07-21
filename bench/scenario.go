@@ -68,6 +68,8 @@ type Scenario struct {
 	TenantAddLog      *CompactLogger
 	PlayerAddCountMu  sync.Mutex
 	PlayerAddCount    int
+	PlayerDelCountMu  sync.Mutex
+	PlayerDelCount    int
 
 	addedWorkerCountMap map[string]int
 	batchwg             sync.WaitGroup
@@ -108,6 +110,8 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	sc.TenantAddLog = NewCompactLog(ContestantLogger, batchwg)
 	sc.PlayerAddCountMu = sync.Mutex{}
 	sc.PlayerAddCount = 0
+	sc.PlayerDelCountMu = sync.Mutex{}
+	sc.PlayerDelCount = 0
 	sc.batchwg = batchwg
 	sc.addedWorkerCountMap = make(map[string]int)
 
@@ -300,6 +304,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 			sc.TenantAddLog.Log()
 			sc.workerAddLogPrint()
 			sc.PlayerAddCountPrint()
+			sc.PlayerDelCountPrint()
 		}
 
 		if ConstMaxError <= errorCount {
@@ -349,6 +354,29 @@ func (sc *Scenario) PlayerAddCountPrint() {
 	}()
 }
 
+func (sc *Scenario) PlayerDelCountAdd(num int) {
+	sc.batchwg.Add(1)
+	go func(num int) {
+		defer sc.batchwg.Done()
+		sc.PlayerDelCountMu.Lock()
+		defer sc.PlayerDelCountMu.Unlock()
+		sc.PlayerDelCount += num
+	}(num)
+}
+
+func (sc *Scenario) PlayerDelCountPrint() {
+	sc.batchwg.Add(1)
+	go func() {
+		defer sc.batchwg.Done()
+		sc.PlayerDelCountMu.Lock()
+		defer sc.PlayerDelCountMu.Unlock()
+		if sc.PlayerDelCount != 0 {
+			ContestantLogger.Printf("leaderboardの表示に1秒以上かかったため%d人の参加者が離脱しました。", sc.PlayerDelCount)
+			sc.PlayerDelCount = 0
+		}
+	}()
+}
+
 func (sc *Scenario) CountWorker(name string) {
 	// lockするし急ぎではないので後回し
 	sc.batchwg.Add(1)
@@ -388,6 +416,7 @@ func (sc *Scenario) PrintWorkerCount() {
 	AdminLogger.Printf("WorkerCount: %s", pp.Sprint(sc.WorkerCountMap))
 }
 
+// workerの追加ログ, worker種別毎に出す
 func (sc *Scenario) workerAddLogPrint() {
 	// lockするし急ぎではないので後回し
 	sc.batchwg.Add(1)
@@ -403,6 +432,7 @@ func (sc *Scenario) workerAddLogPrint() {
 	}()
 }
 
+// 同じplayerのPlayerWorkerを起動しないようにチェック
 func (sc *Scenario) playerWorkerKick(tenantName, playerID string) {
 	sc.batchwg.Add(1)
 	go func() {
