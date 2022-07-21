@@ -6,7 +6,6 @@ use bytes::BytesMut;
 use futures_util::stream::StreamExt as _;
 use futures_util::stream::TryStreamExt as _;
 use lazy_static::lazy_static;
-use log::error;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sqlx::mysql::{MySqlConnectOptions, MySqlDatabaseError};
@@ -18,6 +17,8 @@ use std::path::PathBuf;
 use std::result::Result;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs;
+use tracing::error;
+use tracing_subscriber::prelude::*;
 
 const TENANT_DB_SCHEMA_FILE_PATH: &str = "../sql/tenant/10_schema.sql";
 const INITIALIZE_SCRIPT: &str = "../sql/init.sh";
@@ -145,12 +146,32 @@ pub async fn main() -> std::io::Result<()> {
     if std::env::var_os("RUST_LOG").is_none() {
         std::env::set_var("RUST_LOG", "info,sqlx=warn");
     }
-    env_logger::init();
 
-    // sqliteのクエリログを出力する設定
-    // 環境変数 ISUCON_SQLITE_TRACE_FILEを設定すると, そのファイルにクエリログをJSON形式で出力する
-    // 未設定なら出力しない
-    // sqltrace.rsを参照
+    let default_env_filter = tracing_subscriber::EnvFilter::from_default_env();
+    if let Ok(sql_trace_file) = std::env::var("ISUCON_SQL_TRACE_FILE") {
+        // sqliteのクエリログを出力する設定
+        // 環境変数 ISUCON_SQL_TRACE_FILE を設定すると、そのファイルにクエリログを出力する
+        // 未設定なら出力しない
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .json()
+                    .with_writer(
+                        std::fs::File::options()
+                            .create(true)
+                            .append(true)
+                            .open(sql_trace_file)?,
+                    )
+                    .with_target(false)
+                    .with_filter(tracing_subscriber::EnvFilter::new("sqlx::query=info")),
+            )
+            .with(tracing_subscriber::fmt::layer().with_filter(default_env_filter))
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::fmt::layer().with_filter(default_env_filter))
+            .init();
+    }
 
     let mysql_config = MySqlConnectOptions::new()
         .host(&get_env("ISUCON_DB_HOST", "127.0.0.1"))
