@@ -386,7 +386,7 @@ async fn parse_viewer(admin_db: &sqlx::MySqlPool, request: HttpRequest) -> Resul
             format!("invalid token: aud filed is few or too much: {}", token_str).into(),
         ));
     }
-    let tenant = retrieve_tenant_row_from_header(admin_db, request).await?;
+    let tenant = retrieve_tenant_row_from_header(admin_db, &request).await?;
     if tenant.is_none() {
         return Err(Error::Custom(
             StatusCode::UNAUTHORIZED,
@@ -418,17 +418,16 @@ async fn parse_viewer(admin_db: &sqlx::MySqlPool, request: HttpRequest) -> Resul
 
 async fn retrieve_tenant_row_from_header(
     admin_db: &sqlx::MySqlPool,
-    request: HttpRequest,
+    request: &HttpRequest,
 ) -> sqlx::Result<Option<TenantRow>> {
     // JWTに入っているテナント名とHostヘッダのテナント名が一致しているか確認
     let base_host = get_env("ISUCON_BASE_HOSTNAME", ".t.isucon.dev");
-    let tenant_name = request
-        .headers()
-        .get("Host")
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .trim_end_matches(&base_host);
+    let tenant_name = {
+        // await_holding_refcell_ref を避けるために tenant_name を String にしておく
+        // https://rust-lang.github.io/rust-clippy/master/index.html#await_holding_refcell_ref
+        let conn_info = request.connection_info();
+        conn_info.host().trim_end_matches(&base_host).to_owned()
+    };
 
     // SaaS管理者用ドメイン
     if tenant_name == "admin" {
@@ -1630,7 +1629,7 @@ async fn me_handler(
     admin_db: web::Data<sqlx::MySqlPool>,
     request: HttpRequest,
 ) -> actix_web::Result<HttpResponse, Error> {
-    let tenant = match retrieve_tenant_row_from_header(&admin_db, request.clone()).await? {
+    let tenant = match retrieve_tenant_row_from_header(&admin_db, &request).await? {
         Some(t) => t,
         None => {
             return Err(Error::Internal(
