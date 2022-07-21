@@ -69,7 +69,7 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 		orgAc:           orgAc,
 		scTag:           scTag,
 		tenantName:      tenantName,
-		scoreRepeat:     3,
+		scoreRepeat:     1,
 		addScoreNum:     100,
 		scoreInterval:   1000, // 結果の検証時には3s、負荷かける用は1s
 		playerWorkerNum: 5,    // CSV入稿と同時に立つworker数

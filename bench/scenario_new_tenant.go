@@ -111,7 +111,7 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		orgAc:           orgAc,
 		scTag:           scTag,
 		tenantName:      tenant.Name,
-		scoreRepeat:     3,
+		scoreRepeat:     1,
 		addScoreNum:     100,  // 1度のスコア入稿で増える行数
 		scoreInterval:   3000, // 結果の検証時には3s、負荷かける用は1s
 		playerWorkerNum: 5,

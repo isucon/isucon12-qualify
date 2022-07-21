@@ -108,6 +108,8 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		}
 
 		if len(playerIDs) == 0 {
+			sleepms := randomRange([]int{500, 1000})
+			SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 			continue
 		}
 
