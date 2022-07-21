@@ -54,9 +54,7 @@ func GetAdminTenantsBillingAction(ctx context.Context, beforeTenantID string, ag
 	}
 
 	msg := "beforeTenantID:" + beforeTenantID
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -66,9 +64,7 @@ func GetOrganizerPlayersListAction(ctx context.Context, ag *agent.Agent) (*http.
 		return nil, err, ""
 	}
 
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, ""
 }
 
@@ -84,9 +80,7 @@ func PostOrganizerPlayersAddAction(ctx context.Context, playerDisplayNames []str
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	msg := fmt.Sprintf("playerDisplayNames length:%d", len(playerDisplayNames))
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -98,9 +92,7 @@ func PostOrganizerApiPlayerDisqualifiedAction(ctx context.Context, playerID stri
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	msg := "playerID:" + playerID
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -127,9 +119,7 @@ func PostOrganizerCompetitionFinishAction(ctx context.Context, competitionID str
 	}
 
 	msg := "competitionID:" + competitionID
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -151,9 +141,7 @@ func PostOrganizerCompetitionScoreAction(ctx context.Context, competitionID stri
 	}
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	msg := fmt.Sprintf("competitionID:%s  CSV length:%dbytes", competitionID, len(csv))
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -163,9 +151,7 @@ func GetOrganizerBillingAction(ctx context.Context, ag *agent.Agent) (*http.Resp
 		return nil, err, ""
 	}
 
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, ""
 }
 
@@ -175,9 +161,7 @@ func GetOrganizerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http
 		return nil, err, ""
 	}
 
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, ""
 }
 
@@ -188,9 +172,7 @@ func GetPlayerAction(ctx context.Context, playerID string, ag *agent.Agent) (*ht
 	}
 
 	msg := "playerID:" + playerID
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -205,9 +187,7 @@ func GetPlayerCompetitionRankingAction(ctx context.Context, competitionID string
 	}
 
 	msg := fmt.Sprintf("competitionID:%s rankAfter:%s", competitionID, rankAfter)
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, msg
 }
 
@@ -217,9 +197,7 @@ func GetPlayerCompetitionsAction(ctx context.Context, ag *agent.Agent) (*http.Re
 		return nil, err, ""
 	}
 
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err, ""
 }
 
@@ -229,9 +207,7 @@ func GetFile(ctx context.Context, ag *agent.Agent, path string) (*http.Response,
 		return nil, err
 	}
 
-	res, err := RequestWithRetry(ctx, func() (*http.Response, error) {
-		return ag.Do(ctx, req)
-	})
+	res, err := ag.Do(ctx, req)
 	return res, err
 }
 

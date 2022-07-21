@@ -21,8 +21,6 @@ func (adminBillingScenarioWorker) String() string {
 func (w *adminBillingScenarioWorker) Process(ctx context.Context) { w.worker.Process(ctx) }
 
 // ずっと/admin/billingを見続けるシナリオ
-// 指定回数エラーが出るまで繰り返し、並列動作はしない
-
 func (sc *Scenario) AdminBillingScenarioWorker(step *isucandar.BenchmarkStep, p int32) (Worker, error) {
 	scTag := ScenarioTagAdminBilling
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
@@ -109,13 +107,14 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 			// contextの打ち切りでloopを抜ける
 			return nil
 		} else {
-			// ErrorCountで打ち切りがあるので、ここでreturn ValidateErrorはせずリトライする
+			// ErrorCountで打ち切りがあるので、ここでreturn ValidateErrorは返さずリトライする
 			// ただしsleepを挟む
 			sc.AddErrorCount()
 			SleepWithCtx(ctx, time.Millisecond*100)
 		}
 
 	}
+
 	// Billingが見終わったら新規テナントを追加する
 	tenant := data.CreateTenant(data.TenantTagGeneral)
 	{
@@ -129,7 +128,7 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
 		} else {
-			sc.AddErrorCount()
+			sc.AddCriticalCount()
 			return v
 		}
 		sc.TenantAddLog.Printf("テナント「%s」を作成しました", tenant.DisplayName)
