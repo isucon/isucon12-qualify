@@ -23,6 +23,8 @@ COPY --from=bench-builder /opt/isucon12-qualify/bench/bench /opt/isucon12-qualif
 COPY --from=bench-builder /opt/isucon12-qualify/bench/benchmarker*.json /opt/isucon12-qualify/bench/
 COPY --from=bench-builder /opt/isucon12-qualify/bench/*.pem /opt/isucon12-qualify/bench/
 COPY --from=supervisor /usr/local/bin/isuxportal-supervisor /usr/local/bin/isuxportal-supervisor
+COPY public/ /opt/isucon12-qualify/public/
+
 WORKDIR /opt/isucon12-qualify/bench
 
 ENV ISUXPORTAL_SUPERVISOR_INSTANCE_NAME=
