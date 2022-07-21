@@ -118,7 +118,8 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
 	for {
-		orgJobConf.newPlayerWorkerNum = randomRange([]int{40, 50})
+		// orgJobConf.newPlayerWorkerNum = randomRange([]int{40, 50})
+		orgJobConf.newPlayerWorkerNum = randomRange([]int{10, 12})
 		if _, err := sc.OrganizerJob(ctx, step, orgJobConf); err != nil {
 			return err
 		}
