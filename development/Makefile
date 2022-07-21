@@ -29,7 +29,7 @@ run-bench-ci:
 	gh release list | awk '/Latest/{print $$3}' | xargs gh release download --dir ..
 
 install_initial_data:
-	docker compose -f docker-compose-common.yml cp ../initial_data/ bench:/home/isucon/
+	docker compose -f docker-compose-common.yml  cp ../initial_data/ bench:/home/isucon/
 
 initial_data: ../initial_data.tar.gz
 	tar -C .. -xvf ../initial_data.tar.gz
