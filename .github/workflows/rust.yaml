@@ -35,6 +35,9 @@ jobs:
         run: |
           make initial_data
           make down/rust
+          # Warm up cargo build cache
+          docker compose -f docker-compose-common.yml -f docker-compose-rust.yml build webapp
+          docker compose -f docker-compose-common.yml -f docker-compose-rust.yml run webapp cargo build --release
           make up/rust OPT='-d --build'
           make install_initial_data
         working-directory: ./development

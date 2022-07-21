@@ -2,8 +2,8 @@ version: '3.0'
 
 services:
   webapp:
-    cpus: 1
-    mem_limit: 1g
+    # cpus: 1
+    # mem_limit: 1g
     build:
       context: ..
       dockerfile: ./development/backend-rust/Dockerfile
