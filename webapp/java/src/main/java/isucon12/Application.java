@@ -413,16 +413,17 @@ public class Application {
 
     // 排他ロックする
     private FileLock flockByTenantID(long tenantId) throws FileLockException {
-        String p = this.lockFilePath(tenantId);
-        File lockfile = new File(p);
-        try (FileChannel fc = FileChannel.open(lockfile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE);) {
-            FileLock lock = fc.tryLock();
-            if (lock == null) {
-                throw new FileLockException(String.format("error FileChannel.tryLock: path=%s, ", p));
+        synchronized(this) {
+            String p = this.lockFilePath(tenantId);
+            File lockfile = new File(p);
+            try (FileChannel fc = FileChannel.open(lockfile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE); FileLock lock = fc.tryLock();) {
+                if (lock == null) {
+                    throw new FileLockException(String.format("error FileChannel.tryLock: path=%s, ", p));
+                }
+                return lock;
+            } catch (IOException | OverlappingFileLockException e) {
+                throw new FileLockException(String.format("error flockByTenantID: path=%s, ", p), e);
             }
-            return lock;
-        } catch (IOException | OverlappingFileLockException e) {
-            throw new FileLockException(String.format("error flockByTenantID: path=%s, ", p), e);
         }
     }
 
