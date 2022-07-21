@@ -81,6 +81,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 	}
 
 	checkerPlayerID := playerIDs[0]
+	disqualifyingdPlayerID := playerIDs[1]
+
 	checkerPlayerAc, checkerPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenant.TenantName, checkerPlayerID)
 	if err != nil {
 		return err
@@ -107,7 +109,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 				if r.Data.Player.ID != pid {
 					return fmt.Errorf("PlayerIDが違います (want:%s got:%s)", pid, r.Data.Player.ID)
 				}
-				if r.Data.Player.IsDisqualified {
+				if false != r.Data.Player.IsDisqualified {
 					return fmt.Errorf("失格状態が違います playerID: %s (want %v got:%v)", pid, false, r.Data.Player.IsDisqualified)
 				}
 				return nil
@@ -116,12 +118,40 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
+			sc.AddErrorCount()
 			return v
 		}
 	}
 
+	// 状態を更新する
 	{
-		pid := disqualifiedPlayerIDs[0]
+		pid := disqualifyingdPlayerID
+		res, err, txt := PostOrganizerApiPlayerDisqualifiedAction(ctx, pid, orgAg)
+		msg := fmt.Sprintf("%s %s", orgAc, txt)
+		v := ValidateResponseWithMsg("プレイヤーを失格にする", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithCacheControlPrivate(),
+			WithSuccessResponse(func(r ResponseAPIPlayerDisqualified) error {
+				if !r.Data.Player.IsDisqualified {
+					return fmt.Errorf("プレイヤーが失格になっていません player.id: %s", r.Data.Player.ID)
+				}
+				if disqualifyingdPlayerID != r.Data.Player.ID {
+					return fmt.Errorf("失格にしたプレイヤーが違います (want: %s, got: %s)", disqualifyingdPlayerID, r.Data.Player.ID)
+				}
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
+
+	// 反映されていることをチェック
+	{
+		pid := disqualifyingdPlayerID
 		res, err, txt := GetPlayerAction(ctx, pid, checkerPlayerAg)
 		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
 		v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(200),
@@ -130,7 +160,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 				if r.Data.Player.ID != pid {
 					return fmt.Errorf("PlayerIDが違います (want:%s got:%s)", pid, r.Data.Player.ID)
 				}
-				if !r.Data.Player.IsDisqualified {
+				if true != r.Data.Player.IsDisqualified {
 					return fmt.Errorf("失格状態が違います playerID: %s (want %v got:%v)", pid, true, r.Data.Player.IsDisqualified)
 				}
 				return nil
@@ -139,12 +169,11 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
+			sc.AddErrorCount()
 			return v
 		}
 	}
-
-	// 状態を更新する
-	// TODO check
+	// TODO
 
 	SleepWithCtx(ctx, time.Second*3)
 
