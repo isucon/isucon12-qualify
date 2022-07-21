@@ -1,7 +1,0 @@
-#!/bin/sh
-
-set -eu
-in=$1
-
-echo .dump | sqlite3 $in | \
-	perl -pE 's/PRAGMA foreign_keys=OFF;//; s/^CREATE TABLE /CREATE TABLE IF NOT EXISTS /; s/BEGIN TRANSACTION/BEGIN/g'
