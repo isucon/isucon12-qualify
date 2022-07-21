@@ -75,22 +75,6 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		}
 	}
 
-	// PlayerWorker追加
-	{
-		i := 0
-		for _, playerID := range qualifyPlayerIDs {
-			if conf.newPlayerWorkerNum < i {
-				break
-			}
-			i++
-			wkr, err := sc.PlayerScenarioWorker(step, 1, conf.tenantName, playerID)
-			if err != nil {
-				return nil, err
-			}
-			sc.WorkerCh <- wkr
-		}
-	}
-
 	{
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, comp.Title, orgAg)
 		msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
@@ -120,9 +104,9 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		})
 	}
 	scoredPlayerIDs = score.PlayerIDs()
+	eg := errgroup.Group{}
 	mu := sync.Mutex{}
 
-	eg := errgroup.Group{}
 	doneCh := make(chan struct{})
 	for i := 0; i < conf.playerWorkerNum; i++ {
 		eg.Go(func() error {
@@ -208,6 +192,28 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			}
 
 			SleepWithCtx(ctx, time.Millisecond*time.Duration(conf.scoreInterval))
+		}
+		return nil
+	})
+
+	// PlayerWorker追加
+	// checkPlayerWorkerKickedがlockをとるのでbatchへ逃がすが、エラーを取りたいのでerrGroupを流用
+	eg.Go(func() error {
+		i := 0
+		for _, playerID := range qualifyPlayerIDs {
+			if conf.newPlayerWorkerNum < i {
+				break
+			}
+			if sc.checkPlayerWorkerKicked(conf.tenantName, playerID) {
+				continue
+			}
+			i++
+			// batchに逃がす関係で仕方なくエラーを握りつぶす
+			wkr, err := sc.PlayerScenarioWorker(step, 1, conf.tenantName, playerID)
+			if err != nil {
+				return err
+			}
+			sc.WorkerCh <- wkr
 		}
 		return nil
 	})

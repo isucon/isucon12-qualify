@@ -71,6 +71,9 @@ type Scenario struct {
 
 	addedWorkerCountMap map[string]int
 	batchwg             sync.WaitGroup
+
+	kickedWorkerPlayerIDMap map[string]struct{}
+	kickedWorkerMu          sync.Mutex
 }
 
 // isucandar.PrepeareScenario を満たすメソッド
@@ -107,6 +110,9 @@ func (sc *Scenario) Prepare(ctx context.Context, step *isucandar.BenchmarkStep) 
 	sc.PlayerAddCount = 0
 	sc.batchwg = batchwg
 	sc.addedWorkerCountMap = make(map[string]int)
+
+	sc.kickedWorkerPlayerIDMap = make(map[string]struct{})
+	sc.kickedWorkerMu = sync.Mutex{}
 
 	// GET /initialize 用ユーザーエージェントの生成
 	b, err := url.Parse(sc.Option.TargetURL)
@@ -395,4 +401,25 @@ func (sc *Scenario) workerAddLogPrint() {
 		}
 		sc.addedWorkerCountMap = make(map[string]int)
 	}()
+}
+
+func (sc *Scenario) playerWorkerKick(tenantName, playerID string) {
+	sc.batchwg.Add(1)
+	go func() {
+		defer sc.batchwg.Done()
+		sc.kickedWorkerMu.Lock()
+		defer sc.kickedWorkerMu.Unlock()
+		key := fmt.Sprintf("%s_%s", tenantName, playerID)
+		if _, ok := sc.kickedWorkerPlayerIDMap[key]; !ok {
+			sc.kickedWorkerPlayerIDMap[key] = struct{}{}
+		}
+	}()
+}
+
+func (sc *Scenario) checkPlayerWorkerKicked(tenantName, playerID string) bool {
+	key := fmt.Sprintf("%s_%s", tenantName, playerID)
+	sc.kickedWorkerMu.Lock()
+	defer sc.kickedWorkerMu.Unlock()
+	_, ok := sc.kickedWorkerPlayerIDMap[key]
+	return ok
 }

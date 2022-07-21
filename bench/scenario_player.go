@@ -23,6 +23,7 @@ func (w *playerScenarioWorker) Process(ctx context.Context) { w.worker.Process(c
 // competition一覧を取り、rankingを参照するプレイヤー
 func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32, tenantName, playerID string) (Worker, error) {
 	scTag := ScenarioTagPlayer
+	sc.playerWorkerKick(tenantName, playerID)
 	if tenantName == "isucon" {
 		scTag += "HeavyTenant"
 	}

@@ -107,30 +107,15 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		}
 	}
 
-	// プレイヤーのworker
-	{
-		i := 0
-		for _, player := range players {
-			if ConstNewTenantScenarioPlayerWorkerNum < i {
-				break
-			}
-			i++
-			wkr, err := sc.PlayerScenarioWorker(step, 1, tenant.Name, player.ID)
-			if err != nil {
-				return err
-			}
-			sc.WorkerCh <- wkr
-		}
-	}
-
 	orgJobConf := &OrganizerJobConfig{
-		orgAc:           orgAc,
-		scTag:           scTag,
-		tenantName:      tenant.Name,
-		scoreRepeat:     3,
-		addScoreNum:     100,  // 1度のスコア入稿で増える行数
-		scoreInterval:   3000, // 結果の検証時には3s、負荷かける用は1s
-		playerWorkerNum: 5,
+		orgAc:              orgAc,
+		scTag:              scTag,
+		tenantName:         tenant.Name,
+		scoreRepeat:        3,
+		addScoreNum:        100,  // 1度のスコア入稿で増える行数
+		scoreInterval:      3000, // 結果の検証時には3s、負荷かける用は1s
+		playerWorkerNum:    5,
+		newPlayerWorkerNum: ConstNewTenantScenarioPlayerWorkerNum,
 	}
 
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
