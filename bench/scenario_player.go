@@ -23,6 +23,10 @@ func (w *playerScenarioWorker) Process(ctx context.Context) { w.worker.Process(c
 // competition一覧を取り、rankingを参照するプレイヤー
 func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32, tenantName, playerID string) (Worker, error) {
 	scTag := ScenarioTagPlayer
+	sc.playerWorkerKick(tenantName, playerID)
+	if tenantName == "isucon" {
+		scTag += "HeavyTenant"
+	}
 
 	w, err := worker.NewWorker(func(ctx context.Context, _ int) {
 		if err := sc.PlayerScenario(ctx, step, scTag, tenantName, playerID); err != nil {
@@ -104,6 +108,8 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 		}
 
 		if len(playerIDs) == 0 {
+			sleepms := randomRange([]int{500, 1000})
+			SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 			continue
 		}
 
@@ -125,7 +131,7 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 				sc.AddErrorCount()
 				return v
 			}
-			sleepms := rand.Intn(5000)
+			sleepms := randomRange([]int{1000, 2000})
 			SleepWithCtx(ctx, time.Millisecond*time.Duration(sleepms))
 		}
 	}

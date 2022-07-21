@@ -1,0 +1,14 @@
+parameters:
+  level: 4
+  paths:
+    - app
+    - public
+    - sqltrace
+    - src
+  ignoreErrors:
+    -
+      message: '#^If condition is always#'
+      path: public/index.php
+    -
+      message: '#Property App\\Isuports\\Handlers::\$logger is never read, only written\.#'
+      path: src/Isuports/Handlers.php

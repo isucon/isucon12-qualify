@@ -144,7 +144,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 	}
 
 	// 状態を更新する
-	// check
+	// TODO check
 
 	SleepWithCtx(ctx, time.Second*3)
 
