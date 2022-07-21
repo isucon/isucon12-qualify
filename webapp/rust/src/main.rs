@@ -145,7 +145,7 @@ async fn dispense_id(pool: &sqlx::MySqlPool) -> Result<String, sqlx::Error> {
 #[actix_web::main]
 pub async fn main() -> std::io::Result<()> {
     if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var("RUST_LOG", "info");
+        std::env::set_var("RUST_LOG", "info,sqlx=warn");
     }
     env_logger::init();
 
