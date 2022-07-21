@@ -177,16 +177,6 @@ public class Application {
         }
     }
 
-    private void closeTenantDbConnection(Connection tenantDb) {
-        try {
-            if (tenantDb != null) {
-                tenantDb.close();
-            }
-        } catch (SQLException e) {
-            logger.warn("failed close connection", e);
-        }
-    }
-
     // システム全体で一意なIDを生成する
     public String dispenseID() throws DispenseIdException {
         String lastErrorString = "";
@@ -413,27 +403,15 @@ public class Application {
 
     // 排他ロックする
     private FileLock flockByTenantID(long tenantId) throws FileLockException {
-        synchronized(this) {
-            String p = this.lockFilePath(tenantId);
-            File lockfile = new File(p);
-            try (FileChannel fc = FileChannel.open(lockfile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE); FileLock lock = fc.tryLock();) {
-                if (lock == null) {
-                    throw new FileLockException(String.format("error FileChannel.tryLock: path=%s, ", p));
-                }
-                return lock;
-            } catch (IOException | OverlappingFileLockException e) {
-                throw new FileLockException(String.format("error flockByTenantID: path=%s, ", p), e);
+        String p = this.lockFilePath(tenantId);
+        File lockfile = new File(p);
+        try (FileChannel fc = FileChannel.open(lockfile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE); FileLock lock = fc.lock();) {
+            if (lock == null) {
+                throw new FileLockException(String.format("error FileChannel.lock: path=%s, ", p));
             }
-        }
-    }
-
-    private void releaseFileLock(FileLock fl) {
-        try {
-            if (fl != null && fl.isValid()) {
-                fl.release();
-            }
-        } catch (IOException e) {
-            logger.warn("failed release filelock", e);
+            return lock;
+        } catch (IOException | OverlappingFileLockException e) {
+            throw new FileLockException(String.format("error flockByTenantID: path=%s, ", p), e);
         }
     }
 
@@ -536,10 +514,9 @@ public class Application {
             billingMap.put(vh.getPlayerId(), "visitor");
         }
 
-        FileLock fl = null;
         try {
             // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-            fl = this.flockByTenantID(tenantId);
+            this.flockByTenantID(tenantId);
 
             // スコアを登録した参加者のIDを取得する
             List<String> scoredPlayerIDs = new ArrayList<>();
@@ -583,8 +560,6 @@ public class Application {
             throw new BillingReportByCompetitionException(String.format("error Select visit_history: tenantID=%d, competitionID=%s", tenantId, comp.getId()), e);
         } catch (SQLException e) {
             throw new BillingReportByCompetitionException(String.format("error Select count player_score: tenantID=%d, competitionID=%s, ", tenantId, competitionId), e);
-        } finally {
-            this.releaseFileLock(fl);
         }
     }
 
@@ -637,10 +612,7 @@ public class Application {
             tb.setName(t.getName());
             tb.setDisplayName(t.getDisplayName());
 
-            Connection tenantDb = null;
-            try {
-                tenantDb = this.connectToTenantDB(t.getId());
-                PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM competition WHERE tenant_id=?");
+            try (Connection tenantDb = this.connectToTenantDB(t.getId()); PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM competition WHERE tenant_id=?");) {
                 ps.setLong(1, t.getId());
                 ResultSet rs = ps.executeQuery();
 
@@ -668,8 +640,6 @@ public class Application {
                 throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "failed to Select competition: ", e);
             } catch (BillingReportByCompetitionException e) {
                 throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "failed to billingReportByCompetition: ", e);
-            } finally {
-                this.closeTenantDbConnection(tenantDb);
             }
 
             if (tenantBillings.size() >= 10) {
@@ -717,8 +687,6 @@ public class Application {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDb: ", e);
         } catch (SQLException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error Select player: ", e);
-        } finally {
-            this.closeTenantDbConnection(tenantDb);
         }
     }
 
@@ -732,10 +700,8 @@ public class Application {
             throw new WebException(HttpStatus.FORBIDDEN, "role organizer required");
         }
 
-        Connection tenantDb = null;
-        try {
-            List<PlayerDetail> pds = new ArrayList<>();
-            tenantDb = this.connectToTenantDB(v.getTenantId());
+        List<PlayerDetail> pds = new ArrayList<>();
+        try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
             for (String displayName : displayNames) {
                 String id = this.dispenseID();
 
@@ -765,8 +731,8 @@ public class Application {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error dispenseID: ", e);
         } catch (RetrievePlayerException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrievePlayer: ", e);
-        } finally {
-            this.closeTenantDbConnection(tenantDb);
+        } catch (SQLException e) {
+            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDB: ", e);
         }
     }
 
@@ -780,11 +746,8 @@ public class Application {
             throw new WebException(HttpStatus.FORBIDDEN, "role organizer required");
         }
 
-        Connection tenantDb = null;
-        try {
-            tenantDb = this.connectToTenantDB(v.getTenantId());
+        try ( Connection tenantDb = this.connectToTenantDB(v.getTenantId()); PreparedStatement ps = tenantDb.prepareStatement("UPDATE player SET is_disqualified = ?, updated_at = ? WHERE id = ?");) {
             java.sql.Date now = new java.sql.Date(new Date().getTime());
-            PreparedStatement ps = tenantDb.prepareStatement("UPDATE player SET is_disqualified = ?, updated_at = ? WHERE id = ?");
             ps.setBoolean(1, true);
             ps.setDate(2, now);
             ps.setString(3, playerId);
@@ -802,8 +765,6 @@ public class Application {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, String.format("error Update player id=%s: ", playerId), e);
         } catch (RetrievePlayerException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrievePlayer: ", e);
-        } finally {
-            this.closeTenantDbConnection(tenantDb);
         }
     }
 
@@ -817,13 +778,10 @@ public class Application {
             throw new WebException(HttpStatus.FORBIDDEN, "role organizer required");
         }
 
-        Connection tenantDb = null;
-        try {
-            tenantDb = this.connectToTenantDB(v.getTenantId());
+        try (Connection tenantDb = this.connectToTenantDB(v.getTenantId()); PreparedStatement ps = tenantDb.prepareStatement("INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)");) {
             java.sql.Date now = new java.sql.Date(new Date().getTime());
             String id = this.dispenseID();
 
-            PreparedStatement ps = tenantDb.prepareStatement("INSERT INTO competition (id, tenant_id, title, finished_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)");
             ps.setString(1, id);
             ps.setLong(2, v.getTenantId());
             ps.setString(3, title);
@@ -839,8 +797,6 @@ public class Application {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error dispenseID: ", e);
         } catch (SQLException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error Insert competition: ", e);
-        } finally {
-            this.closeTenantDbConnection(tenantDb);
         }
     }
 
@@ -854,9 +810,7 @@ public class Application {
             throw new WebException(HttpStatus.FORBIDDEN, "role organizer required");
         }
 
-        Connection tenantDb = null;
-        try {
-            tenantDb = this.connectToTenantDB(v.getTenantId());
+        try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
             CompetitionRow cr = this.retrieveCompetition(tenantDb, id);
             if (cr == null) {
                 // 存在しない大会
@@ -876,8 +830,6 @@ public class Application {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error Update competition: ", e);
         } catch (RetrieveCompetitionException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrieveCompetition: ", e);
-        } finally {
-            this.closeTenantDbConnection(tenantDb);
         }
     }
 
@@ -891,10 +843,7 @@ public class Application {
             throw new WebException(HttpStatus.FORBIDDEN, "role organizer required");
         }
 
-        Connection tenantDb = null;
-        FileLock fl = null;
-        try {
-            tenantDb = this.connectToTenantDB(v.getTenantId());
+        try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
             CompetitionRow comp = this.retrieveCompetition(tenantDb, competitionId);
             if (comp == null) {
                 // 存在しない大会
@@ -921,7 +870,7 @@ public class Application {
             }
 
             // DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
-            fl = this.flockByTenantID(v.getTenantId());
+            this.flockByTenantID(v.getTenantId());
 
             String line = null;
             long rowNum = 0L;
@@ -988,9 +937,6 @@ public class Application {
             throw new WebException(HttpStatus.BAD_REQUEST, "error Long.valueOf(scoreStr): ", e);
         } catch (DispenseIdException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error dispenseID: ", e);
-        } finally {
-            this.closeTenantDbConnection(tenantDb);
-            this.releaseFileLock(fl);
         }
     }
 
@@ -1037,8 +983,6 @@ public class Application {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error billingReportByCompetition: ", e);
         } catch (NumberFormatException e) {
             throw new WebException(HttpStatus.BAD_REQUEST, "error Long.valueOf(scoreStr): ", e);
-        } finally {
-            this.closeTenantDbConnection(tenantDb);
         }
     }
 
@@ -1053,10 +997,7 @@ public class Application {
             throw new WebException(HttpStatus.FORBIDDEN, "role player required");
         }
 
-        Connection tenantDb = null;
-        FileLock fl = null;
-        try {
-            tenantDb = this.connectToTenantDB(v.getTenantId());
+        try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
             this.authorizePlayer(tenantDb, v.getPlayerId());
 
             PlayerRow p = this.retrievePlayer(tenantDb, playerId);
@@ -1078,7 +1019,7 @@ public class Application {
             }
 
             // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-            fl = this.flockByTenantID(v.getTenantId());
+            this.flockByTenantID(v.getTenantId());
 
             List<PlayerScoreRow> pss = new ArrayList<>();
             for (CompetitionRow c : cs) {
@@ -1124,11 +1065,6 @@ public class Application {
             throw new WebException(e.getHttpStatus(), e);
         } catch (RetrieveCompetitionException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrieveCompetition: ", e);
-        } catch (WebException e) {
-            throw e;
-        } finally {
-            this.closeTenantDbConnection(tenantDb);
-            this.releaseFileLock(fl);
         }
     }
 
@@ -1142,10 +1078,7 @@ public class Application {
             throw new WebException(HttpStatus.FORBIDDEN, "role player required");
         }
 
-        Connection tenantDb = null;
-        FileLock fl = null;
-        try {
-            tenantDb = this.connectToTenantDB(v.getTenantId());
+        try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
             this.authorizePlayer(tenantDb, v.getPlayerId());
 
             // 大会の存在確認
@@ -1183,7 +1116,7 @@ public class Application {
             }
 
             // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-            fl = this.flockByTenantID(v.getTenantId());
+            this.flockByTenantID(v.getTenantId());
             List<PlayerScoreRow> pss = new ArrayList<>();
             {
                 PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC");
@@ -1268,11 +1201,6 @@ public class Application {
             throw new WebException(e.getHttpStatus(), e);
         } catch (RetrieveCompetitionException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrieveCompetition: ", e);
-        } catch (WebException e) {
-            throw e;
-        } finally {
-            this.closeTenantDbConnection(tenantDb);
-            this.releaseFileLock(fl);
         }
     }
 
@@ -1286,17 +1214,13 @@ public class Application {
             throw new WebException(HttpStatus.FORBIDDEN, "role player required");
         }
 
-        Connection tenantDb = null;
-        try {
-            tenantDb = this.connectToTenantDB(v.getTenantId());
+        try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
             this.authorizePlayer(tenantDb, v.getPlayerId());
             return this.competitionsHandler(v, tenantDb);
-        } catch (DatabaseException e) {
+        } catch (DatabaseException | SQLException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDb: ", e);
         } catch (AuthorizePlayerException e) {
             throw new WebException(e.getHttpStatus(), e);
-        } finally {
-            this.closeTenantDbConnection(tenantDb);
         }
     }
 
@@ -1310,14 +1234,10 @@ public class Application {
             throw new WebException(HttpStatus.FORBIDDEN, "role organizer required");
         }
 
-        Connection tenantDb = null;
-        try {
-            tenantDb = this.connectToTenantDB(v.getTenantId());
+        try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
             return this.competitionsHandler(v, tenantDb);
-        } catch (DatabaseException e) {
+        } catch (DatabaseException | SQLException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDb: ", e);
-        } finally {
-            this.closeTenantDbConnection(tenantDb);
         }
     }
 
@@ -1377,21 +1297,17 @@ public class Application {
             return new SuccessResult(true, new MeHandlerResult(td, null, v.getRole(), true));
         }
 
-        Connection tenantDb = null;
-        try {
-            tenantDb = this.connectToTenantDB(v.getTenantId());
+        try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
             PlayerRow p = this.retrievePlayer(tenantDb, v.getPlayerId());
             if (p == null) {
                 return new SuccessResult(true, new MeHandlerResult(td, null, ROLE_NONE, false));
             }
 
             return new SuccessResult(true, new MeHandlerResult(td, new PlayerDetail(p.getId(), p.getDisplayName(), p.getIsDisqualified()), v.getRole(), true));
-        } catch (DatabaseException e) {
+        } catch (DatabaseException | SQLException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDb: ", e);
         } catch (RetrievePlayerException e) {
             throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrievePlayer: ", e);
-        } finally {
-            this.closeTenantDbConnection(tenantDb);
         }
     }
 
