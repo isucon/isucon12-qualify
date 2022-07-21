@@ -152,7 +152,7 @@ public class Application {
         }
 
         try {
-            return DriverManager.getConnection(String.format("jdbc:sqlite:%s", tenantDBPath));
+            return DriverManager.getConnection(String.format("jdbc:log4jdbc:sqlite:%s", tenantDBPath));
         } catch (SQLException e) {
             throw new DatabaseException(String.format("failed to open tenant DB: %s", e.getMessage()));
         }
