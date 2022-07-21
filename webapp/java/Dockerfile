@@ -18,4 +18,4 @@ RUN mkdir -p /home/isucon/webapp/java
 WORKDIR /home/isucon/webapp/java
 COPY --chown=isucon:isucon ./ /home/isucon/webapp/java/
 
-CMD ["gradlew", "bootRun"]
+CMD ["./gradlew", "bootRun"]

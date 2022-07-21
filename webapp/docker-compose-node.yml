@@ -13,5 +13,5 @@ services:
       - /home/isucon/webapp/sql:/home/isucon/webapp/sql
       - /home/isucon/webapp/public.pem:/home/isucon/webapp/public.pem:ro
       - /home/isucon/initial_data:/home/isucon/initial_data
-      - ../tmp/node_modules:/home/isucon/webapp/node/node_modules
+      - /home/isucon/tmp/node/node_modules:/home/isucon/webapp/node/node_modules
     init: true

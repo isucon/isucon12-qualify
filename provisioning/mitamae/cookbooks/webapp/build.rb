@@ -5,8 +5,10 @@
     cwd '/home/isucon/webapp'
     not_if { File.exist?("/.dockerenv") }
   end
+end
 
-  directory "/home/isucon/tmp/#{lang}" do
+%w[go python ruby php perl node node/node_modules java rust rust/target].each do |d|
+  directory "/home/isucon/tmp/node/#{d}" do
     owner 'isucon'
     group 'isucon'
     mode '1777'
