@@ -90,7 +90,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 			return nil, v
 		}
-		sc.CompetitionAddLog.Printf("大会「%s」を作成しました", comp.Title)
+		sc.CompetitionAddLog.Printf("大会「%s」を作成しました。参加者が増えます。", comp.Title)
 	}
 
 	scoredPlayerIDs := []string{}
