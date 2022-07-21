@@ -30,6 +30,20 @@ const (
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
+	pp.SetColorScheme(pp.ColorScheme{
+		Bool:            pp.NoColor,
+		Integer:         pp.NoColor,
+		Float:           pp.NoColor,
+		String:          pp.NoColor,
+		StringQuotation: pp.NoColor,
+		EscapedChar:     pp.NoColor,
+		FieldName:       pp.NoColor,
+		PointerAdress:   pp.NoColor,
+		Nil:             pp.NoColor,
+		Time:            pp.NoColor,
+		StructName:      pp.NoColor,
+		ObjectLength:    pp.NoColor,
+	})
 
 	// ベンチマークオプションの生成
 	option := bench.Option{}

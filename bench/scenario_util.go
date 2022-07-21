@@ -73,13 +73,17 @@ func (sc *Scenario) PrintScenarioScoreMap() {
 
 // シナリオ回転数
 func (sc *Scenario) ScenarioStart(scTag ScenarioTag) {
-	sc.ScenarioCountMutex.Lock()
-	defer sc.ScenarioCountMutex.Unlock()
+	sc.batchwg.Add(1)
+	go func() {
+		defer sc.batchwg.Done()
+		sc.ScenarioCountMutex.Lock()
+		defer sc.ScenarioCountMutex.Unlock()
 
-	if _, ok := sc.ScenarioCountMap[scTag]; !ok {
-		sc.ScenarioCountMap[scTag] = []int{0, 0}
-	}
-	sc.ScenarioCountMap[scTag][0] += 1
+		if _, ok := sc.ScenarioCountMap[scTag]; !ok {
+			sc.ScenarioCountMap[scTag] = []int{0, 0}
+		}
+		sc.ScenarioCountMap[scTag][0] += 1
+	}()
 }
 
 func (sc *Scenario) ScenarioError(scTag ScenarioTag, err error) {
@@ -88,24 +92,31 @@ func (sc *Scenario) ScenarioError(scTag ScenarioTag, err error) {
 		return
 	}
 
-	AdminLogger.Printf("[%s]: %s", scTag, err)
-	sc.ScenarioCountMutex.Lock()
-	defer sc.ScenarioCountMutex.Unlock()
+	sc.batchwg.Add(1)
+	go func() {
+		defer sc.batchwg.Done()
+		sc.ScenarioCountMutex.Lock()
+		defer sc.ScenarioCountMutex.Unlock()
 
-	if _, ok := sc.ScenarioCountMap[scTag]; !ok {
-		sc.ScenarioCountMap[scTag] = []int{0, 0}
-	}
-	sc.ScenarioCountMap[scTag][1] += 1
+		if _, ok := sc.ScenarioCountMap[scTag]; !ok {
+			sc.ScenarioCountMap[scTag] = []int{0, 0}
+		}
+		sc.ScenarioCountMap[scTag][1] += 1
+	}()
 }
 
 func (sc *Scenario) PrintScenarioCount() {
-	sc.ScenarioCountMutex.Lock()
-	defer sc.ScenarioCountMutex.Unlock()
-	scmap := map[ScenarioTag]string{}
-	for key, value := range sc.ScenarioCountMap {
-		scmap[key] = fmt.Sprintf("count: %d (error: %d)", value[0], value[1])
-	}
-	AdminLogger.Printf("ScenarioCount: %s", pp.Sprint(scmap))
+	sc.batchwg.Add(1)
+	go func() {
+		defer sc.batchwg.Done()
+		sc.ScenarioCountMutex.Lock()
+		defer sc.ScenarioCountMutex.Unlock()
+		scmap := map[ScenarioTag]string{}
+		for key, value := range sc.ScenarioCountMap {
+			scmap[key] = fmt.Sprintf("count: %d (error: %d)", value[0], value[1])
+		}
+		AdminLogger.Printf("ScenarioCount: %s", pp.Sprint(scmap))
+	}()
 }
 
 // Accountを作成してAccountとagent.Agentを返す
@@ -153,27 +164,39 @@ type CompactLogger struct {
 	logger *log.Logger
 	logs   []string
 	mu     sync.Mutex
+	wg     sync.WaitGroup
 }
 
-func NewCompactLog(lgr *log.Logger) *CompactLogger {
+func NewCompactLog(lgr *log.Logger, wg sync.WaitGroup) *CompactLogger {
 	return &CompactLogger{
 		logger: lgr,
 		logs:   []string{},
 		mu:     sync.Mutex{},
+		wg:     wg,
 	}
 }
 
 func (cl *CompactLogger) Printf(format string, args ...any) {
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
-	cl.logs = append(cl.logs, fmt.Sprintf(format, args...))
+	// lockするし急ぎではないので後回し
+	cl.wg.Add(1)
+	go func(l string) {
+		defer cl.wg.Done()
+		cl.mu.Lock()
+		defer cl.mu.Unlock()
+		cl.logs = append(cl.logs, l)
+	}(fmt.Sprintf(format, args...))
 }
 
 func (cl *CompactLogger) Log() {
-	cl.mu.Lock()
-	defer cl.mu.Unlock()
-	if 0 < len(cl.logs) {
-		cl.logger.Printf("%s (類似のログ計%d件)", cl.logs[0], len(cl.logs))
-	}
-	cl.logs = []string{}
+	// lockするし急ぎではないので後回し
+	cl.wg.Add(1)
+	go func() {
+		defer cl.wg.Done()
+		cl.mu.Lock()
+		defer cl.mu.Unlock()
+		if 0 < len(cl.logs) {
+			cl.logger.Printf("%s (類似のログ計%d件)", cl.logs[0], len(cl.logs))
+		}
+		cl.logs = []string{}
+	}()
 }
