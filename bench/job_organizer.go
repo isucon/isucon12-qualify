@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/isucon/isucandar"
@@ -12,14 +13,15 @@ import (
 )
 
 type OrganizerJobConfig struct {
-	orgAc           *Account
-	scTag           ScenarioTag
-	tenantName      string // 対象テナント
-	scoreRepeat     int
-	scoreInterval   int // スコアCSVを入稿するインターバル
-	addScoreNum     int // 一度の再投稿時に増えるスコアの数
-	playerWorkerNum int // CSV入稿と同時にrankingを取るplayer worker数
-	maxScoredPlayer int // id=1等の巨大テナントの場合は全プレイヤーにスコアを与えると重いので上限をつける 0=上限なし
+	orgAc              *Account
+	scTag              ScenarioTag
+	tenantName         string // 対象テナント
+	scoreRepeat        int
+	scoreInterval      int // スコアCSVを入稿するインターバル
+	addScoreNum        int // 一度の再投稿時に増えるスコアの数
+	playerWorkerNum    int // CSV入稿と同時にrankingを取るplayer worker数
+	newPlayerWorkerNum int // 新規に建てられる永続PlayerWorker数
+	maxScoredPlayer    int // id=1等の巨大テナントの場合は全プレイヤーにスコアを与えると重いので上限をつける 0=上限なし
 }
 
 type OrganizerJobResult struct {
@@ -73,6 +75,22 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		}
 	}
 
+	// PlayerWorker追加
+	{
+		i := 0
+		for _, playerID := range qualifyPlayerIDs {
+			if conf.newPlayerWorkerNum < i {
+				break
+			}
+			i++
+			wkr, err := sc.PlayerScenarioWorker(step, 1, conf.tenantName, playerID)
+			if err != nil {
+				return nil, err
+			}
+			sc.WorkerCh <- wkr
+		}
+	}
+
 	{
 		res, err, txt := PostOrganizerCompetitionsAddAction(ctx, comp.Title, orgAg)
 		msg := fmt.Sprintf("%s %s", conf.orgAc, txt)
@@ -102,6 +120,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		})
 	}
 	scoredPlayerIDs = score.PlayerIDs()
+	mu := sync.Mutex{}
 
 	eg := errgroup.Group{}
 	doneCh := make(chan struct{})
@@ -126,6 +145,8 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 				msg := fmt.Sprintf("%s %s", playerAc, txt)
 				v := ValidateResponseWithMsg("大会内のランキング取得", step, res, err, msg, WithStatusCode(200),
 					WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+						mu.Lock()
+						defer mu.Unlock()
 						for _, rank := range r.Data.Ranks {
 							playerIDs = append(playerIDs, rank.PlayerID)
 						}
@@ -152,6 +173,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 	eg.Go(func() error {
 		defer close(doneCh)
 		for count := 0; count < conf.scoreRepeat; count++ {
+			mu.Lock()
 			for i := 0; i < conf.addScoreNum; i++ {
 				index := rand.Intn(len(playerIDs))
 				player := players[playerIDs[index]]
@@ -160,6 +182,7 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 					Score:    rand.Intn(1000),
 				})
 			}
+			mu.Unlock()
 			csv := score.CSV()
 			scoredPlayerIDs = score.PlayerIDs()
 

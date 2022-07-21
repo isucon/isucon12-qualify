@@ -66,14 +66,15 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 	// 大会を開催し、ダッシュボードを受け取ったら再び大会を開催する
 	orgJobConf := &OrganizerJobConfig{
 		// 入稿サイズ: scoreRepeat * maxScoredPlayer
-		orgAc:           orgAc,
-		scTag:           scTag,
-		tenantName:      tenantName,
-		scoreRepeat:     ConstPopularTenantScenarioScoreRepeat,
-		addScoreNum:     ConstPopularTenantScenarioAddScoreNum,
-		scoreInterval:   1000, // 結果の検証時には3s、負荷かける用は1s
-		playerWorkerNum: 5,
-		maxScoredPlayer: 1000,
+		orgAc:              orgAc,
+		scTag:              scTag,
+		tenantName:         tenantName,
+		scoreRepeat:        ConstPopularTenantScenarioScoreRepeat,
+		addScoreNum:        ConstPopularTenantScenarioAddScoreNum,
+		scoreInterval:      1000,                                      // 結果の検証時には3s、負荷かける用は1s
+		playerWorkerNum:    5,                                         // CSV入稿と同時に立つworker数
+		newPlayerWorkerNum: ConstPopularTenantScenarioPlayerWorkerNum, // 新規に建てられるplayer worker数
+		maxScoredPlayer:    1000,
 	}
 
 	for {
