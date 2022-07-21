@@ -17,8 +17,8 @@ listenfd = "1"
 nix = "0.24"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
-serde_derive = "1"
 sqlx = { version = "0.6", default-features = false, features = ["macros", "runtime-actix-rustls", "mysql", "sqlite"] }
+thiserror = "1"
 tokio = { version = "1", features = ["fs", "process"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
