@@ -1,0 +1,51 @@
+name: PHP CI
+on:
+  push:
+    branches: [main]
+    paths:
+      - bench/**/*
+      - webapp/php/**/*
+      - development/backend-php/**/*
+      - development/docker-compose-common.yml
+      - development/docker-compose-php.yml
+      - development/Makefile
+      - .github/workflows/php.yml
+  pull_request:
+    paths:
+      - bench/**/*
+      - webapp/php/**/*
+      - development/backend-php/**/*
+      - development/docker-compose-common.yml
+      - development/docker-compose-php.yml
+      - development/Makefile
+      - .github/workflows/php.yml
+jobs:
+  test:
+    name: Build
+    runs-on: [self-hosted, core2]
+    steps:
+      - name: cleanup
+        run: |
+          sudo rm -fr /home/github/work/isucon12-qualify/isucon12-qualify
+          mkdir /home/github/work/isucon12-qualify/isucon12-qualify
+
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: "setup containers"
+        run: |
+          make initial_data
+          make down/php
+          make up/php OPT='-d --build'
+          # ホスト側の webapp/php をマウントすることで webapp/php/vendor/ がない状態で上書きされてしまうので、ここで composer install を行う
+          docker compose -f docker-compose-php.yml -f docker-compose-common.yml exec webapp ./composer.phar install
+          make install_initial_data
+        working-directory: ./development
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "run bench"
+        working-directory: ./development
+        run: |
+          make run-bench-ci

@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<ruleset name="Custom standard">
+    <description>Custom coding standard</description>
+
+    <!-- display progress -->
+    <arg value="p"/>
+    <!-- use colors in output -->
+    <arg name="colors"/>
+
+    <!-- inherit rules from: -->
+    <rule ref="PSR1.Classes.ClassDeclaration">
+        <exclude-pattern>src/Isuports/classes\.php</exclude-pattern>
+    </rule>
+    <rule ref="PSR12">
+        <exclude name="Generic.Files.LineLength"/>
+    </rule>
+    <rule ref="Generic.Arrays.DisallowLongArraySyntax"/>
+
+    <!-- Paths to check -->
+    <file>app</file>
+    <file>public</file>
+    <file>sqltrace</file>
+    <file>src</file>
+</ruleset>
