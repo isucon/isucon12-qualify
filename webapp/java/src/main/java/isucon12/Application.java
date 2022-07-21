@@ -127,7 +127,7 @@ public class Application {
 
     /*
      * ENV
-     * 
+     *
      * @Value("${<<環境変数>>:<<デフォルト値>>}")
      */
     @Value("${ISUCON_TENANT_DB_DIR:../tenant_db}")
@@ -475,6 +475,9 @@ public class Application {
         }
 
         long tenantId = holder.getKey().longValue();
+        // NOTE: 先にadminDBに書き込まれることでこのAPIの処理中に
+        //       /api/admin/tenants/billingにアクセスされるとエラーになりそう
+        //       ロックなどで対処したほうが良さそう
         this.createTenantDB(tenantId);
 
         TenantWithBilling twb = new TenantWithBilling();
