@@ -208,7 +208,6 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 				continue
 			}
 			i++
-			// batchに逃がす関係で仕方なくエラーを握りつぶす
 			wkr, err := sc.PlayerScenarioWorker(step, 1, conf.tenantName, playerID)
 			if err != nil {
 				return err
