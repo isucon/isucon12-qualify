@@ -119,6 +119,7 @@ func main() {
 		isValidateError := false
 		isCriticalError := false
 		isNormalError := false
+
 		for _, errCode := range failure.GetErrorCodes(err) {
 			switch errCode {
 			case string(bench.ErrValidation): // validationErrorで出るもの
@@ -191,7 +192,7 @@ func main() {
 	// 減点計算
 	// NormalErrorは1%減点、CriticalErrorは10%減点
 	deductPercent := int64((noramlErrorCount * 1) + (criticalErrorCount * 10))
-	deduction := (addition * 100) * deductPercent / 100
+	deduction := int64((addition * deductPercent) / 100)
 
 	bench.ContestantLogger.Printf("Error %d (Critical:%d)", noramlErrorCount+criticalErrorCount, criticalErrorCount)
 
@@ -207,7 +208,7 @@ func main() {
 		reason = "fail"
 	}
 	bench.ContestantLogger.Printf("PASSED: %v", isPassed)
-	bench.ContestantLogger.Printf("SCORE: %d (+%d %d)", score, addition, -deduction)
+	bench.ContestantLogger.Printf("SCORE: %d (+%d %d(%d%%))", score, addition, -deduction, deductPercent)
 	br := AllTagBreakdown(result)
 	tags := make([]string, 0, len(br))
 	for tag, score := range br {
