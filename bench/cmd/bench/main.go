@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"sort"
@@ -159,7 +158,7 @@ func main() {
 	// benchの問題でエラーが出た場合はexit 1
 	if len(unexpectedErrors) != 0 {
 		for _, err := range unexpectedErrors {
-			log.Printf("bench unexpected error: %v\n", err)
+			bench.AdminLogger.Printf("bench unexpected error: %v\n", err)
 		}
 		os.Exit(1)
 	}
