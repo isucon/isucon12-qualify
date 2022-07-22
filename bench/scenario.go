@@ -29,6 +29,9 @@ var (
 const (
 	ErrFailedPrepare failure.StringCode = "fail-prepare"
 	ErrFailedLoad    failure.StringCode = "fail-load"
+
+	ErrNormalError   failure.StringCode = "error-normal"
+	ErrCriticalError failure.StringCode = "error-critical"
 )
 
 type TenantData struct {
@@ -295,8 +298,10 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 				wkr.Process(ctx)
 			}(w)
 		case <-sc.ErrorCh:
+			step.AddError(ErrNormalError)
 			errorCount++
 		case <-sc.CriticalErrorCh:
+			step.AddError(ErrCriticalError)
 			errorCount++
 			criticalCount++
 		case <-logTicker.C:
