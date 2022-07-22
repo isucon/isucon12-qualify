@@ -1,0 +1,4 @@
+Flask
+Flask-SQLAlchemy
+mysql-connector-python
+pyjwt[crypto]

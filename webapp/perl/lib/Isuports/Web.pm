@@ -1106,7 +1106,7 @@ sub player_competitions_handler($self, $c) {
     return competitions_handler($c, $v, $tenant_db);
 }
 
-# 主催者向けAPI
+# テナント管理者向けAPI
 # GET /api/organizer/competitions
 # 大会の一覧を取得する
 sub organizer_competitions_handler($self, $c) {

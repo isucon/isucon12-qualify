@@ -1460,7 +1460,7 @@ func playerCompetitionsHandler(c echo.Context) error {
 	return competitionsHandler(c, v, tenantDB)
 }
 
-// 主催者向けAPI
+// テナント管理者向けAPI
 // GET /api/organizer/competitions
 // 大会の一覧を取得する
 func organizerCompetitionsHandler(c echo.Context) error {

@@ -10,7 +10,7 @@
         v-if="role !== 'organizer'"
         type="button"
         @click="handleAssumeOrganizerRole"
-      >主催者モードに切り替える</button>
+      >テナント管理者モードに切り替える</button>
       <button
         v-if="isLoggedIn"
         type="button"
