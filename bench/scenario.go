@@ -303,14 +303,8 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 			sc.PlayerDelCountPrint()
 		}
 
-		if ConstMaxError <= errorCount {
-			ContestantLogger.Printf("エラーが%d件を越えたので負荷走行を打ち切ります", ConstMaxError)
-			step.AddError(ErrFailedLoad)
-			end = true
-		}
-
-		if ConstMaxCriticalError <= criticalCount {
-			ContestantLogger.Printf("Criticalなエラーが%d件を越えたので負荷走行を打ち切ります", ConstMaxCriticalError)
+		if 100 <= (errorCount*1)+(criticalCount*10) {
+			ContestantLogger.Println("エラーによる減点が100%になったので負荷走行を打ち切ります")
 			step.AddError(ErrFailedLoad)
 			end = true
 		}
