@@ -1370,7 +1370,7 @@ func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 
 		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, ag)
 		msg := fmt.Sprintf("%s %s", ac, txt)
-		v := ValidateResponseWithMsg("新規テナント作成: 不正リクエスト(不正なRSA鍵)", step, res, err, msg, WithStatusCode(401, 500))
+		v := ValidateResponseWithMsg("新規テナント作成: 不正リクエスト(不正なRSA鍵)", step, res, err, msg, WithStatusCode(401))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
@@ -1395,7 +1395,7 @@ func invalidJWTCheck(ctx context.Context, sc *Scenario, step *isucandar.Benchmar
 
 		res, err, txt := PostAdminTenantsAddAction(ctx, tenantName, tenantDisplayName, ag)
 		msg := fmt.Sprintf("%s %s", ac, txt)
-		v := ValidateResponseWithMsg("新規テナント作成: 不正リクエスト(不正な鍵認証方式)", step, res, err, msg, WithStatusCode(401, 500))
+		v := ValidateResponseWithMsg("新規テナント作成: 不正リクエスト(不正な鍵認証方式)", step, res, err, msg, WithStatusCode(401))
 		if !v.IsEmpty() && sc.Option.StrictPrepare {
 			return v
 		}
