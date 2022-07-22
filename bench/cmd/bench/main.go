@@ -114,6 +114,7 @@ func main() {
 	criticalErrorCount := 0
 
 	errAll := result.Errors.All()
+	pp.Println(result.Errors.Messages())
 	for _, err := range errAll {
 		fail := false
 		isValidateError := false
