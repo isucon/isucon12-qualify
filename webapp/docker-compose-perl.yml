@@ -1,0 +1,17 @@
+services:
+  webapp:
+    build: ./perl
+    environment:
+      ISUCON_DB_HOST: 127.0.0.1
+      ISUCON_DB_PORT: 3306
+      ISUCON_DB_USER: isucon
+      ISUCON_DB_PASSWORD: isucon
+      ISUCON_DB_NAME: isuports
+    network_mode: host
+    volumes:
+      - /home/isucon/webapp/tenant_db:/home/isucon/webapp/tenant_db
+      - /home/isucon/webapp/sql:/home/isucon/webapp/sql
+      - /home/isucon/webapp/public.pem:/home/isucon/webapp/public.pem:ro
+      - /home/isucon/initial_data:/home/isucon/initial_data
+      - /home/isucon/tmp:/home/isucon/tmp
+    init: true

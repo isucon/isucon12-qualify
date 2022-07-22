@@ -18,6 +18,13 @@ remote_file "/opt/isucon-env-checker/run-isucon-env-checker.sh" do
   source "run-isucon-env-checker.sh"
 end
 
+remote_file "/opt/isucon-env-checker/warmup.sh" do
+  owner "root"
+  group "root"
+  mode "0700"
+  source "warmup.sh"
+end
+
 remote_file "/etc/systemd/system/isucon-env-checker.service" do
   owner "root"
   group "root"
