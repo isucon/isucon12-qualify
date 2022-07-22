@@ -995,8 +995,9 @@ public class Application {
 
                 List<CompetitionRow> cs = new ArrayList<>();
                 {
-                    PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM competition ORDER BY created_at ASC");
+                    PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at ASC");
                     ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
+                    ps.setLong(1, v.getTenantId());
                     ResultSet resultSet = ps.executeQuery();
 
                     while (resultSet.next()) {
@@ -1213,7 +1214,7 @@ public class Application {
         }
     }
 
-    // 主催者向けAPI
+    // テナント管理者向けAPI
     // GET /api/organizer/competitions
     // 大会の一覧を取得する
     @GetMapping("/api/organizer/competitions")
