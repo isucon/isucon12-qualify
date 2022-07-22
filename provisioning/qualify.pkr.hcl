@@ -48,6 +48,11 @@ source "amazon-ebs" "qualify" {
   ssh_interface           = "public_ip"
   ssh_username            = "ubuntu"
   temporary_key_pair_type = "ed25519"
+
+  launch_block_device_mappings {
+    volume_size = 20
+    device_name = "/dev/sda1"
+  }
 }
 
 build {
@@ -102,6 +107,7 @@ build {
 
       # prepare webapp
       "sudo ./mitamae local roles/webapp.rb",
+      "sudo -u isucon /home/isucon/webapp/sql/init.sh",
 
       # Remove authorized_keys for packer
       "sudo truncate -s 0 /home/ubuntu/.ssh/authorized_keys",

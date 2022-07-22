@@ -288,6 +288,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 				defer sc.CountdownWorker(ctx, wkr.String())
 				wkr.Process(ctx)
 			}(w)
+
 		case <-sc.ErrorCh:
 			step.AddError(ErrNormalError)
 			errorCount++
