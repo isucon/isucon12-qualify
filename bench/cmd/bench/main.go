@@ -109,7 +109,7 @@ func main() {
 	unexpectedErrors := []error{}
 	validateErrors := []error{}
 	existFailLog := false
-	// noramlErrorCount := 0 // NOTE: validateErrorsを信頼する
+	// normalErrorCount := 0 // NOTE: validateErrorsを信頼する
 	criticalErrorCount := 0
 
 	errAll := result.Errors.All()
@@ -124,12 +124,12 @@ func main() {
 			switch errCode {
 			case string(bench.ErrValidation): // validationErrorで出るもの
 				isValidateError = true
-			// case string(bench.ErrNormalError): // 通常エラーのカウント
-			// 	isNormalError = true
 			case string(bench.ErrCriticalError): // Criticalエラーのカウント
 				isCriticalError = true
 			case string(bench.ErrFailedLoad), string(bench.ErrFailedPrepare): // portal上はfailを出す
 				fail = true
+			case string(bench.ErrNormalError): // 通常エラーのカウント
+			// 	isNormalError = true
 			default: // isucandar系など
 			}
 		}
@@ -143,7 +143,7 @@ func main() {
 			continue
 		}
 		// if isNormalError {
-		// 	noramlErrorCount++
+		// 	normalErrorCount++
 		// 	continue
 		// }
 		if fail {
