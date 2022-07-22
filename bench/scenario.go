@@ -283,7 +283,7 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 			end = true
 		case w := <-sc.WorkerCh: // workerを起動する
 			// debug: 一つのworkerのみを立ち上げる
-			// if w.String() != "AdminBillingValidateWorker" {
+			// if w.String() != "PlayerValidateScenarioWorker" {
 			// 	continue
 			// }
 			sc.CountWorker(w.String())
