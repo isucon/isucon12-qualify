@@ -3,10 +3,13 @@ package bench
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/isucon/isucandar"
 	"github.com/isucon/isucandar/worker"
 	"github.com/isucon/isucon12-qualify/data"
+	isuports "github.com/isucon/isucon12-qualify/webapp/go"
 )
 
 type playerValidateScenarioWorker struct {
@@ -104,7 +107,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 
 	score := ScoreRows{}
 	for i, id := range playerIDs {
-		if 100 < i {
+		if 100 <= i {
 			break
 		}
 		score = append(score, &ScoreRow{
@@ -139,6 +142,10 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 	if err != nil {
 		return err
 	}
+	disqualifyingdPlayerAc, disqualifyingdPlayerAg, err := sc.GetAccountAndAgent(AccountRolePlayer, tenant.TenantName, disqualifyingdPlayerID)
+	if err != nil {
+		return err
+	}
 
 	// GETPlayer
 	//		IsDisqualifyが更新されていること
@@ -162,7 +169,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 					return fmt.Errorf("PlayerIDが違います (want:%s got:%s)", pid, r.Data.Player.ID)
 				}
 				if false != r.Data.Player.IsDisqualified {
-					return fmt.Errorf("失格状態が違います playerID: %s (want %v got:%v)", pid, false, r.Data.Player.IsDisqualified)
+					return fmt.Errorf("失格状態が違います playerID: %s (want:%v got:%v)", pid, false, r.Data.Player.IsDisqualified)
 				}
 				return nil
 			}),
@@ -185,7 +192,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 					return fmt.Errorf("PlayerIDが違います (want:%s got:%s)", pid, r.Data.Player.ID)
 				}
 				if false != r.Data.Player.IsDisqualified {
-					return fmt.Errorf("失格状態が違います playerID: %s (want %v got:%v)", pid, false, r.Data.Player.IsDisqualified)
+					return fmt.Errorf("失格状態が違います playerID: %s (want:%v got:%v)", pid, false, r.Data.Player.IsDisqualified)
 				}
 				return nil
 			}),
@@ -197,13 +204,18 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 			return v
 		}
 	}
+
+	var beforeRanks []isuports.CompetitionRank
 	{
 		res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", checkerPlayerAg)
 		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
 		v := ValidateResponseWithMsg("大会ランキング確認", step, res, err, msg, WithStatusCode(200),
 			WithContentType("application/json"),
-			WithSuccessResponse(func(r ResponseAPIPlayer) error {
-				_ = r
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				if false != r.Data.Competition.IsFinished {
+					return fmt.Errorf("大会の開催状態が違います CompetitionID:%s (want:%v got:%v)", comp.ID, false, r.Data.Competition.IsFinished)
+				}
+				beforeRanks = r.Data.Ranks
 				return nil
 			}),
 		)
@@ -219,11 +231,47 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
 		v := ValidateResponseWithMsg("大会一覧確認", step, res, err, msg, WithStatusCode(200),
 			WithContentType("application/json"),
-			WithSuccessResponse(func(r ResponseAPIPlayer) error {
+			WithSuccessResponse(func(r ResponseAPICompetitions) error {
 				_ = r
 				return nil
 			}),
 		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
+
+	// disqualify後に403になる
+	{
+		pid := disqualifyingdPlayerID
+		res, err, txt := GetPlayerAction(ctx, pid, disqualifyingdPlayerAg)
+		msg := fmt.Sprintf("%s %s", disqualifyingdPlayerAc, txt)
+		v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(200))
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
+	{
+		res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", disqualifyingdPlayerAg)
+		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
+		v := ValidateResponseWithMsg("大会ランキング確認", step, res, err, msg, WithStatusCode(200))
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
+	{
+		res, err, txt := GetPlayerCompetitionsAction(ctx, disqualifyingdPlayerAg)
+		msg := fmt.Sprintf("%s %s", disqualifyingdPlayerAc, txt)
+		v := ValidateResponseWithMsg("大会一覧確認", step, res, err, msg, WithStatusCode(200))
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
 		} else {
@@ -245,7 +293,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 					return fmt.Errorf("プレイヤーが失格になっていません player.id: %s", r.Data.Player.ID)
 				}
 				if disqualifyingdPlayerID != r.Data.Player.ID {
-					return fmt.Errorf("失格にしたプレイヤーが違います (want: %s, got: %s)", disqualifyingdPlayerID, r.Data.Player.ID)
+					return fmt.Errorf("失格にしたプレイヤーが違います (want:%s, got:%s)", disqualifyingdPlayerID, r.Data.Player.ID)
 				}
 				return nil
 			}),
@@ -270,7 +318,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 					return fmt.Errorf("PlayerIDが違います (want:%s got:%s)", pid, r.Data.Player.ID)
 				}
 				if true != r.Data.Player.IsDisqualified {
-					return fmt.Errorf("失格状態が違います playerID: %s (want %v got:%v)", pid, true, r.Data.Player.IsDisqualified)
+					return fmt.Errorf("失格状態が違います playerID: %s (want:%v got:%v)", pid, true, r.Data.Player.IsDisqualified)
 				}
 				return nil
 			}),
@@ -282,12 +330,46 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 			return v
 		}
 	}
+	{
+		pid := disqualifyingdPlayerID
+		res, err, txt := GetPlayerAction(ctx, pid, disqualifyingdPlayerAg)
+		msg := fmt.Sprintf("%s %s", disqualifyingdPlayerAc, txt)
+		v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(403))
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
+	{
+		res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", disqualifyingdPlayerAg)
+		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
+		v := ValidateResponseWithMsg("大会ランキング確認", step, res, err, msg, WithStatusCode(403))
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
+	{
+		res, err, txt := GetPlayerCompetitionsAction(ctx, disqualifyingdPlayerAg)
+		msg := fmt.Sprintf("%s %s", disqualifyingdPlayerAc, txt)
+		v := ValidateResponseWithMsg("大会一覧確認", step, res, err, msg, WithStatusCode(403))
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
 
 	// スコアを入稿する
 	// 初期スコアの逆順
 	score = ScoreRows{}
 	for i, id := range playerIDs {
-		if 100 < i {
+		if 100 <= i {
 			break
 		}
 		score = append(score, &ScoreRow{
@@ -321,8 +403,16 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
 		v := ValidateResponseWithMsg("大会ランキング確認", step, res, err, msg, WithStatusCode(200),
 			WithContentType("application/json"),
-			WithSuccessResponse(func(r ResponseAPIPlayer) error {
-				_ = r
+			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
+				if false != r.Data.Competition.IsFinished {
+					return fmt.Errorf("大会の開催状態が違います CompetitionID:%s (want:%v got:%v)", comp.ID, false, r.Data.Competition.IsFinished)
+				}
+				if len(score) != len(r.Data.Ranks) {
+					return fmt.Errorf("大会のランキング数が違います CompetitionID:%s (want:%v got:%v)", comp.ID, len(score), len(r.Data.Ranks))
+				}
+				if diff := cmp.Diff(beforeRanks, r.Data.Ranks); diff == "" {
+					return fmt.Errorf("大会のランキングが更新されていません CompetitionID:%s", comp.ID)
+				}
 				return nil
 			}),
 		)
@@ -359,7 +449,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
 		v := ValidateResponseWithMsg("大会一覧確認", step, res, err, msg, WithStatusCode(200),
 			WithContentType("application/json"),
-			WithSuccessResponse(func(r ResponseAPIPlayer) error {
+			WithSuccessResponse(func(r ResponseAPICompetitions) error {
+				// TODO
 				_ = r
 				return nil
 			}),
@@ -372,8 +463,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		}
 	}
 
-	// TODO
-	// SleepWithCtx(ctx, time.Second*3)
+	SleepWithCtx(ctx, time.Second*5)
 
 	return nil
 }
