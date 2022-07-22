@@ -58,6 +58,7 @@ func (o Option) NewAgent(targetURL string, forInitialize bool) (*agent.Agent, er
 	agentOptions := []agent.AgentOption{
 		agent.WithBaseURL(targetURL),
 		agent.WithTransport(trs),
+		agent.WithNoCache(),
 	}
 
 	// initialize 用の agent.Agent はタイムアウト時間が違うのでオプションを調整

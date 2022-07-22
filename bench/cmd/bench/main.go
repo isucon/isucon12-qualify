@@ -88,6 +88,8 @@ func main() {
 		return
 	}
 
+	reason := "unknown" // ポータルに表示する結果
+
 	// ベンチマークにシナリオを追加
 	benchmark.AddScenario(scenario)
 
@@ -108,15 +110,23 @@ func main() {
 	unexpectedErrors := []error{}
 	validateErrors := []error{}
 	existFailLog := false
+	noramlErrorCount := 0
+	criticalErrorCount := 0
 
 	errAll := result.Errors.All()
 	for _, err := range errAll {
 		fail := false
 		isValidateError := false
+		isCriticalError := false
+		isNormalError := false
 		for _, errCode := range failure.GetErrorCodes(err) {
 			switch errCode {
 			case string(bench.ErrValidation): // validationErrorで出るもの
 				isValidateError = true
+			case string(bench.ErrNormalError): // 通常エラーのカウント
+				isNormalError = true
+			case string(bench.ErrCriticalError): // Criticalエラーのカウント
+				isCriticalError = true
 			case string(bench.ErrFailedLoad), string(bench.ErrFailedPrepare): // portal上はfailを出す
 				fail = true
 			default: // isucandar系など
@@ -125,6 +135,14 @@ func main() {
 
 		if isValidateError {
 			validateErrors = append(validateErrors, err)
+			continue
+		}
+		if isCriticalError {
+			criticalErrorCount++
+			continue
+		}
+		if isNormalError {
+			noramlErrorCount++
 			continue
 		}
 		if fail {
@@ -171,12 +189,19 @@ func main() {
 	addition := SumScore(result)
 	deduction := int64(len(validateErrors) * 10)
 
+	bench.ContestantLogger.Printf("Error %d (Critical:%d)", noramlErrorCount+criticalErrorCount, criticalErrorCount)
+
 	score := addition - deduction
 	if score < 0 {
 		score = 0
 	}
 
 	isPassed := 0 < score && !existFailLog
+	if isPassed {
+		reason = "pass"
+	} else {
+		reason = "fail"
+	}
 	bench.ContestantLogger.Printf("PASSED: %v", isPassed)
 	bench.ContestantLogger.Printf("SCORE: %d (+%d %d)", score, addition, -deduction)
 	br := AllTagBreakdown(result)
@@ -200,7 +225,7 @@ func main() {
 				Deduction: deduction,
 			},
 			Execution: &isuxportalResources.BenchmarkResult_Execution{
-				Reason: "TODO",
+				Reason: reason,
 			},
 			SurveyResponse: &isuxportalResources.SurveyResponse{
 				Language: "galaxy", // TODO /initialize で取得した言語を入れる

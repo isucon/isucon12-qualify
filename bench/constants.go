@@ -22,16 +22,10 @@ const (
 )
 
 var (
-	// NOTE: 初期データ範囲について(0-based)
-	//       0: 巨大テナント
-	//   1 ~ 39: 人気テナント
-	//  40 ~ 69: AdminBilling検証用テナント
-	//  70 ~ 99: 破壊的操作テナント
-	// 100 ~ : prepare validate tenant
-
-	ConstPopularTenantScenarioIDRange        = []int{1, 29}
-	ConstValidateScenarioAdminBillingIDRange = []int{12, 29}
-	ConstPlayerValidateScenarioIDRange       = []int{30, 49}
-	ConstAdminBillingValidateScenarioIDRange = []int{50, 69}
-	ConstPeacefulTenantScenarioIDRange       = []int{70, 99}
+	// NOTE: 初期データ範囲
+	// 1: ISUコングロマリット(巨大テナント)
+	ConstPopularTenantScenarioIDRange        = []int{1, 29}  // 破壊的変更NGで
+	ConstValidateScenarioAdminBillingIDRange = []int{12, 29} // 整合性チェックで利用
+	ConstAdminBillingValidateScenarioIDRange = []int{30, 69} // 大会追加OK
+	ConstPlayerValidateScenarioIDRange       = []int{70, 99} // 破壊的変更OK
 )

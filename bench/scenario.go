@@ -29,6 +29,9 @@ var (
 const (
 	ErrFailedPrepare failure.StringCode = "fail-prepare"
 	ErrFailedLoad    failure.StringCode = "fail-load"
+
+	ErrNormalError   failure.StringCode = "error-normal"
+	ErrCriticalError failure.StringCode = "error-critical"
 )
 
 type TenantData struct {
@@ -225,15 +228,6 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		sc.WorkerCh <- wkr
 	}
 
-	// 破壊的な変更を許容するシナリオ
-	{
-		wkr, err := sc.PeacefulTenantScenarioWorker(step, 1)
-		if err != nil {
-			return err
-		}
-		sc.WorkerCh <- wkr
-	}
-
 	// 初期から回る新規テナントシナリオ
 	{
 		wkr, err := sc.NewTenantScenarioWorker(step, nil, 1)
@@ -295,8 +289,10 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 				wkr.Process(ctx)
 			}(w)
 		case <-sc.ErrorCh:
+			step.AddError(ErrNormalError)
 			errorCount++
 		case <-sc.CriticalErrorCh:
+			step.AddError(ErrCriticalError)
 			errorCount++
 			criticalCount++
 		case <-logTicker.C:
