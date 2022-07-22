@@ -7,7 +7,7 @@
   end
 end
 
-%w[go python ruby php perl node node/node_modules java rust rust/target].each do |d|
+%w[go python ruby php perl node node/node_modules java rust rust/target rust/registry].each do |d|
   directory "/home/isucon/tmp/#{d}" do
     owner 'isucon'
     group 'isucon'
