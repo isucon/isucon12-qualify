@@ -119,6 +119,7 @@ public class Application {
     private static final String ROLE_NONE = "none";
 
     private static final String TENANT_NAME_REG_PATTERN = "^[a-z][a-z0-9-]{0,61}[a-z0-9]$";
+    private static final int SQLITE_BUSY_TIMEOUT = 5;
 
     /*
      * ENV
@@ -335,6 +336,7 @@ public class Application {
     private PlayerRow retrievePlayer(Connection tenantDb, String id) throws RetrievePlayerException {
         try {
             PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM player WHERE id = ?");
+            ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
             ps.setString(1, id);
             ResultSet rs = ps.executeQuery();
             if (!rs.isBeforeFirst()) {
@@ -373,6 +375,7 @@ public class Application {
     private CompetitionRow retrieveCompetition(Connection tenantDb, String id) throws RetrieveCompetitionException {
         try {
             PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM competition WHERE id = ?");
+            ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
             ps.setString(1, id);
             ResultSet rs = ps.executeQuery();
             if (!rs.isBeforeFirst()) {
@@ -496,6 +499,7 @@ public class Application {
                 // スコアを登録した参加者のIDを取得する
                 List<String> scoredPlayerIDs = new ArrayList<>();
                 PreparedStatement ps = tenantDb.prepareStatement("SELECT DISTINCT(player_id) AS player_id FROM player_score WHERE tenant_id = ? AND competition_id = ?");
+                ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
                 ps.setLong(1, tenantId);
                 ps.setString(2, competitionId);
                 ResultSet rs = ps.executeQuery();
@@ -587,6 +591,7 @@ public class Application {
             tb.setDisplayName(t.getDisplayName());
 
             try (Connection tenantDb = this.connectToTenantDB(t.getId()); PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM competition WHERE tenant_id=?");) {
+                ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
                 ps.setLong(1, t.getId());
                 ResultSet rs = ps.executeQuery();
 
@@ -638,6 +643,7 @@ public class Application {
             List<PlayerRow> pls = new ArrayList<>();
             tenantDb = this.connectToTenantDB(v.getTenantId());
             PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM player WHERE tenant_id=? ORDER BY created_at DESC");
+            ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
             ps.setLong(1, v.getTenantId());
             ResultSet rs = ps.executeQuery();
 
@@ -681,6 +687,7 @@ public class Application {
 
                 java.sql.Date now = new java.sql.Date(new Date().getTime());
                 try (PreparedStatement ps = tenantDb.prepareStatement("INSERT INTO player (id, tenant_id, display_name, is_disqualified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")) {
+                    ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
                     ps.setString(1, id);
                     ps.setLong(2, v.getTenantId());
                     ps.setString(3, displayName);
@@ -721,6 +728,7 @@ public class Application {
         }
 
         try ( Connection tenantDb = this.connectToTenantDB(v.getTenantId()); PreparedStatement ps = tenantDb.prepareStatement("UPDATE player SET is_disqualified = ?, updated_at = ? WHERE id = ?");) {
+            ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
             java.sql.Date now = new java.sql.Date(new Date().getTime());
             ps.setBoolean(1, true);
             ps.setDate(2, now);
@@ -756,6 +764,7 @@ public class Application {
             java.sql.Date now = new java.sql.Date(new Date().getTime());
             String id = this.dispenseID();
 
+            ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
             ps.setString(1, id);
             ps.setLong(2, v.getTenantId());
             ps.setString(3, title);
@@ -793,6 +802,7 @@ public class Application {
 
             java.sql.Date now = new java.sql.Date(new Date().getTime());
             PreparedStatement ps = tenantDb.prepareStatement("UPDATE competition SET finished_at = ?, updated_at = ? WHERE id = ?");
+            ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
             ps.setDate(1, now);
             ps.setDate(2, now);
             ps.setString(3, id);
@@ -873,6 +883,7 @@ public class Application {
 
                 {
                     PreparedStatement ps = tenantDb.prepareStatement("DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?");
+                    ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
                     ps.setLong(1, v.getTenantId());
                     ps.setString(2, competitionId);
                     ps.execute();
@@ -881,6 +892,7 @@ public class Application {
                 {
                     for (PlayerScoreRow psr : playerScoreRows) {
                         PreparedStatement ps = tenantDb.prepareStatement("INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                        ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
                         ps.setString(1, psr.getId());
                         ps.setLong(2, psr.getTenantId());
                         ps.setString(3, psr.getPlayerId());
@@ -926,6 +938,7 @@ public class Application {
         try {
             tenantDb = this.connectToTenantDB(v.getTenantId());
             PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC");
+            ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
             ps.setLong(1, v.getTenantId());
             ResultSet rs = ps.executeQuery();
 
@@ -980,23 +993,28 @@ public class Application {
                     throw new WebException(HttpStatus.NOT_FOUND, String.format("player not found: %s", playerId));
                 }
 
-                ResultSet resultSet = tenantDb.prepareStatement("SELECT * FROM competition ORDER BY created_at ASC").executeQuery();
-
                 List<CompetitionRow> cs = new ArrayList<>();
-                while (resultSet.next()) {
-                    cs.add(new CompetitionRow(
-                            resultSet.getLong("tenant_id"),
-                            resultSet.getString("id"),
-                            resultSet.getString("title"),
-                            new Date(resultSet.getLong("finished_at")),
-                            new Date(resultSet.getLong("created_at")),
-                            new Date(resultSet.getLong("updated_at"))));
+                {
+                    PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM competition ORDER BY created_at ASC");
+                    ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
+                    ResultSet resultSet = ps.executeQuery();
+
+                    while (resultSet.next()) {
+                        cs.add(new CompetitionRow(
+                                resultSet.getLong("tenant_id"),
+                                resultSet.getString("id"),
+                                resultSet.getString("title"),
+                                new Date(resultSet.getLong("finished_at")),
+                                new Date(resultSet.getLong("created_at")),
+                                new Date(resultSet.getLong("updated_at"))));
+                    }
                 }
 
                 List<PlayerScoreRow> pss = new ArrayList<>();
                 for (CompetitionRow c : cs) {
                     // 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
                     PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1");
+                    ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
                     ps.setLong(1, v.getTenantId());
                     ps.setString(2, c.getId());
                     ps.setString(3, p.getId());
@@ -1091,6 +1109,7 @@ public class Application {
                 List<PlayerScoreRow> pss = new ArrayList<>();
                 {
                     PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC");
+                    ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
                     ps.setLong(1, tenant.getId());
                     ps.setString(2, competitionId);
                     ResultSet rs = ps.executeQuery();
@@ -1214,6 +1233,7 @@ public class Application {
     private SuccessResult competitionsHandler(Viewer v, Connection tenantDb) {
         try {
             PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM competition WHERE tenant_id=? ORDER BY created_at DESC");
+            ps.setQueryTimeout(SQLITE_BUSY_TIMEOUT);
             ps.setLong(1, v.getTenantId());
             ResultSet rs = ps.executeQuery();
 
