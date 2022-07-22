@@ -118,7 +118,7 @@ func main() {
 		fail := false
 		isValidateError := false
 		isCriticalError := false
-		// isNormalError := false
+		isNormalError := false
 
 		for _, errCode := range failure.GetErrorCodes(err) {
 			switch errCode {
@@ -129,7 +129,7 @@ func main() {
 			case string(bench.ErrFailedLoad), string(bench.ErrFailedPrepare): // portal上はfailを出す
 				fail = true
 			case string(bench.ErrNormalError): // 通常エラーのカウント
-			// 	isNormalError = true
+				isNormalError = true
 			default: // isucandar系など
 			}
 		}
@@ -142,10 +142,10 @@ func main() {
 			criticalErrorCount++
 			continue
 		}
-		// if isNormalError {
-		// 	normalErrorCount++
-		// 	continue
-		// }
+		if isNormalError {
+			// normalErrorCount++
+			continue
+		}
 		if fail {
 			existFailLog = true
 			continue
