@@ -65,6 +65,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v
@@ -103,6 +105,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddCriticalCount()
 			return v
@@ -127,6 +131,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionsAdd, scTag)
+			} else if v.Canceled {
+				return nil
 			} else {
 				sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 				return v
@@ -169,6 +175,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 			)
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionScore, scTag)
+			} else if v.Canceled {
+				return nil
 			} else {
 				sc.AddCriticalCount()
 				return v
@@ -195,6 +203,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 			)
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
+			} else if v.Canceled {
+				return nil
 			} else {
 				sc.AddErrorCount()
 				return v
@@ -223,6 +233,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionFinish, scTag)
+			} else if v.Canceled {
+				return nil
 			} else {
 				sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 				return v
@@ -252,6 +264,8 @@ func (sc *Scenario) TenantBillingValidate(ctx context.Context, step *isucandar.B
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v

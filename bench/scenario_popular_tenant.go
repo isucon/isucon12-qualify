@@ -94,6 +94,8 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
+			} else if v.Canceled {
+				return nil
 			} else {
 				sc.AddErrorCount()
 				return v
@@ -114,6 +116,8 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 			v := ValidateResponseWithMsg("大会参加者追加", step, res, err, msg, WithStatusCode(200))
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
+			} else if v.Canceled {
+				return nil
 			} else {
 				sc.AddCriticalCount()
 				return v

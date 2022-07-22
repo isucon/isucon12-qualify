@@ -127,6 +127,8 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddCriticalCount()
 			return v

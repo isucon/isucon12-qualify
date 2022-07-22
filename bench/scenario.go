@@ -292,10 +292,12 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		case <-sc.ErrorCh:
 			step.AddError(ErrNormalError)
 			errorCount++
+			AdminLogger.Println("Normal Error")
 
 		case <-sc.CriticalErrorCh:
 			step.AddError(ErrCriticalError)
 			criticalCount++
+			AdminLogger.Println("Critical Error")
 
 		case <-logTicker.C:
 			sc.CompetitionAddLog.Log()

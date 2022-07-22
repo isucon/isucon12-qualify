@@ -71,6 +71,8 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v
@@ -132,6 +134,8 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETAdminTenantsBilling, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v

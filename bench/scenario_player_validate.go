@@ -78,6 +78,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETOrganizerPlayersList, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v
@@ -100,6 +102,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionsAdd, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 			return v
@@ -130,6 +134,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 			}))
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionScore, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 			return v
@@ -177,6 +183,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v
@@ -200,6 +208,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v
@@ -222,6 +232,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v
@@ -239,6 +251,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v
@@ -253,6 +267,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(200))
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v
@@ -264,6 +280,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		v := ValidateResponseWithMsg("大会ランキング確認", step, res, err, msg, WithStatusCode(200))
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v
@@ -275,6 +293,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		v := ValidateResponseWithMsg("大会一覧確認", step, res, err, msg, WithStatusCode(200))
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v
@@ -302,6 +322,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddCriticalCount()
 			return v
@@ -335,6 +357,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 			}))
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionScore, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 			return v
@@ -362,6 +386,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v
@@ -380,6 +406,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionFinish, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 			return v
@@ -401,6 +429,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v
@@ -431,6 +461,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddErrorCount()
 			return v
@@ -443,6 +475,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(403))
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddCriticalCount()
 			return v
@@ -454,6 +488,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		v := ValidateResponseWithMsg("大会ランキング確認", step, res, err, msg, WithStatusCode(403))
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddCriticalCount()
 			return v
@@ -465,6 +501,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		v := ValidateResponseWithMsg("大会一覧確認", step, res, err, msg, WithStatusCode(403))
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddCriticalCount()
 			return v

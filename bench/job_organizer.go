@@ -69,6 +69,8 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETOrganizerPlayersList, conf.scTag)
+		} else if v.Canceled {
+			return nil, v
 		} else {
 			sc.AddErrorCount()
 			return nil, v
@@ -86,6 +88,8 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionsAdd, conf.scTag)
+		} else if v.Canceled {
+			return nil, v
 		} else {
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 			return nil, v
@@ -139,6 +143,8 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 				)
 				if v.IsEmpty() {
 					sc.AddScoreByScenario(step, ScoreGETPlayerRanking, conf.scTag)
+				} else if v.Canceled {
+					return nil
 				} else {
 					sc.AddErrorCount()
 					return v
@@ -182,6 +188,8 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 				}))
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionScore, conf.scTag)
+			} else if v.Canceled {
+				return nil
 			} else {
 				if v.Canceled {
 					// context.Doneによって打ち切られた場合はエラーカウントしない
@@ -236,6 +244,8 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionFinish, conf.scTag)
+		} else if v.Canceled {
+			return nil, v
 		} else {
 			sc.AddCriticalCount() // OrganizerAPI 更新系はCritical Error
 			return nil, v
