@@ -88,6 +88,8 @@ func main() {
 		return
 	}
 
+	reason := "unknown" // ポータルに表示する結果
+
 	// ベンチマークにシナリオを追加
 	benchmark.AddScenario(scenario)
 
@@ -177,6 +179,11 @@ func main() {
 	}
 
 	isPassed := 0 < score && !existFailLog
+	if isPassed {
+		reason = "pass"
+	} else {
+		reason = "fail"
+	}
 	bench.ContestantLogger.Printf("PASSED: %v", isPassed)
 	bench.ContestantLogger.Printf("SCORE: %d (+%d %d)", score, addition, -deduction)
 	br := AllTagBreakdown(result)
@@ -200,7 +207,7 @@ func main() {
 				Deduction: deduction,
 			},
 			Execution: &isuxportalResources.BenchmarkResult_Execution{
-				Reason: "TODO",
+				Reason: reason,
 			},
 			SurveyResponse: &isuxportalResources.SurveyResponse{
 				Language: "galaxy", // TODO /initialize で取得した言語を入れる
