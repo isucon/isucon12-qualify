@@ -50,7 +50,7 @@ source "amazon-ebs" "qualify" {
   temporary_key_pair_type = "ed25519"
 
   launch_block_device_mappings {
-    volume_size = 12
+    volume_size = 20
     device_name = "/dev/sda1"
   }
 }
