@@ -114,7 +114,7 @@ func main() {
 	criticalErrorCount := 0
 
 	errAll := result.Errors.All()
-	AdminLogger.Println(pp.Sprintln(result.Errors.Messages()))
+	bench.AdminLogger.Println(pp.Sprintln(result.Errors.Messages()))
 	for _, err := range errAll {
 		fail := false
 		isValidateError := false
