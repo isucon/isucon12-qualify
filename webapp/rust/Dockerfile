@@ -17,5 +17,6 @@ RUN mkdir -p /home/isucon/webapp/rust
 WORKDIR /home/isucon/webapp/rust
 COPY --chown=isucon:isucon ./ /home/isucon/webapp/rust/
 RUN ls -la /home/isucon/webapp/rust/
+RUN cargo build
 
-CMD [ "cargo", "run" ]
+CMD [ "./target/debug/isuports" ]

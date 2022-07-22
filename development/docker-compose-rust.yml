@@ -23,10 +23,12 @@ services:
       - tenant_db:/home/isucon/webapp/tenant_db
       - initial_data:/home/isucon/initial_data
       - target:/home/isucon/webapp/rust/target
+      - cargo_registry:/usr/local/cargo/registry
     init: true
     restart: always
 
 volumes:
   target:
+  cargo_registry:
   tenant_db:
   initial_data:

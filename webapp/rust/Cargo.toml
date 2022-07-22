@@ -6,27 +6,19 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-session = "0.6.2"
-actix-web = "4.1.0"
-lazy_static = "1.4.0"
-nix = "0.24.1"
-regex = "1.5.6"
-serde = {version="1.0.138",features = ["derive"]}
-sqlx = { version = "0.6.0", default-features = false, features = ["macros", "runtime-actix-rustls", "mysql","sqlite", "chrono"] }
-tokio = { version = "1.19.2", features = ["fs", "process"] }
-cookie = "0.16"
-jsonwebtoken = {version = "8", features=["use_pem"] }
-actix-form-data = "0.6.2"
-actix-multipart = "0.4.0"
-csv = "1.1.6"
-futures-util = "0.3.21"
-uuid = "1.1.2"
-sanitize-filename = "0.4.0"
-env_logger = "0.8"
-log = "0.4"
-serde_derive = "1.0.139"
-mime = "0.3.16"
-derive_more = "0.99.17"
-serde_json = "1.0.82"
-listenfd = "1"
+actix-multipart = "0.4"
+actix-web = "4"
 bytes = "1"
+csv = "1"
+futures-util = "0.3"
+jsonwebtoken = "8"
+lazy_static = "1"
+listenfd = "1"
+nix = "0.24"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+sqlx = { version = "0.6", default-features = false, features = ["macros", "runtime-actix-rustls", "mysql", "sqlite"] }
+thiserror = "1"
+tokio = { version = "1", features = ["fs", "process"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
