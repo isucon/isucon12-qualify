@@ -867,7 +867,7 @@ class Handlers
         }
 
         $cs = $tenantDB->prepare('SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at ASC')
-            ->executeQuery([$v->tenantID)
+            ->executeQuery([$v->tenantID])
             ->fetchAllAssociative();
 
         // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
