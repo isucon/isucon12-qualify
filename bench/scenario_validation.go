@@ -192,7 +192,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	if err != nil {
 		return err
 	}
-	// 大会主催者API
+	// テナント管理者API
 	orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, tenantName, "organizer")
 	if err != nil {
 		return err
@@ -500,7 +500,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	AdminLogger.Println("allAPISuccessCheck sleep 3s")
 	SleepWithCtx(ctx, time.Second*3)
 
-	// 主催者API 大会の終了
+	// テナント管理者API 大会の終了
 	{
 		res, err, txt := PostOrganizerCompetitionFinishAction(ctx, competitionID, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
@@ -555,7 +555,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		}
 	}
 
-	// 主催者API テナント内請求情報確認
+	// テナント管理者API テナント内請求情報確認
 	{
 		res, err, txt := GetOrganizerBillingAction(ctx, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
@@ -621,7 +621,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	{
 		res, err, txt := GetOrganizerCompetitionsAction(ctx, orgAg)
 		msg := fmt.Sprintf("%s %s", orgAc, txt)
-		v := ValidateResponseWithMsg("主催者API テナント内の大会一覧取得", step, res, err, msg, WithStatusCode(200),
+		v := ValidateResponseWithMsg("テナント管理者API テナント内の大会一覧取得", step, res, err, msg, WithStatusCode(200),
 			WithContentType("application/json"),
 			WithCacheControlPrivate(),
 			WithSuccessResponse(func(r ResponseAPICompetitions) error {

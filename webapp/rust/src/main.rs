@@ -1565,7 +1565,7 @@ async fn player_competitions_handler(
     competitions_handler(v, tenant_db).await
 }
 
-// 主催者向けAPI
+// テナント管理者向けAPI
 // GET /api/organizer/competitions
 // 大会の一覧を取得する
 async fn organizer_competitions_handler(

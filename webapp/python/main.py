@@ -767,7 +767,7 @@ def billing_handler():
 @app.route("/api/organizer/competitions", methods=["GET"])
 def organizer_competitions_handler():
     """
-    主催者向けAPI
+    テナント管理者向けAPI
     大会の一覧を取得する
     """
     viewer = parse_viewer()
