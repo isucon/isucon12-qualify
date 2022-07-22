@@ -1248,7 +1248,7 @@ app.get(
           is_disqualified: !!p.is_disqualified,
         }
 
-        const competitions = await tenantDB.all<CompetitionRow[]>('SELECT * FROM competition ORDER BY created_at ASC')
+        const competitions = await tenantDB.all<CompetitionRow[]>('SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at ASC', viewer.tenantId)
 
         const pss: PlayerScoreRow[] = []
 
