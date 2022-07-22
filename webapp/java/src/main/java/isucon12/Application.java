@@ -4,13 +4,9 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.nio.channels.FileChannel;
-import java.nio.channels.FileLock;
-import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
 import java.security.interfaces.RSAPublicKey;
@@ -73,7 +69,6 @@ import isucon12.exception.AuthorizePlayerException;
 import isucon12.exception.BillingReportByCompetitionException;
 import isucon12.exception.DatabaseException;
 import isucon12.exception.DispenseIdException;
-import isucon12.exception.FileLockException;
 import isucon12.exception.RetrieveCompetitionException;
 import isucon12.exception.RetrievePlayerException;
 import isucon12.exception.RetrieveTenantRowFromHeaderException;
@@ -396,25 +391,6 @@ public class Application {
         }
     }
 
-    // 排他ロックのためのファイル名を生成する
-    private String lockFilePath(long id) {
-        return Paths.get(ISUCON_TENANT_DB_DIR).resolve(String.format("%d.lock", id)).toString();
-    }
-
-    // 排他ロックする
-    private FileLock flockByTenantID(long tenantId) throws FileLockException {
-        String p = this.lockFilePath(tenantId);
-        File lockfile = new File(p);
-        try (FileChannel fc = FileChannel.open(lockfile.toPath(), StandardOpenOption.CREATE, StandardOpenOption.WRITE); FileLock lock = fc.lock();) {
-            if (lock == null) {
-                throw new FileLockException(String.format("error FileChannel.lock: path=%s, ", p));
-            }
-            return lock;
-        } catch (IOException | OverlappingFileLockException e) {
-            throw new FileLockException(String.format("error flockByTenantID: path=%s, ", p), e);
-        }
-    }
-
     @PostMapping("/api/admin/tenants/add")
     public SuccessResult tenantsAddHandler(HttpServletRequest req, @RequestParam(name = "name") String name, @RequestParam(name = "display_name") String displayName) {
         Viewer v = this.parseViewer(req);
@@ -514,52 +490,50 @@ public class Application {
             billingMap.put(vh.getPlayerId(), "visitor");
         }
 
-        try {
-            // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-            this.flockByTenantID(tenantId);
+        // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+        synchronized (this) {
+            try {
+                // スコアを登録した参加者のIDを取得する
+                List<String> scoredPlayerIDs = new ArrayList<>();
+                PreparedStatement ps = tenantDb.prepareStatement("SELECT DISTINCT(player_id) AS player_id FROM player_score WHERE tenant_id = ? AND competition_id = ?");
+                ps.setLong(1, tenantId);
+                ps.setString(2, competitionId);
+                ResultSet rs = ps.executeQuery();
+                while (rs.next()) {
+                    scoredPlayerIDs.add(rs.getString("player_id"));
+                }
 
-            // スコアを登録した参加者のIDを取得する
-            List<String> scoredPlayerIDs = new ArrayList<>();
-            PreparedStatement ps = tenantDb.prepareStatement("SELECT DISTINCT(player_id) AS player_id FROM player_score WHERE tenant_id = ? AND competition_id = ?");
-            ps.setLong(1, tenantId);
-            ps.setString(2, competitionId);
-            ResultSet rs = ps.executeQuery();
-            while (rs.next()) {
-                scoredPlayerIDs.add(rs.getString("player_id"));
-            }
+                for (String pid : scoredPlayerIDs) {
+                    // スコアが登録されている参加者
+                    billingMap.put(pid, "player");
+                }
 
-            for (String pid : scoredPlayerIDs) {
-                // スコアが登録されている参加者
-                billingMap.put(pid, "player");
-            }
-
-            // 大会が終了している場合のみ請求金額が確定するので計算する
-            long playerCount = 0, visitorCount = 0;
-            if (this.isValidFinishedAt(comp.getFinishedAt())) {
-                for (Map.Entry<String, String> entry : billingMap.entrySet()) {
-                    switch (entry.getValue()) {
-                    case "player":
-                        playerCount++;
-                        break;
-                    case "visitor":
-                        visitorCount++;
-                        break;
+                // 大会が終了している場合のみ請求金額が確定するので計算する
+                long playerCount = 0, visitorCount = 0;
+                if (this.isValidFinishedAt(comp.getFinishedAt())) {
+                    for (Map.Entry<String, String> entry : billingMap.entrySet()) {
+                        switch (entry.getValue()) {
+                        case "player":
+                            playerCount++;
+                            break;
+                        case "visitor":
+                            visitorCount++;
+                            break;
+                        }
                     }
                 }
+                BillingReport br = new BillingReport();
+                br.setCompetitionId(comp.getId());
+                br.setCompetitionTitle(comp.getTitle());
+                br.setPlayerCount(playerCount);
+                br.setVisitorCount(visitorCount);
+                br.setBillingPlayerYen(100 * playerCount); // スコアを登録した参加者は100円
+                br.setBillingVisitorYen(10 * visitorCount); // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
+                br.setBillingYen(100 * playerCount + 10 * visitorCount);
+                return br;
+            } catch (SQLException e) {
+                throw new BillingReportByCompetitionException(String.format("error Select count player_score: tenantID=%d, competitionID=%s, ", tenantId, competitionId), e);
             }
-            BillingReport br = new BillingReport();
-            br.setCompetitionId(comp.getId());
-            br.setCompetitionTitle(comp.getTitle());
-            br.setPlayerCount(playerCount);
-            br.setVisitorCount(visitorCount);
-            br.setBillingPlayerYen(100 * playerCount); // スコアを登録した参加者は100円
-            br.setBillingVisitorYen(10 * visitorCount); // ランキングを閲覧だけした(スコアを登録していない)参加者は10円
-            br.setBillingYen(100 * playerCount + 10 * visitorCount);
-            return br;
-        } catch (FileLockException e) {
-            throw new BillingReportByCompetitionException(String.format("error Select visit_history: tenantID=%d, competitionID=%s", tenantId, comp.getId()), e);
-        } catch (SQLException e) {
-            throw new BillingReportByCompetitionException(String.format("error Select count player_score: tenantID=%d, competitionID=%s, ", tenantId, competitionId), e);
         }
     }
 
@@ -843,100 +817,98 @@ public class Application {
             throw new WebException(HttpStatus.FORBIDDEN, "role organizer required");
         }
 
-        try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
-            CompetitionRow comp = this.retrieveCompetition(tenantDb, competitionId);
-            if (comp == null) {
-                // 存在しない大会
-                throw new WebException(HttpStatus.NOT_FOUND, "competition not found ");
-            }
-
-            if (this.isValidFinishedAt(comp.getFinishedAt())) {
-                throw new WebException(HttpStatus.BAD_REQUEST, String.format("competition is finished: %s", comp.getFinishedAt()));
-            }
-
-            if (multipartFile.isEmpty()) {
-                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error upload file scores");
-            }
-
-            BufferedReader r = new BufferedReader(new InputStreamReader(multipartFile.getInputStream(), StandardCharsets.UTF_8));
-            String header = r.readLine();
-            if (header == null) {
-                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error r.readLine at header");
-            }
-
-            List<String> headers = Arrays.asList(header.split(","));
-            if (!headers.equals(Arrays.asList("player_id", "score"))) {
-                throw new WebException(HttpStatus.BAD_REQUEST, "invalid CSV headers");
-            }
-
-            // DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
-            this.flockByTenantID(v.getTenantId());
-
-            String line = null;
-            long rowNum = 0L;
-            List<PlayerScoreRow> playerScoreRows = new ArrayList<>();
-            while ((line = r.readLine()) != null) {
-                rowNum++;
-                List<String> row = Arrays.asList(line.split(","));
-                if (row.size() != 2) {
-                    throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, String.format("row must have two columns: %s", line));
-                }
-                String playerId = row.get(0);
-                String scoreStr = row.get(1);
-
-                PlayerRow p = this.retrievePlayer(tenantDb, playerId);
-                // 存在しない参加者が含まれている
-                if (p == null) {
-                    throw new WebException(HttpStatus.BAD_REQUEST, String.format("player not found: %s", playerId));
+        // DELETEしたタイミングで参照が来ると空っぽのランキングになるのでロックする
+        synchronized (this) {
+            try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
+                CompetitionRow comp = this.retrieveCompetition(tenantDb, competitionId);
+                if (comp == null) {
+                    // 存在しない大会
+                    throw new WebException(HttpStatus.NOT_FOUND, "competition not found ");
                 }
 
-                long score = 0L;
-                score = Long.valueOf(scoreStr);
-
-                String id = this.dispenseID();
-                Date now = new Date();
-                playerScoreRows.add(new PlayerScoreRow(v.getTenantId(), id, playerId, competitionId, score, rowNum, now, now));
-            }
-
-            {
-                PreparedStatement ps = tenantDb.prepareStatement("DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?");
-                ps.setLong(1, v.getTenantId());
-                ps.setString(2, competitionId);
-                ps.execute();
-            }
-
-            {
-                for (PlayerScoreRow psr : playerScoreRows) {
-                    PreparedStatement ps = tenantDb.prepareStatement("INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-                    ps.setString(1, psr.getId());
-                    ps.setLong(2, psr.getTenantId());
-                    ps.setString(3, psr.getPlayerId());
-                    ps.setString(4, psr.getCompetitionId());
-                    ps.setLong(5, psr.getScore());
-                    ps.setLong(6, psr.getRowNum());
-                    ps.setDate(7, new java.sql.Date(psr.getCreatedAt().getTime()));
-                    ps.setDate(8, new java.sql.Date(psr.getUpdatedAt().getTime()));
-                    ps.executeUpdate();
+                if (this.isValidFinishedAt(comp.getFinishedAt())) {
+                    throw new WebException(HttpStatus.BAD_REQUEST, String.format("competition is finished: %s", comp.getFinishedAt()));
                 }
-            }
 
-            return new SuccessResult(true, new ScoreHandlerResult((long) playerScoreRows.size()));
-        } catch (DatabaseException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDb: ", e);
-        } catch (SQLException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error tenantdb.player_score: ", e);
-        } catch (RetrieveCompetitionException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrieveCompetition: ", e);
-        } catch (IOException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error new BufferdReader: ", e);
-        } catch (FileLockException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error flockByTenantId: ", e);
-        } catch (RetrievePlayerException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrievePlayer: ", e);
-        } catch (NumberFormatException e) {
-            throw new WebException(HttpStatus.BAD_REQUEST, "error Long.valueOf(scoreStr): ", e);
-        } catch (DispenseIdException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error dispenseID: ", e);
+                if (multipartFile.isEmpty()) {
+                    throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error upload file scores");
+                }
+
+                BufferedReader r = new BufferedReader(new InputStreamReader(multipartFile.getInputStream(), StandardCharsets.UTF_8));
+                String header = r.readLine();
+                if (header == null) {
+                    throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error r.readLine at header");
+                }
+
+                List<String> headers = Arrays.asList(header.split(","));
+                if (!headers.equals(Arrays.asList("player_id", "score"))) {
+                    throw new WebException(HttpStatus.BAD_REQUEST, "invalid CSV headers");
+                }
+
+                String line = null;
+                long rowNum = 0L;
+                List<PlayerScoreRow> playerScoreRows = new ArrayList<>();
+                while ((line = r.readLine()) != null) {
+                    rowNum++;
+                    List<String> row = Arrays.asList(line.split(","));
+                    if (row.size() != 2) {
+                        throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, String.format("row must have two columns: %s", line));
+                    }
+                    String playerId = row.get(0);
+                    String scoreStr = row.get(1);
+
+                    PlayerRow p = this.retrievePlayer(tenantDb, playerId);
+                    // 存在しない参加者が含まれている
+                    if (p == null) {
+                        throw new WebException(HttpStatus.BAD_REQUEST, String.format("player not found: %s", playerId));
+                    }
+
+                    long score = 0L;
+                    score = Long.valueOf(scoreStr);
+
+                    String id = this.dispenseID();
+                    Date now = new Date();
+                    playerScoreRows.add(new PlayerScoreRow(v.getTenantId(), id, playerId, competitionId, score, rowNum, now, now));
+                }
+
+                {
+                    PreparedStatement ps = tenantDb.prepareStatement("DELETE FROM player_score WHERE tenant_id = ? AND competition_id = ?");
+                    ps.setLong(1, v.getTenantId());
+                    ps.setString(2, competitionId);
+                    ps.execute();
+                }
+
+                {
+                    for (PlayerScoreRow psr : playerScoreRows) {
+                        PreparedStatement ps = tenantDb.prepareStatement("INSERT INTO player_score (id, tenant_id, player_id, competition_id, score, row_num, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+                        ps.setString(1, psr.getId());
+                        ps.setLong(2, psr.getTenantId());
+                        ps.setString(3, psr.getPlayerId());
+                        ps.setString(4, psr.getCompetitionId());
+                        ps.setLong(5, psr.getScore());
+                        ps.setLong(6, psr.getRowNum());
+                        ps.setDate(7, new java.sql.Date(psr.getCreatedAt().getTime()));
+                        ps.setDate(8, new java.sql.Date(psr.getUpdatedAt().getTime()));
+                        ps.executeUpdate();
+                    }
+                }
+
+                return new SuccessResult(true, new ScoreHandlerResult((long) playerScoreRows.size()));
+            } catch (DatabaseException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDb: ", e);
+            } catch (SQLException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error tenantdb.player_score: ", e);
+            } catch (RetrieveCompetitionException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrieveCompetition: ", e);
+            } catch (IOException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error new BufferdReader: ", e);
+            } catch (RetrievePlayerException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrievePlayer: ", e);
+            } catch (NumberFormatException e) {
+                throw new WebException(HttpStatus.BAD_REQUEST, "error Long.valueOf(scoreStr): ", e);
+            } catch (DispenseIdException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error dispenseID: ", e);
+            }
         }
     }
 
@@ -997,74 +969,73 @@ public class Application {
             throw new WebException(HttpStatus.FORBIDDEN, "role player required");
         }
 
-        try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
-            this.authorizePlayer(tenantDb, v.getPlayerId());
+        // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+        synchronized (this) {
 
-            PlayerRow p = this.retrievePlayer(tenantDb, playerId);
-            if (p == null) {
-                throw new WebException(HttpStatus.NOT_FOUND, String.format("player not found: %s", playerId));
-            }
+            try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
+                this.authorizePlayer(tenantDb, v.getPlayerId());
 
-            ResultSet resultSet = tenantDb.prepareStatement("SELECT * FROM competition ORDER BY created_at ASC").executeQuery();
-
-            List<CompetitionRow> cs = new ArrayList<>();
-            while (resultSet.next()) {
-                cs.add(new CompetitionRow(
-                        resultSet.getLong("tenant_id"),
-                        resultSet.getString("id"),
-                        resultSet.getString("title"),
-                        new Date(resultSet.getLong("finished_at")),
-                        new Date(resultSet.getLong("created_at")),
-                        new Date(resultSet.getLong("updated_at"))));
-            }
-
-            // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-            this.flockByTenantID(v.getTenantId());
-
-            List<PlayerScoreRow> pss = new ArrayList<>();
-            for (CompetitionRow c : cs) {
-                // 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
-                PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1");
-                ps.setLong(1, v.getTenantId());
-                ps.setString(2, c.getId());
-                ps.setString(3, p.getId());
-                ResultSet rs = ps.executeQuery();
-                if (!rs.isBeforeFirst()) {
-                    // 行がない = スコアが記録されてない
-                    continue;
+                PlayerRow p = this.retrievePlayer(tenantDb, playerId);
+                if (p == null) {
+                    throw new WebException(HttpStatus.NOT_FOUND, String.format("player not found: %s", playerId));
                 }
-                pss.add(new PlayerScoreRow(
-                        rs.getLong("tenant_id"),
-                        rs.getString("id"),
-                        rs.getString("player_id"),
-                        rs.getString("competition_id"),
-                        rs.getLong("score"),
-                        rs.getLong("row_num"),
-                        new Date(rs.getLong("created_at")),
-                        new Date(rs.getLong("updated_at"))));
-            }
 
-            List<PlayerScoreDetail> psds = new ArrayList<>();
-            for (PlayerScoreRow psr : pss) {
-                CompetitionRow comp = this.retrieveCompetition(tenantDb, psr.getCompetitionId());
-                psds.add(new PlayerScoreDetail(comp.getTitle(), psr.getScore()));
-            }
+                ResultSet resultSet = tenantDb.prepareStatement("SELECT * FROM competition ORDER BY created_at ASC").executeQuery();
 
-            return new SuccessResult(true, new PlayerHandlerResult(new PlayerDetail(p.getId(), p.getDisplayName(), p.getIsDisqualified()), psds));
-        } catch (DatabaseException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDb: ", e);
-        } catch (SQLException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error tenantdb SQL: ", e);
-        } catch (NumberFormatException e) {
-            throw new WebException(HttpStatus.BAD_REQUEST, "error Long.valueOf(scoreStr): ", e);
-        } catch (FileLockException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error flockByTenantId: ", e);
-        } catch (RetrievePlayerException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrievePlayer: ", e);
-        } catch (AuthorizePlayerException e) {
-            throw new WebException(e.getHttpStatus(), e);
-        } catch (RetrieveCompetitionException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrieveCompetition: ", e);
+                List<CompetitionRow> cs = new ArrayList<>();
+                while (resultSet.next()) {
+                    cs.add(new CompetitionRow(
+                            resultSet.getLong("tenant_id"),
+                            resultSet.getString("id"),
+                            resultSet.getString("title"),
+                            new Date(resultSet.getLong("finished_at")),
+                            new Date(resultSet.getLong("created_at")),
+                            new Date(resultSet.getLong("updated_at"))));
+                }
+
+                List<PlayerScoreRow> pss = new ArrayList<>();
+                for (CompetitionRow c : cs) {
+                    // 最後にCSVに登場したスコアを採用する = row_numが一番大きいもの
+                    PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? AND player_id = ? ORDER BY row_num DESC LIMIT 1");
+                    ps.setLong(1, v.getTenantId());
+                    ps.setString(2, c.getId());
+                    ps.setString(3, p.getId());
+                    ResultSet rs = ps.executeQuery();
+                    if (!rs.isBeforeFirst()) {
+                        // 行がない = スコアが記録されてない
+                        continue;
+                    }
+                    pss.add(new PlayerScoreRow(
+                            rs.getLong("tenant_id"),
+                            rs.getString("id"),
+                            rs.getString("player_id"),
+                            rs.getString("competition_id"),
+                            rs.getLong("score"),
+                            rs.getLong("row_num"),
+                            new Date(rs.getLong("created_at")),
+                            new Date(rs.getLong("updated_at"))));
+                }
+
+                List<PlayerScoreDetail> psds = new ArrayList<>();
+                for (PlayerScoreRow psr : pss) {
+                    CompetitionRow comp = this.retrieveCompetition(tenantDb, psr.getCompetitionId());
+                    psds.add(new PlayerScoreDetail(comp.getTitle(), psr.getScore()));
+                }
+
+                return new SuccessResult(true, new PlayerHandlerResult(new PlayerDetail(p.getId(), p.getDisplayName(), p.getIsDisqualified()), psds));
+            } catch (DatabaseException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDb: ", e);
+            } catch (SQLException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error tenantdb SQL: ", e);
+            } catch (NumberFormatException e) {
+                throw new WebException(HttpStatus.BAD_REQUEST, "error Long.valueOf(scoreStr): ", e);
+            } catch (RetrievePlayerException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrievePlayer: ", e);
+            } catch (AuthorizePlayerException e) {
+                throw new WebException(e.getHttpStatus(), e);
+            } catch (RetrieveCompetitionException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrieveCompetition: ", e);
+            }
         }
     }
 
@@ -1078,129 +1049,128 @@ public class Application {
             throw new WebException(HttpStatus.FORBIDDEN, "role player required");
         }
 
-        try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
-            this.authorizePlayer(tenantDb, v.getPlayerId());
+        // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
+        synchronized (this) {
+            try (Connection tenantDb = this.connectToTenantDB(v.getTenantId());) {
+                this.authorizePlayer(tenantDb, v.getPlayerId());
 
-            // 大会の存在確認
-            CompetitionRow comp = this.retrieveCompetition(tenantDb, competitionId);
-            if (comp == null) {
-                throw new WebException(HttpStatus.NOT_FOUND, "competition not found ");
-            }
-
-            Date now = new Date();
-            TenantRow tenant = null;
-            {
-                SqlParameterSource source = new MapSqlParameterSource()
-                        .addValue("tenant_id", v.getTenantId());
-                RowMapper<TenantRow> mapper = (rs, i) -> {
-                    TenantRow row = new TenantRow();
-                    row.setId(rs.getLong("id"));
-                    row.setName(rs.getString("name"));
-                    row.setDisplayName(rs.getString("display_name"));
-                    row.setCreatedAt(new Date(rs.getLong("created_at")));
-                    row.setUpdatedAt(new Date(rs.getLong("updated_at")));
-                    return row;
-                };
-                tenant = this.adminDb.queryForObject("SELECT * FROM tenant WHERE id = :tenant_id", source, mapper);
-            }
-
-            {
-                SqlParameterSource source = new MapSqlParameterSource()
-                        .addValue("player_id", v.getPlayerId())
-                        .addValue("tenant_id", tenant.getId())
-                        .addValue("competition_id", competitionId)
-                        .addValue("created_at", now.getTime())
-                        .addValue("updated_at", now.getTime());
-                String sql = "INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (:player_id, :tenant_id, :competition_id, :created_at, :updated_at)";
-                this.adminDb.update(sql, source);
-            }
-
-            // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
-            this.flockByTenantID(v.getTenantId());
-            List<PlayerScoreRow> pss = new ArrayList<>();
-            {
-                PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC");
-                ps.setLong(1, tenant.getId());
-                ps.setString(2, competitionId);
-                ResultSet rs = ps.executeQuery();
-                while (rs.next()) {
-                    pss.add(new PlayerScoreRow(
-                            rs.getLong("tenant_id"),
-                            rs.getString("id"),
-                            rs.getString("player_id"),
-                            rs.getString("competition_id"),
-                            rs.getLong("score"),
-                            rs.getLong("row_num"),
-                            new Date(rs.getLong("created_at")),
-                            new Date(rs.getLong("updated_at"))));
+                // 大会の存在確認
+                CompetitionRow comp = this.retrieveCompetition(tenantDb, competitionId);
+                if (comp == null) {
+                    throw new WebException(HttpStatus.NOT_FOUND, "competition not found ");
                 }
-            }
 
-            List<CompetitionRank> ranks = new ArrayList<>();
-            Set<String> scoredPlayerSet = new HashSet<>();
-            {
-                for (PlayerScoreRow ps : pss) {
-                    // player_scoreが同一player_id内ではrow_numの降順でソートされているので
-                    // 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
-                    if (scoredPlayerSet.contains(ps.getPlayerId())) {
+                Date now = new Date();
+                TenantRow tenant = null;
+                {
+                    SqlParameterSource source = new MapSqlParameterSource()
+                            .addValue("tenant_id", v.getTenantId());
+                    RowMapper<TenantRow> mapper = (rs, i) -> {
+                        TenantRow row = new TenantRow();
+                        row.setId(rs.getLong("id"));
+                        row.setName(rs.getString("name"));
+                        row.setDisplayName(rs.getString("display_name"));
+                        row.setCreatedAt(new Date(rs.getLong("created_at")));
+                        row.setUpdatedAt(new Date(rs.getLong("updated_at")));
+                        return row;
+                    };
+                    tenant = this.adminDb.queryForObject("SELECT * FROM tenant WHERE id = :tenant_id", source, mapper);
+                }
+
+                {
+                    SqlParameterSource source = new MapSqlParameterSource()
+                            .addValue("player_id", v.getPlayerId())
+                            .addValue("tenant_id", tenant.getId())
+                            .addValue("competition_id", competitionId)
+                            .addValue("created_at", now.getTime())
+                            .addValue("updated_at", now.getTime());
+                    String sql = "INSERT INTO visit_history (player_id, tenant_id, competition_id, created_at, updated_at) VALUES (:player_id, :tenant_id, :competition_id, :created_at, :updated_at)";
+                    this.adminDb.update(sql, source);
+                }
+
+                List<PlayerScoreRow> pss = new ArrayList<>();
+                {
+                    PreparedStatement ps = tenantDb.prepareStatement("SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC");
+                    ps.setLong(1, tenant.getId());
+                    ps.setString(2, competitionId);
+                    ResultSet rs = ps.executeQuery();
+                    while (rs.next()) {
+                        pss.add(new PlayerScoreRow(
+                                rs.getLong("tenant_id"),
+                                rs.getString("id"),
+                                rs.getString("player_id"),
+                                rs.getString("competition_id"),
+                                rs.getLong("score"),
+                                rs.getLong("row_num"),
+                                new Date(rs.getLong("created_at")),
+                                new Date(rs.getLong("updated_at"))));
+                    }
+                }
+
+                List<CompetitionRank> ranks = new ArrayList<>();
+                Set<String> scoredPlayerSet = new HashSet<>();
+                {
+                    for (PlayerScoreRow ps : pss) {
+                        // player_scoreが同一player_id内ではrow_numの降順でソートされているので
+                        // 現れたのが2回目以降のplayer_idはより大きいrow_numでスコアが出ているとみなせる
+                        if (scoredPlayerSet.contains(ps.getPlayerId())) {
+                            continue;
+                        }
+                        scoredPlayerSet.add(ps.getPlayerId());
+                        PlayerRow p = this.retrievePlayer(tenantDb, ps.getPlayerId());
+                        CompetitionRank competitionRank = new CompetitionRank();
+                        competitionRank.setScore(ps.getScore());
+                        competitionRank.setPlayerId(p.getId());
+                        competitionRank.setPlayerDisplayName(p.getDisplayName());
+                        competitionRank.setRowNum(ps.getRowNum());
+
+                        ranks.add(competitionRank);
+                    }
+                }
+
+                Collections.sort(ranks, new Comparator<CompetitionRank>() {
+                    @Override
+                    public int compare(CompetitionRank o1, CompetitionRank o2) {
+                        if (o1.getScore().longValue() == o2.getScore().longValue()) {
+                            return Long.compare(o1.getRowNum(), o2.getRowNum());
+                        }
+                        return Long.compare(o2.getScore(), o1.getScore());
+                    }
+                });
+
+                List<CompetitionRank> pagedRanks = new ArrayList<>();
+                for (int i = 0; i < ranks.size(); i++) {
+                    if (i < rankAfter) {
                         continue;
                     }
-                    scoredPlayerSet.add(ps.getPlayerId());
-                    PlayerRow p = this.retrievePlayer(tenantDb, ps.getPlayerId());
+                    CompetitionRank rank = ranks.get(i);
+
                     CompetitionRank competitionRank = new CompetitionRank();
-                    competitionRank.setScore(ps.getScore());
-                    competitionRank.setPlayerId(p.getId());
-                    competitionRank.setPlayerDisplayName(p.getDisplayName());
-                    competitionRank.setRowNum(ps.getRowNum());
+                    competitionRank.setRank(i + 1L);
+                    competitionRank.setScore(rank.getScore());
+                    competitionRank.setPlayerId(rank.getPlayerId());
+                    competitionRank.setPlayerDisplayName(rank.getPlayerDisplayName());
+                    pagedRanks.add(competitionRank);
 
-                    ranks.add(competitionRank);
-                }
-            }
-
-            Collections.sort(ranks, new Comparator<CompetitionRank>() {
-                @Override
-                public int compare(CompetitionRank o1, CompetitionRank o2) {
-                    if (o1.getScore().longValue() == o2.getScore().longValue()) {
-                        return Long.compare(o1.getRowNum(), o2.getRowNum());
+                    if (pagedRanks.size() >= 100) {
+                        break;
                     }
-                    return Long.compare(o2.getScore(), o1.getScore());
                 }
-            });
 
-            List<CompetitionRank> pagedRanks = new ArrayList<>();
-            for (int i = 0; i < ranks.size(); i++) {
-                if (i < rankAfter) {
-                    continue;
-                }
-                CompetitionRank rank = ranks.get(i);
-
-                CompetitionRank competitionRank = new CompetitionRank();
-                competitionRank.setRank(i + 1L);
-                competitionRank.setScore(rank.getScore());
-                competitionRank.setPlayerId(rank.getPlayerId());
-                competitionRank.setPlayerDisplayName(rank.getPlayerDisplayName());
-                pagedRanks.add(competitionRank);
-
-                if (pagedRanks.size() >= 100) {
-                    break;
-                }
+                return new SuccessResult(true, new CompetitionRankingHandlerResult(new CompetitionDetail(comp.getId(), comp.getTitle(), this.isValidFinishedAt(comp.getFinishedAt())), pagedRanks));
+            } catch (DataAccessException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error admindb SQL: ", e);
+            } catch (DatabaseException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDb: ", e);
+            } catch (SQLException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error tenantdb SQL: ", e);
+            } catch (RetrievePlayerException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrievePlayer: ", e);
+            } catch (AuthorizePlayerException e) {
+                throw new WebException(e.getHttpStatus(), e);
+            } catch (RetrieveCompetitionException e) {
+                throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrieveCompetition: ", e);
             }
-
-            return new SuccessResult(true, new CompetitionRankingHandlerResult(new CompetitionDetail(comp.getId(), comp.getTitle(), this.isValidFinishedAt(comp.getFinishedAt())), pagedRanks));
-        } catch (DataAccessException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error admindb SQL: ", e);
-        } catch (DatabaseException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error connectToTenantDb: ", e);
-        } catch (SQLException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error tenantdb SQL: ", e);
-        } catch (FileLockException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error flockByTenantId: ", e);
-        } catch (RetrievePlayerException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrievePlayer: ", e);
-        } catch (AuthorizePlayerException e) {
-            throw new WebException(e.getHttpStatus(), e);
-        } catch (RetrieveCompetitionException e) {
-            throw new WebException(HttpStatus.INTERNAL_SERVER_ERROR, "error retrieveCompetition: ", e);
         }
     }
 
