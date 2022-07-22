@@ -866,7 +866,7 @@ class Handlers
             throw new HttpNotFoundException($request, 'player not found');
         }
 
-        $cs = $tenantDB->executeQuery('SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at ASC')
+        $cs = $tenantDB->prepare('SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at ASC')
             ->executeQuery([$v->tenantID)
             ->fetchAllAssociative();
 
