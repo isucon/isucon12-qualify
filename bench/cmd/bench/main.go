@@ -110,15 +110,23 @@ func main() {
 	unexpectedErrors := []error{}
 	validateErrors := []error{}
 	existFailLog := false
+	noramlErrorCount := 0
+	criticalErrorCount := 0
 
 	errAll := result.Errors.All()
 	for _, err := range errAll {
 		fail := false
 		isValidateError := false
+		isCriticalError := false
+		isNormalError := false
 		for _, errCode := range failure.GetErrorCodes(err) {
 			switch errCode {
 			case string(bench.ErrValidation): // validationErrorで出るもの
 				isValidateError = true
+			case string(bench.ErrNormalError): // 通常エラーのカウント
+				isNormalError = true
+			case string(bench.ErrCriticalError): // Criticalエラーのカウント
+				isCriticalError = true
 			case string(bench.ErrFailedLoad), string(bench.ErrFailedPrepare): // portal上はfailを出す
 				fail = true
 			default: // isucandar系など
@@ -127,6 +135,14 @@ func main() {
 
 		if isValidateError {
 			validateErrors = append(validateErrors, err)
+			continue
+		}
+		if isCriticalError {
+			criticalErrorCount++
+			continue
+		}
+		if isNormalError {
+			noramlErrorCount++
 			continue
 		}
 		if fail {
@@ -172,6 +188,8 @@ func main() {
 	scenario.PrintWorkerCount()
 	addition := SumScore(result)
 	deduction := int64(len(validateErrors) * 10)
+
+	bench.ContestantLogger.Printf("Error %d (Critical:%d)", noramlErrorCount+criticalErrorCount, criticalErrorCount)
 
 	score := addition - deduction
 	if score < 0 {
