@@ -228,15 +228,6 @@ func (sc *Scenario) Load(ctx context.Context, step *isucandar.BenchmarkStep) err
 		sc.WorkerCh <- wkr
 	}
 
-	// 破壊的な変更を許容するシナリオ
-	{
-		wkr, err := sc.PeacefulTenantScenarioWorker(step, 1)
-		if err != nil {
-			return err
-		}
-		sc.WorkerCh <- wkr
-	}
-
 	// 初期から回る新規テナントシナリオ
 	{
 		wkr, err := sc.NewTenantScenarioWorker(step, nil, 1)

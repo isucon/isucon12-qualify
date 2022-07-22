@@ -307,7 +307,8 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		}
 	}
 
-	// 失格が反映されていることをチェック
+	// 失格
+	// チェックは3秒後
 	{
 		pid := disqualifyingdPlayerID
 		res, err, txt := GetPlayerAction(ctx, pid, checkerPlayerAg)
@@ -331,40 +332,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 			return v
 		}
 	}
-	{
-		pid := disqualifyingdPlayerID
-		res, err, txt := GetPlayerAction(ctx, pid, disqualifyingdPlayerAg)
-		msg := fmt.Sprintf("%s %s", disqualifyingdPlayerAc, txt)
-		v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(403))
-		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
-		} else {
-			sc.AddCriticalCount()
-			return v
-		}
-	}
-	{
-		res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", disqualifyingdPlayerAg)
-		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
-		v := ValidateResponseWithMsg("大会ランキング確認", step, res, err, msg, WithStatusCode(403))
-		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
-		} else {
-			sc.AddCriticalCount()
-			return v
-		}
-	}
-	{
-		res, err, txt := GetPlayerCompetitionsAction(ctx, disqualifyingdPlayerAg)
-		msg := fmt.Sprintf("%s %s", disqualifyingdPlayerAc, txt)
-		v := ValidateResponseWithMsg("大会一覧確認", step, res, err, msg, WithStatusCode(403))
-		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
-		} else {
-			sc.AddCriticalCount()
-			return v
-		}
-	}
+	disqualifyTicker := time.After(time.Second * 3)
 
 	// スコアを入稿する
 	// 初期スコアの逆順
@@ -464,7 +432,47 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		}
 	}
 
-	SleepWithCtx(ctx, time.Second*5)
+	// 失格操作は3秒の猶予がある
+	select {
+	case <-ctx.Done():
+	case <-disqualifyTicker:
+	}
+
+	// 失格が反映されていることをチェック
+	{
+		pid := disqualifyingdPlayerID
+		res, err, txt := GetPlayerAction(ctx, pid, disqualifyingdPlayerAg)
+		msg := fmt.Sprintf("%s %s", disqualifyingdPlayerAc, txt)
+		v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(403))
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			sc.AddCriticalCount()
+			return v
+		}
+	}
+	{
+		res, err, txt := GetPlayerCompetitionRankingAction(ctx, comp.ID, "", disqualifyingdPlayerAg)
+		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
+		v := ValidateResponseWithMsg("大会ランキング確認", step, res, err, msg, WithStatusCode(403))
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
+		} else {
+			sc.AddCriticalCount()
+			return v
+		}
+	}
+	{
+		res, err, txt := GetPlayerCompetitionsAction(ctx, disqualifyingdPlayerAg)
+		msg := fmt.Sprintf("%s %s", disqualifyingdPlayerAc, txt)
+		v := ValidateResponseWithMsg("大会一覧確認", step, res, err, msg, WithStatusCode(403))
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
+		} else {
+			sc.AddCriticalCount()
+			return v
+		}
+	}
 
 	return nil
 }
