@@ -187,7 +187,11 @@ func main() {
 	scenario.PrintScenarioCount()
 	scenario.PrintWorkerCount()
 	addition := SumScore(result)
-	deduction := int64(len(validateErrors) * 10)
+
+	// 減点計算
+	// NormalErrorは1%減点、CriticalErrorは10%減点
+	deductPercent := int64((noramlErrorCount * 1) + (criticalErrorCount * 10))
+	deduction := (addition * 100) * deductPercent / 100
 
 	bench.ContestantLogger.Printf("Error %d (Critical:%d)", noramlErrorCount+criticalErrorCount, criticalErrorCount)
 
