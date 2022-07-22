@@ -35,7 +35,7 @@ benchmarker_tenant.json: benchmarker.json
 
 image: benchmarker.json benchmarker_tenant.json
 	docker --config .docker \
-		pull 497146501771.dkr.ecr.ap-northeast-1.amazonaws.com/stg/benchmarker:supervisor
+		pull 497146501771.dkr.ecr.ap-northeast-1.amazonaws.com/$(ENV)/benchmarker:supervisor
 	docker --config .docker \
 		build \
 		-f Dockerfile \
