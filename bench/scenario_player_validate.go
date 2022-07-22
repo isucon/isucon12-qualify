@@ -282,6 +282,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 	}
 
 	// 失格状態を更新する
+	// チェックは3秒後
 	{
 		pid := disqualifyingdPlayerID
 		res, err, txt := PostOrganizerApiPlayerDisqualifiedAction(ctx, pid, orgAg)
@@ -303,32 +304,6 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
 		} else {
 			sc.AddCriticalCount()
-			return v
-		}
-	}
-
-	// 失格
-	// チェックは3秒後
-	{
-		pid := disqualifyingdPlayerID
-		res, err, txt := GetPlayerAction(ctx, pid, checkerPlayerAg)
-		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
-		v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(200),
-			WithContentType("application/json"),
-			WithSuccessResponse(func(r ResponseAPIPlayer) error {
-				if r.Data.Player.ID != pid {
-					return fmt.Errorf("PlayerIDが違います (want:%s got:%s)", pid, r.Data.Player.ID)
-				}
-				if true != r.Data.Player.IsDisqualified {
-					return fmt.Errorf("失格状態が違います playerID: %s (want:%v got:%v)", pid, true, r.Data.Player.IsDisqualified)
-				}
-				return nil
-			}),
-		)
-		if v.IsEmpty() {
-			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
-		} else {
-			sc.AddErrorCount()
 			return v
 		}
 	}
@@ -437,8 +412,30 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 	case <-ctx.Done():
 	case <-disqualifyTicker:
 	}
-
 	// 失格が反映されていることをチェック
+	{
+		pid := disqualifyingdPlayerID
+		res, err, txt := GetPlayerAction(ctx, pid, checkerPlayerAg)
+		msg := fmt.Sprintf("%s %s", checkerPlayerAc, txt)
+		v := ValidateResponseWithMsg("参加者と戦績情報取得", step, res, err, msg, WithStatusCode(200),
+			WithContentType("application/json"),
+			WithSuccessResponse(func(r ResponseAPIPlayer) error {
+				if r.Data.Player.ID != pid {
+					return fmt.Errorf("PlayerIDが違います (want:%s got:%s)", pid, r.Data.Player.ID)
+				}
+				if true != r.Data.Player.IsDisqualified {
+					return fmt.Errorf("失格状態が違います playerID: %s (want:%v got:%v)", pid, true, r.Data.Player.IsDisqualified)
+				}
+				return nil
+			}),
+		)
+		if v.IsEmpty() {
+			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
+		} else {
+			sc.AddErrorCount()
+			return v
+		}
+	}
 	{
 		pid := disqualifyingdPlayerID
 		res, err, txt := GetPlayerAction(ctx, pid, disqualifyingdPlayerAg)
