@@ -109,7 +109,7 @@ func main() {
 	unexpectedErrors := []error{}
 	validateErrors := []error{}
 	existFailLog := false
-	noramlErrorCount := 0
+	// noramlErrorCount := 0 // NOTE: validateErrorsを信頼する
 	criticalErrorCount := 0
 
 	errAll := result.Errors.All()
@@ -118,14 +118,14 @@ func main() {
 		fail := false
 		isValidateError := false
 		isCriticalError := false
-		isNormalError := false
+		// isNormalError := false
 
 		for _, errCode := range failure.GetErrorCodes(err) {
 			switch errCode {
 			case string(bench.ErrValidation): // validationErrorで出るもの
 				isValidateError = true
-			case string(bench.ErrNormalError): // 通常エラーのカウント
-				isNormalError = true
+			// case string(bench.ErrNormalError): // 通常エラーのカウント
+			// 	isNormalError = true
 			case string(bench.ErrCriticalError): // Criticalエラーのカウント
 				isCriticalError = true
 			case string(bench.ErrFailedLoad), string(bench.ErrFailedPrepare): // portal上はfailを出す
@@ -142,10 +142,10 @@ func main() {
 			criticalErrorCount++
 			continue
 		}
-		if isNormalError {
-			noramlErrorCount++
-			continue
-		}
+		// if isNormalError {
+		// 	noramlErrorCount++
+		// 	continue
+		// }
 		if fail {
 			existFailLog = true
 			continue
@@ -191,10 +191,20 @@ func main() {
 
 	// 減点計算
 	// NormalErrorは1%減点、CriticalErrorは10%減点
-	deductPercent := int64((noramlErrorCount * 1) + (criticalErrorCount * 10))
+	normalErrorCount := len(validateErrors) - criticalErrorCount
+
+	// NOTE: validateErrorsよりCriticalErrorCountのほうが多かった場合、本来はbenchのエラー
+	// とりあえずcriticalErrorCountを下げて表示されるエラー数に辻褄をあわせる
+	if normalErrorCount < 0 {
+		normalErrorCount = 0
+		criticalErrorCount = len(validateErrors)
+		bench.AdminLogger.Printf("[bench warning] len(validateErrors)(%d) < criticalErrorCount(%d)", len(validateErrors), criticalErrorCount)
+	}
+
+	deductPercent := int64((normalErrorCount * 1) + (criticalErrorCount * 10))
 	deduction := int64((addition * deductPercent) / 100)
 
-	bench.ContestantLogger.Printf("Error %d (Critical:%d)", noramlErrorCount+criticalErrorCount, criticalErrorCount)
+	bench.ContestantLogger.Printf("Error %d (Critical:%d)", normalErrorCount+criticalErrorCount, criticalErrorCount)
 
 	score := addition - deduction
 	if score < 0 {
