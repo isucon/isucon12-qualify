@@ -1225,7 +1225,8 @@ func playerHandler(c echo.Context) error {
 	if err := tenantDB.SelectContext(
 		ctx,
 		&cs,
-		"SELECT * FROM competition ORDER BY created_at ASC",
+		"SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at ASC",
+		v.tenantID,
 	); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("error Select competition: %w", err)
 	}

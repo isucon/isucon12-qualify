@@ -1354,7 +1354,8 @@ async fn player_handler(
         }
     };
     let cs: Vec<CompetitionRow> =
-        sqlx::query_as("SELECT * FROM competition ORDER BY created_at ASC")
+        sqlx::query_as("SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at ASC")
+            .bind(v.tenant_id)
             .fetch_all(&mut tenant_db)
             .await?;
 

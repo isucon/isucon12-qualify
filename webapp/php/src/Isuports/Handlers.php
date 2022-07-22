@@ -866,7 +866,8 @@ class Handlers
             throw new HttpNotFoundException($request, 'player not found');
         }
 
-        $cs = $tenantDB->executeQuery('SELECT * FROM competition ORDER BY created_at ASC')
+        $cs = $tenantDB->prepare('SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at ASC')
+            ->executeQuery([$v->tenantID])
             ->fetchAllAssociative();
 
         // player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する

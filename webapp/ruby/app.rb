@@ -709,7 +709,7 @@ module Isuports
         unless player
           raise HttpError.new(404, 'player not found')
         end
-        competitions = tenant_db.execute('SELECT * FROM competition ORDER BY created_at ASC').map { |row| CompetitionRow.new(row) }
+        competitions = tenant_db.execute('SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at ASC', [v.tenant_id]).map { |row| CompetitionRow.new(row) }
         # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
         flock_by_tenant_id(v.tenant_id) do
           player_score_rows = competitions.filter_map do |c|
