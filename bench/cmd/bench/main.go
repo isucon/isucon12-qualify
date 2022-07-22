@@ -117,16 +117,16 @@ func main() {
 	for _, err := range errAll {
 		fail := false
 		isValidateError := false
+		isCriticalError := false
+		isNormalError := false
 		for _, errCode := range failure.GetErrorCodes(err) {
 			switch errCode {
 			case string(bench.ErrValidation): // validationErrorで出るもの
 				isValidateError = true
 			case string(bench.ErrNormalError): // 通常エラーのカウント
-				noramlErrorCount++
-				continue
+				isNormalError = true
 			case string(bench.ErrCriticalError): // Criticalエラーのカウント
-				criticalErrorCount++
-				continue
+				isCriticalError = true
 			case string(bench.ErrFailedLoad), string(bench.ErrFailedPrepare): // portal上はfailを出す
 				fail = true
 			default: // isucandar系など
@@ -135,6 +135,14 @@ func main() {
 
 		if isValidateError {
 			validateErrors = append(validateErrors, err)
+			continue
+		}
+		if isCriticalError {
+			criticalErrorCount++
+			continue
+		}
+		if isNormalError {
+			noramlErrorCount++
 			continue
 		}
 		if fail {

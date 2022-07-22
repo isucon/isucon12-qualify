@@ -202,7 +202,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
-			sc.AddErrorCount()
+			sc.AddCriticalCount()
 			return v
 		}
 	}
@@ -214,7 +214,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
-			sc.AddErrorCount()
+			sc.AddCriticalCount()
 			return v
 		}
 	}
@@ -226,7 +226,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
-			sc.AddErrorCount()
+			sc.AddCriticalCount()
 			return v
 		}
 	}
@@ -250,7 +250,7 @@ func (sc *Scenario) PeacefulTenantScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
-			sc.AddCriticalCount() // 反映されていないのはCritical
+			sc.AddErrorCount()
 			return v
 		}
 	}

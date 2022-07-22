@@ -79,6 +79,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETOrganizerPlayersList, scTag)
 		} else {
+			sc.AddErrorCount()
 			return v
 		}
 	}
@@ -301,7 +302,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayerDisqualified, scTag)
 		} else {
-			sc.AddErrorCount()
+			sc.AddCriticalCount()
 			return v
 		}
 	}
@@ -338,7 +339,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerDetails, scTag)
 		} else {
-			sc.AddErrorCount()
+			sc.AddCriticalCount()
 			return v
 		}
 	}
@@ -349,7 +350,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerRanking, scTag)
 		} else {
-			sc.AddErrorCount()
+			sc.AddCriticalCount()
 			return v
 		}
 	}
@@ -360,7 +361,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScoreGETPlayerCompetitions, scTag)
 		} else {
-			sc.AddErrorCount()
+			sc.AddCriticalCount()
 			return v
 		}
 	}
