@@ -1060,7 +1060,7 @@ class Handlers
     }
 
     /**
-     * 主催者向けAPI
+     * テナント管理者向けAPI
      * GET /api/organizer/competitions
      * 大会の一覧を取得する
      */
