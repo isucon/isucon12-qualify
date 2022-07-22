@@ -16,7 +16,7 @@ import (
 
 // failure.NewError で用いるエラーコード定義
 const (
-	ErrValidation failure.StringCode = "validation"
+	ErrValidation failure.StringCode = "load-validation"
 )
 
 type ValidationError struct {
