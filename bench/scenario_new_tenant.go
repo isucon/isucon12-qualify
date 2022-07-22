@@ -63,6 +63,8 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTAdminTenantsAdd, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddCriticalCount()
 			return v
@@ -100,6 +102,8 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 		)
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerPlayersAdd, scTag)
+		} else if v.Canceled {
+			return nil
 		} else {
 			sc.AddCriticalCount()
 			return v
@@ -136,6 +140,8 @@ func (sc *Scenario) NewTenantScenario(ctx context.Context, step *isucandar.Bench
 
 			if v.IsEmpty() {
 				sc.AddScoreByScenario(step, ScoreGETOrganizerBilling, scTag)
+			} else if v.Canceled {
+				return nil
 			} else {
 				sc.AddErrorCount()
 				return v
