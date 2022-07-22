@@ -912,7 +912,8 @@ sub player_handler($self, $c) {
     }
 
     my $competitions = $tenant_db->select_all(
-        "SELECT * FROM competition ORDER BY created_at ASC",
+        "SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at ASC",
+        $v->{tenant_id},
     );
 
     # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する

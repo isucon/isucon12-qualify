@@ -803,7 +803,7 @@ def player_handler(player_id: str):
     if not player:
         abort(404, "player not found")
 
-    competition_rows = tenant_db.execute("SELECT * FROM competition ORDER BY created_at ASC").fetchall()
+    competition_rows = tenant_db.execute("SELECT * FROM competition WHERE tenant_id = ? ORDER BY created_at ASC", viewer.tenant_id).fetchall()
 
     # player_scoreを読んでいるときに更新が走ると不整合が起こるのでロックを取得する
     lock_file = flock_by_tenant_id(viewer.tenant_id)
