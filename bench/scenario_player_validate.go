@@ -73,6 +73,9 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 						playerIDs = append(playerIDs, pl.ID)
 					}
 				}
+				if len(playerIDs) < 2 {
+					return fmt.Errorf("テナント内のプレイヤーが不足しています。")
+				}
 				return nil
 			}),
 		)
@@ -99,7 +102,6 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 				comp.ID = r.Data.Competition.ID
 				return nil
 			}))
-
 		if v.IsEmpty() {
 			sc.AddScoreByScenario(step, ScorePOSTOrganizerCompetitionsAdd, scTag)
 		} else if v.Canceled {
