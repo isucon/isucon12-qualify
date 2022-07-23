@@ -782,6 +782,9 @@ func rankingCheck(ctx context.Context, sc *Scenario, step *isucandar.BenchmarkSt
 				for _, pl := range r.Data.Players {
 					pIDs = append(pIDs, pl.ID)
 				}
+				if 101 != len(pIDs) {
+					return fmt.Errorf("追加されたプレイヤーが違います (want:%d got:%d)", 101, len(pIDs))
+				}
 				return nil
 			}),
 		)
