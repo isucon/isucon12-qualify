@@ -64,6 +64,9 @@ func (sc *Scenario) OrganizerJob(ctx context.Context, step *isucandar.BenchmarkS
 						DisplayName: player.DisplayName,
 					}
 				}
+				if len(playerIDs) == 0 || len(qualifyPlayerIDs) == 0 {
+					return fmt.Errorf("テナントにプレイヤーがいません")
+				}
 				return nil
 			}),
 		)
