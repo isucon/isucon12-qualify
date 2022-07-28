@@ -200,7 +200,7 @@ func WithSuccessResponse[T ResponseAPI](validates ...func(res T) error) Response
 			if failure.Is(err, context.DeadlineExceeded) || failure.Is(err, context.Canceled) {
 				return nil
 			}
-			return fmt.Errorf("JSONのdecodeに失敗しました %s %s status %d body: %s ", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode, r.Body)
+			return fmt.Errorf("JSONのdecodeに失敗しました %s %s status %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode)
 		}
 		if !v.IsSuccess() {
 			return fmt.Errorf("成功したAPIレスポンスの.statusはtrueである必要があります %s %s status %d", r.Response.Request.Method, r.Response.Request.URL.Path, r.Response.StatusCode)
