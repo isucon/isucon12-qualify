@@ -41,14 +41,14 @@ go run cmd/bench/main.go --help
 
 ## シナリオ一覧
 
-- SaaS管理者: AdminBilling
-- Player
-- 新規テナント: OrganizerNewTenant
-- 既存巨大テナント(id=1): PopularTenant(heavry)
-- 既存テナント: PopularTenant
-- 管理者請求額確認: AdminBillingValidate
-- テナント請求額確認: TenantBillingValidate
-- プレイヤー確認 PlayerValidate
+- AdminBillingScenario          : SaaS管理者
+- PlayerScenario                : 参加者
+- OrganizerNewTenantScenario    : 新規テナント
+- PopularTenantScenario         : 既存テナント
+- AdminBillingValidateScenario  : 管理者請求額整合性チェック
+- TenantBillingValidateScenario : テナント請求額整合性チェック
+- PlayerValidateScenario	      : プレイヤー整合性チェック
+- ValidateScenario	            : 整合性チェック
 
 ### 構成
 
