@@ -1,63 +1,90 @@
-# bench
+# ベンチマーカー
 
-## 構成
+### localでの実行方法
 
-Scenario_xxx
-  workerとしてgoroutineで動作できるもの
-job_xxx
-  Action+Validationのまとまり
-  終わるまでブロックする
-  Scenarioの中で利用する
+```
+go run cmd/bench/main.go -target-url https://t.isucon.dev
+```
 
-## 想定負荷の流れ
+各種オプションは以下を参照してください。
 
-- SaaS管理者は1人 (1 worker)
-  - admin billingを順番に見る
-    - 整合性チェック、テナントのworkerのbillingに左右されるのでちょっと難しそう
-    - 何かしらのチェックは入れたいので頑張りどころ
-      - 大会をfinishしたタイミングでそのtenantのbillingは確定するので、それを記憶するsync.Mapはどうだろう
-      - ただしfinishしてから反映まで1秒の猶予があり、その1秒の間にどうなるかは不明
-  - 見終わったらテナントを1増やして新規テナントシナリオを増やす
+```
+Usage of bench:
+  -data-dir string
+        Data directory (default "data")
+  -debug
+        Debug mode
+  -duration duration
+        Benchmark duration (default 1m0s)
+  -exit-error-on-fail
+        Exit error on fail
+  -initialize-request-timeout duration
+        Initialize request timeout (default 30s)
+  -prepare-only
+        Prepare only
+  -request-timeout duration
+        Default request timeout (default 30s)
+  -skip-prepare
+        Skip prepare
+  -strict-prepare
+        strict prepare mode. default: true (default true)
+  -target-addr string
+        Benchmark target address e.g. host:port
+  -target-url string
+        Benchmark target URL (default "https://t.isucon.dev")
+```
 
-- 増えたテナントで大会が開催される(tenant worker)
-  - 大会を追加
-    - playerを追加
-    - CSV入稿（下記の増加想定）
-    - 大会のfinish
-    - rankingの確認
-  - tenant billingが返ってくる
-  - 大会の追加に戻る
+webappはhost名を見てテナントDBを振り分けるため、`--target-url`にはテナント名のsubdomainを加える前のURLを指定します。  
+`--target-addr`には実際にリクエストするwebappのアドレスを指定します。
 
-- 初期データテナントで整合性チェックをする
-  - ここはあまり負荷は増えない
-  - 巨大テナント(id=1) 1 worker
-    - ranking, score
-    - billing
-  - 人気テナント(id=2~20?)(破壊的シナリオNG)
-    - ranking, score
-    - billing
-  - のんびりテナント(id=21~40?)(破壊的シナリオOK)
-    - playerを失格にして確認
-    - billing
+例: 10.0.0.1:443に向けてベンチマークを実行する場合
+
+```
+go run cmd/bench/main.go -target-url https://t.isucon.dev --target-addr 10.0.0.1:443
+```
+
+### 想定負荷の流れ
+
+- SaaS管理者 (1 worker)
+  - `/api/admin/tenants/billing`を最新から順番に取得する
+  - すべて見終わったらテナントを1つ作成し、NewTenantScenarioを開始する
+
+- Organizer
+  - 以下を繰り返す
+    - 大会を追加
+      - playerを追加
+      - 大会を開催する
+        - 以下を並列で実行する
+        - CSV入稿
+        - 複数のplayerがrankingを取得する
+      - 大会のfinish
+      - rankingの確認
+    - `/api/organizer/billing`を取得する
+
+- Player
+  - workerとして、離脱条件を満たさない限り以下を繰り返す
+    - テナント内の大会の一覧を取得する
+    - 大会のうちの一つのrankingを参照する
+      - 1秒(厳密には1.2秒)レスポンスが帰ってこなければ離脱としてworkerを終了する
+    - rankingの中からplayerを選び、`/api/player/player/:player_name`を参照する
 
 ## シナリオ一覧
 
-- SaaS管理者: AdminBilling
-- 新規テナント: OrganizerNewTenant
-- 既存巨大テナント(id=1): PopularTenant(heavry)
-- 既存人気テナント: PopularTenant
-- 既存のんびりテナント 破壊的操作OK: PeacefulTenant
-- 管理者請求額確認: AdminBillingValidate
-- テナント請求額確認: TenantBillingValidate
+- AdminBillingScenario          : SaaS管理者
+- PlayerScenario                : 参加者
+- OrganizerNewTenantScenario    : 新規テナント
+- PopularTenantScenario         : 既存テナント
+- AdminBillingValidateScenario  : 管理者請求額整合性チェック
+- TenantBillingValidateScenario : テナント請求額整合性チェック
+- PlayerValidateScenario	      : プレイヤー整合性チェック
+- ValidateScenario	            : 整合性チェック
 
-## CSV入稿について
+### 構成
 
-benchから入稿されるCSVは、入稿される度に後ろに行数が増えていく
-最後に入稿されたCSVが有効
-
-# メモ
-
-なんとかActionでリクエストを作って送って返ってきたresをValidateResponseで検証してるんだけど、この2つの関数に関係がないのでリクエスト開始から結果取得完了までの時刻(レスポンスタイム)を元になにかするのができない
-n秒超えたらタイムアウトではないけど0点、みたいな調整がやりづらいのでそこだけ作りを変えたい気持ち
-リクエストを送るctxをwrapして、そこでリクエスト送信時にメタデータを入れてvalidateにもctxを渡してそれをみれるようにするとか
+Scenario_xxx
+- workerとして動作するもの
+job_xxx
+- Action+Validationのまとまり
+- 終わるまでブロックする
+- Scenarioの中で利用する
 

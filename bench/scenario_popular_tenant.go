@@ -103,7 +103,6 @@ func (sc *Scenario) PopularTenantScenario(ctx context.Context, step *isucandar.B
 		}
 
 		// player数を増やし、スコアを大きくする
-		// TODO: スコアはドカンと増える
 		addPlayerNum := randomRange([]int{80, 120})
 		playerDisplayNames := make([]string, addPlayerNum)
 		for i := 0; i < addPlayerNum; i++ {
