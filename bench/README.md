@@ -3,16 +3,14 @@
 ### localでの回し方
 
 ```
-./run_local.sh
+go run cmd/bench/main.go -target-url https://t.isucon.dev
 ```
 
-各種オプションは
-
+各種オプションは以下を参照してください。
 ```
 go run cmd/bench/main.go --help
 ```
 
-を参照してください。
 
 ### 想定負荷の流れ
 
