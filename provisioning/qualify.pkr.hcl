@@ -65,7 +65,7 @@ build {
 
   provisioner "file" {
     destination = "/dev/shm/initial_data.tar.gz"
-    source      = "../initial_data.tar.gz"
+    source      = "./initial_data.tar.gz"
   }
 
   provisioner "file" {

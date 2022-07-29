@@ -1,4 +1,4 @@
-export BRANCH := $(shell git branch --contains | cut -d ' ' -f 2)
+export BRANCH := $(shell git branch --contains | fgrep '*' | cut -d ' ' -f 2)
 
 .PHONY: build clean
 build: isucon12-qualify mitamae.tar.gz
