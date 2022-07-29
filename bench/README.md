@@ -6,14 +6,13 @@
 ./run_local.sh
 ```
 
-### 構成
+各種オプションは
 
-Scenario_xxx
-  workerとして動作できるもの
-job_xxx
-  Action+Validationのまとまり
-  終わるまでブロックする
-  Scenarioの中で利用する
+```
+go run cmd/bench/main.go --help
+```
+
+を参照してください。
 
 ### 想定負荷の流れ
 
@@ -50,3 +49,13 @@ job_xxx
 - 管理者請求額確認: AdminBillingValidate
 - テナント請求額確認: TenantBillingValidate
 - プレイヤー確認 PlayerValidate
+
+### 構成
+
+Scenario_xxx
+- workerとして動作するもの
+job_xxx
+- Action+Validationのまとまり
+- 終わるまでブロックする
+- Scenarioの中で利用する
+
