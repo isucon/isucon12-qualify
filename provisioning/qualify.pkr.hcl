@@ -79,7 +79,7 @@ build {
   }
 
   provisioner "file" {
-    destination = "/dev/shm/webapp"
+    destination = "/dev/shm/bench"
     source      = "isucon12-qualify/bench"
   }
 
