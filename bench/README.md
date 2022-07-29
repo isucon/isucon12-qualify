@@ -1,18 +1,47 @@
 # ベンチマーカー
 
-### localでの回し方
+### localでの実行方法
 
 ```
-./run_local.sh
+go run cmd/bench/main.go -target-url https://t.isucon.dev
 ```
 
-各種オプションは
+各種オプションは以下を参照してください。
 
 ```
-go run cmd/bench/main.go --help
+Usage of bench:
+  -data-dir string
+        Data directory (default "data")
+  -debug
+        Debug mode
+  -duration duration
+        Benchmark duration (default 1m0s)
+  -exit-error-on-fail
+        Exit error on fail
+  -initialize-request-timeout duration
+        Initialize request timeout (default 30s)
+  -prepare-only
+        Prepare only
+  -request-timeout duration
+        Default request timeout (default 30s)
+  -skip-prepare
+        Skip prepare
+  -strict-prepare
+        strict prepare mode. default: true (default true)
+  -target-addr string
+        Benchmark target address e.g. host:port
+  -target-url string
+        Benchmark target URL (default "https://t.isucon.dev")
 ```
 
-を参照してください。
+webappはhost名を見てテナントDBを振り分けるため、`--target-url`にはテナント名のsubdomainを加える前のURLを指定します。  
+`--target-addr`には実際にリクエストするwebappのアドレスを指定します。
+
+例: 10.0.0.1:443に向けてベンチマークを実行する場合
+
+```
+go run cmd/bench/main.go -target-url https://t.isucon.dev --target-addr 10.0.0.1:443
+```
 
 ### 想定負荷の流れ
 
