@@ -45,11 +45,11 @@ TODO
 
 ## 初期データについて
 
-https://github.com/isucon/isucon12-qualify/releases 以下にビルド済みの初期データがあります。  
-利用方法は`webapp/README.md`を参照してください。
+https://github.com/isucon/isucon12-qualify/releases 以下にビルド済みの初期データがあります。
 
 ## Links
 
 - [ISUCON12予選 レギュレーション](https://isucon.net/archives/56671734.html)
 - [ISUCON12予選 当日マニュアル](https://gist.github.com/mackee/4320c18919c8f6f1867849378a17e651)
 - [ISUCON12予選 解説(Node.jsでSQLiteのまま10万点行く方法)](https://isucon.net/archives/56842718.html)
+- [ISUCON12予選 講評](https://isucon.net) TODO
