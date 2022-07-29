@@ -15,11 +15,6 @@ build-for-docker-compose: builder
 		-B isuports --no-tablespaces > ../initial_data/90_data.sql
 	cp *.json ../bench/
 
-build-for-local: builder
-	@ISUPORTS_DATA_HUGE_TENANT_SCALE=2 \
-		./builder 10
-	mysqldump -uisucon -pisucon --host 127.0.0.1 -B isuports --no-tablespaces > 90_data.sql
-
 clean:
 	rm -f *.db *.sql *.json
 	rm -f ../webapp/tenant_db/*.db
