@@ -1,12 +1,12 @@
-directory '/home/isucon-admin/blackauth' do
-  owner 'isucon-admin'
-  group 'isucon-admin'
+directory '/home/isucon/blackauth' do
+  owner 'isucon'
+  group 'isucon'
   mode '0755'
 end
 
-remote_file '/home/isucon-admin/blackauth/blackauth' do
-  owner 'isucon-admin'
-  group 'isucon-admin'
+remote_file '/home/isucon/blackauth/blackauth' do
+  owner 'isucon'
+  group 'isucon'
   mode '0755'
   source 'blackauth'
 end
