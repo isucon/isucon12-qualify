@@ -7,8 +7,8 @@ WantedBy=multi-user.target
 
 [Service]
 Type=simple
-User=isucon-admin
-Group=isucon-admin
+User=isucon
+Group=isucon
 WorkingDirectory=/home/isucon/blackauth
 ExecStart=/home/isucon/blackauth/blackauth
 Restart=always

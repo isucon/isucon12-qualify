@@ -15,8 +15,6 @@ initial_data.tar.gz:
 
 isucon12-qualify:
 	gh repo clone isucon/isucon12-qualify -- --depth=1 --branch=$(BRANCH)
-
-isucon12-qualify/bench/bench: isucon12-qualify
 	cd isucon12-qualify/bench && GOOS=linux GOARCH=amd64 make
 
 isucon12-qualify.tar.gz: isucon12-qualify

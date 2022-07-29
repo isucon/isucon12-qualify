@@ -83,6 +83,11 @@ build {
     source      = "isucon12-qualify/bench"
   }
 
+  provisioner "file" {
+    destination = "/dev/shm/data"
+    source      = "isucon12-qualify/data"
+  }
+
   provisioner "shell" {
     env = {
       DEBIAN_FRONTEND = "noninteractive"
@@ -98,6 +103,7 @@ build {
       "sudo rsync -a /dev/shm/webapp/ /home/isucon/webapp/",
       "sudo rsync -a /dev/shm/public/ /home/isucon/public/",
       "sudo rsync -a /dev/shm/bench/ /home/isucon/bench/",
+      "sudo rsync -a /dev/shm/data/ /home/isucon/data/",
       "sudo tar xvf /dev/shm/initial_data.tar.gz -C /home/isucon",
       "sudo chown -R isucon:isucon /home/isucon",
 
