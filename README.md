@@ -12,7 +12,6 @@
 +- nginx      # 初期状態のnginx設定ファイル
 +- data       # 初期データ生成
 +- probisioning # セットアップ用
-`- infra        # セットアップ用
 ```
 
 ## JWTに利用する鍵について
