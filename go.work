@@ -1,9 +1,0 @@
-go 1.18
-
-use (
-	./bench
-	./blackauth
-	./data
-	./webapp/go
-	./provisioning/isucon-env-checker
-)
