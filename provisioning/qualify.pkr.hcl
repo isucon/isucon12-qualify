@@ -50,7 +50,7 @@ source "amazon-ebs" "qualify" {
   temporary_key_pair_type = "ed25519"
 
   launch_block_device_mappings {
-    volume_size = 20
+    volume_size = 8
     device_name = "/dev/sda1"
   }
 }
@@ -61,11 +61,6 @@ build {
   provisioner "file" {
     destination = "/dev/shm/mitamae.tar.gz"
     source      = "./mitamae.tar.gz"
-  }
-
-  provisioner "file" {
-    destination = "/dev/shm/isucon-admin.pub"
-    source      = "./mitamae/cookbooks/users/isucon-admin.pub"
   }
 
   provisioner "file" {
@@ -83,6 +78,11 @@ build {
     source      = "isucon12-qualify/public"
   }
 
+  provisioner "file" {
+    destination = "/dev/shm/webapp"
+    source      = "isucon12-qualify/bench"
+  }
+
   provisioner "shell" {
     env = {
       DEBIAN_FRONTEND = "noninteractive"
@@ -97,8 +97,8 @@ build {
       # install initial data and codes
       "sudo rsync -a /dev/shm/webapp/ /home/isucon/webapp/",
       "sudo rsync -a /dev/shm/public/ /home/isucon/public/",
+      "sudo rsync -a /dev/shm/bench/ /home/isucon/bench/",
       "sudo tar xvf /dev/shm/initial_data.tar.gz -C /home/isucon",
-      "sudo rm -rf /home/isucon/bench",
       "sudo chown -R isucon:isucon /home/isucon",
 
       # reset mysql password
