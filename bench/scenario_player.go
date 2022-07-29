@@ -154,6 +154,10 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 
 			// 大会参加者を何人か見る
 			// もし参加者がいなければ大会を選び直す
+			// 	NOTE: 予選後のメモ
+			// 		予選開催時、考慮漏れのため「空のランキングが返ってきた場合（スコア入稿が完了していない場合）はsleep無しでranking取得を繰り返す」という挙動になっていた
+			// 		そのため想定から外れ、PlayerAPIをほぼ叩かずrankingを叩いてスコアを稼ぐという解法があった。
+			// 		ただし、スコア入稿の速度によってrankingを叩く回数が大きくブレるため、ベンチマークスコアのブレも大きくなる傾向にあった。
 			if len(playerIDs) == 0 {
 				continue
 			}
