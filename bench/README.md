@@ -22,6 +22,8 @@ Usage of bench:
         Initialize request timeout (default 30s)
   -prepare-only
         Prepare only
+  -reproduce
+        reproduce contest day mode. default: false
   -request-timeout duration
         Default request timeout (default 30s)
   -skip-prepare
@@ -88,3 +90,9 @@ job_xxx
 - 終わるまでブロックする
 - Scenarioの中で利用する
 
+
+### Reproduce mode（コンテスト当日の再現について）
+
+負荷走行の一部で本来意図していない挙動をしていた点について、競技終了後に修正を行いました。  
+コンテスト当日のベンチマーカーの挙動を再現する場合は`-reproduce`をつけてベンチマーカーを実行してください。  
+デフォルトは無効になっています。
