@@ -89,7 +89,7 @@ func (sc *Scenario) AdminBillingScenario(ctx context.Context, step *isucandar.Be
 					}
 
 					if beforeID != 0 && beforeID < id {
-						return fmt.Errorf("tenant IDが降順ではありません (before:%d got:%d)", beforeID, id)
+						return fmt.Errorf("tenant IDが降順ではありません (before: %d, got: %d)", beforeID, id)
 					}
 					beforeID = id
 

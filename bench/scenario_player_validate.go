@@ -175,10 +175,10 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				if r.Data.Player.ID != pid {
-					return fmt.Errorf("PlayerIDが違います (want:%s got:%s)", pid, r.Data.Player.ID)
+					return fmt.Errorf("PlayerIDが違います (want: %s, got: %s)", pid, r.Data.Player.ID)
 				}
 				if false != r.Data.Player.IsDisqualified {
-					return fmt.Errorf("失格状態が違います playerID: %s (want:%v got:%v)", pid, false, r.Data.Player.IsDisqualified)
+					return fmt.Errorf("失格状態が違います playerID: %s (want: %v, got: %v)", pid, false, r.Data.Player.IsDisqualified)
 				}
 				return nil
 			}),
@@ -200,10 +200,10 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				if r.Data.Player.ID != pid {
-					return fmt.Errorf("PlayerIDが違います (want:%s got:%s)", pid, r.Data.Player.ID)
+					return fmt.Errorf("PlayerIDが違います (want: %s, got: %s)", pid, r.Data.Player.ID)
 				}
 				if false != r.Data.Player.IsDisqualified {
-					return fmt.Errorf("失格状態が違います playerID: %s (want:%v got:%v)", pid, false, r.Data.Player.IsDisqualified)
+					return fmt.Errorf("失格状態が違います playerID: %s (want: %v, got: %v)", pid, false, r.Data.Player.IsDisqualified)
 				}
 				return nil
 			}),
@@ -226,7 +226,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if false != r.Data.Competition.IsFinished {
-					return fmt.Errorf("大会の開催状態が違います CompetitionID:%s (want:%v got:%v)", comp.ID, false, r.Data.Competition.IsFinished)
+					return fmt.Errorf("大会の開催状態が違います CompetitionID: %s (want: %v, got: %v)", comp.ID, false, r.Data.Competition.IsFinished)
 				}
 				beforeRanks = r.Data.Ranks
 				return nil
@@ -317,7 +317,7 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 					return fmt.Errorf("プレイヤーが失格になっていません player.id: %s", r.Data.Player.ID)
 				}
 				if disqualifyingdPlayerID != r.Data.Player.ID {
-					return fmt.Errorf("失格にしたプレイヤーが違います (want:%s, got:%s)", disqualifyingdPlayerID, r.Data.Player.ID)
+					return fmt.Errorf("失格にしたプレイヤーが違います (want: %s, got: %s)", disqualifyingdPlayerID, r.Data.Player.ID)
 				}
 				return nil
 			}),
@@ -375,10 +375,10 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 				if false != r.Data.Competition.IsFinished {
-					return fmt.Errorf("大会の開催状態が違います CompetitionID:%s (want:%v got:%v)", comp.ID, false, r.Data.Competition.IsFinished)
+					return fmt.Errorf("大会の開催状態が違います CompetitionID: %s (want: %v, got: %v)", comp.ID, false, r.Data.Competition.IsFinished)
 				}
 				if len(score) != len(r.Data.Ranks) {
-					return fmt.Errorf("大会のランキング数が違います CompetitionID:%s (want:%v got:%v)", comp.ID, len(score), len(r.Data.Ranks))
+					return fmt.Errorf("大会のランキング数が違います CompetitionID: %s (want: %v, got: %v)", comp.ID, len(score), len(r.Data.Ranks))
 				}
 				if diff := cmp.Diff(beforeRanks, r.Data.Ranks); diff == "" {
 					return fmt.Errorf("大会のランキングが更新されていません CompetitionID:%s", comp.ID)
@@ -453,10 +453,10 @@ func (sc *Scenario) PlayerValidateScenario(ctx context.Context, step *isucandar.
 			WithContentType("application/json"),
 			WithSuccessResponse(func(r ResponseAPIPlayer) error {
 				if r.Data.Player.ID != pid {
-					return fmt.Errorf("PlayerIDが違います (want:%s got:%s)", pid, r.Data.Player.ID)
+					return fmt.Errorf("PlayerIDが違います (want: %s, got: %s)", pid, r.Data.Player.ID)
 				}
 				if true != r.Data.Player.IsDisqualified {
-					return fmt.Errorf("失格状態が違います playerID: %s (want:%v got:%v)", pid, true, r.Data.Player.IsDisqualified)
+					return fmt.Errorf("失格状態が違います playerID: %s (want: %v, got: %v)", pid, true, r.Data.Player.IsDisqualified)
 				}
 				return nil
 			}),
