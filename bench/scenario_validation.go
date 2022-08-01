@@ -379,7 +379,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 					WithCacheControlPrivate(),
 					WithSuccessResponse(func(r ResponseAPICompetitionRanking) error {
 						if len(r.Data.Ranks) < beforeRanks {
-							return fmt.Errorf("大会のランキング数が不足しています (expect: %d, got: %d)", beforeRanks, len(r.Data.Ranks))
+							return fmt.Errorf("大会のランキング数が不足しています (want: %d, got: %d)", beforeRanks, len(r.Data.Ranks))
 						}
 						return nil
 					}),
