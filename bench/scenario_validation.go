@@ -497,10 +497,6 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 		}
 	}
 
-	// 大会の終了(organizer/competition/finish)後は反映まで3sの猶予がある
-	AdminLogger.Println("allAPISuccessCheck sleep 3s")
-	SleepWithCtx(ctx, time.Second*3)
-
 	// テナント管理者API 大会の終了
 	{
 		res, err, txt := PostOrganizerCompetitionFinishAction(ctx, competitionID, orgAg)
@@ -517,6 +513,11 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 			return v
 		}
 	}
+
+	// 大会の終了(organizer/competition/finish)後は反映まで3sの猶予がある
+	AdminLogger.Println("allAPISuccessCheck sleep 3s")
+	SleepWithCtx(ctx, time.Second*3)
+
 	// 最終的なランキングが正しいことを確認
 	{
 		// NOTE: 失格者はランキングから除外しない
