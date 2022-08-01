@@ -669,7 +669,7 @@ func allAPISuccessCheck(ctx context.Context, sc *Scenario, step *isucandar.Bench
 	{
 		checkTenantCursor := int64(randomRange([]int{2, 99})) // ID=2~99のどれかのテナントでチェック
 		initDataTenant := sc.InitialDataTenant[checkTenantCursor]
-		_, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, initDataTenant.TenantName, "organizer")
+		orgAc, orgAg, err := sc.GetAccountAndAgent(AccountRoleOrganizer, initDataTenant.TenantName, "organizer")
 		if err != nil {
 			return err
 		}
