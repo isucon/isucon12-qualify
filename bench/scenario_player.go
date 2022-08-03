@@ -57,7 +57,6 @@ func (sc *Scenario) PlayerScenarioWorker(step *isucandar.BenchmarkStep, p int32,
 
 // 本来意図していた挙動版
 func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag, tenantName, playerID string) error {
-	AdminLogger.Println("new")
 	report := timeReporter(string(scTag))
 	defer report()
 	sc.ScenarioStart(scTag)
@@ -202,7 +201,6 @@ func (sc *Scenario) PlayerScenario(ctx context.Context, step *isucandar.Benchmar
 
 // 以下は予選開催時の状態
 func (sc *Scenario) PlayerScenarioReproduce(ctx context.Context, step *isucandar.BenchmarkStep, scTag ScenarioTag, tenantName, playerID string) error {
-	AdminLogger.Println("old")
 	report := timeReporter(string(scTag))
 	defer report()
 	sc.ScenarioStart(scTag)
