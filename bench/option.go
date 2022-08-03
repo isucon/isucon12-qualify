@@ -22,16 +22,18 @@ type Option struct {
 	DataDir                  string
 	Debug                    bool
 	StrictPrepare            bool
+	Reproduce                bool
 }
 
 func (o Option) String() string {
 	return fmt.Sprintf(
-		"TargetURL: %s, TargetAddr: %s, RequestTimeout: %s, InitializeRequestTimeout: %s, StrictPrepare: %v",
+		"TargetURL: %s, TargetAddr: %s, RequestTimeout: %s, InitializeRequestTimeout: %s, StrictPrepare: %v, ReproduceMode: %v",
 		o.TargetURL,
 		o.TargetAddr,
 		o.RequestTimeout.String(),
 		o.InitializeRequestTimeout.String(),
 		o.StrictPrepare,
+		o.Reproduce,
 	)
 }
 

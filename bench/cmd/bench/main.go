@@ -59,6 +59,7 @@ func main() {
 	flag.StringVar(&option.DataDir, "data-dir", "data", "Data directory")
 	flag.BoolVar(&option.Debug, "debug", false, "Debug mode")
 	flag.BoolVar(&option.StrictPrepare, "strict-prepare", DefaultStrictPrepare, "strict prepare mode. default: true")
+	flag.BoolVar(&option.Reproduce, "reproduce", false, "reproduce contest day mode. default: false")
 
 	// コマンドライン引数のパースを実行
 	// この時点で各フィールドに値が設定されます

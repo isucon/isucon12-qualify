@@ -127,7 +127,7 @@ func (sc *Scenario) AdminBillingValidate(ctx context.Context, step *isucandar.Be
 					resultYen += t.BillingYen
 				}
 				if resultYen != sumYen {
-					return fmt.Errorf("全テナントの合計金額が正しくありません (want: %d, got:%d)", sumYen, resultYen)
+					return fmt.Errorf("全テナントの合計金額が正しくありません (want: %d, got: %d)", sumYen, resultYen)
 				}
 				return nil
 			}),
