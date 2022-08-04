@@ -52,6 +52,14 @@ $ ./bench                               # 127.0.0.1:443 に対して実行
 % ./bench -target-addr 203.0.113.1:443  # IPアドレスを指定し別のホストに対して実行
 ```
 
+### 用意されたCloudFormationテンプレートを利用する場合
+
+[cloudformation.yaml](cloudformation.yaml) を利用して、CloudFormationによって環境を起動できます。使用するAMIは上記「用意されたAMIを利用する場合」と同じもののため、予告なく利用できなくなる可能性があります。
+
+- 使用できるリージョンは ap-northeast-1 のみです
+- EC2 (c5.large) が3台起動するため、課金額には注意して下さい
+- EC2用のkeypairは自動作成され、Systems Manager パラメータストアの /ec2/keypair/ 以下に秘密鍵が保存されます
+
 ## 初期データについて
 
 https://github.com/isucon/isucon12-qualify/releases 以下にビルド済みの初期データがあります。
