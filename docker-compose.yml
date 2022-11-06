@@ -34,7 +34,7 @@ services:
     restart: always
 
   mysql:
-    image: mysql/mysql-server:8.0.29
+    image: mysql/mysql-server:8.0.31
     environment:
       - "MYSQL_ROOT_HOST=%"
       - "MYSQL_ROOT_PASSWORD=root"
