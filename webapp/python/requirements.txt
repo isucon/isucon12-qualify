@@ -2,3 +2,4 @@ Flask
 Flask-SQLAlchemy
 mysql-connector-python
 pyjwt[crypto]
+SQLAlchemy<2.0.0
