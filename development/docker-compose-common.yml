@@ -1,0 +1,67 @@
+version: '3.0'
+
+services:
+  nginx:
+    image: nginx:1.22
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ../nginx/tls:/etc/nginx/tls
+      - ../public:/public
+    ports:
+      - "443:443"
+    restart: always
+
+  mysql:
+    cpus: 1
+    mem_limit: 1g
+    image: mysql/mysql-server:8.0.31
+    environment:
+      - "MYSQL_ROOT_HOST=%"
+      - "MYSQL_ROOT_PASSWORD=root"
+    volumes:
+      - ../webapp/sql/admin/:/docker-entrypoint-initdb.d
+      - mysql:/var/lib/mysql
+    ports:
+      - 13306:3306
+    restart: always
+
+  blackauth:
+    build: ./backend-go
+    ports:
+      - "3001:3001"
+    init: true
+    restart: always
+    volumes:
+      - ../:/home/isucon
+    working_dir: /home/isucon/blackauth
+    command:
+      - /usr/local/go/bin/go
+      - run
+      - main.go
+  bench:
+    build: ./backend-go
+    stdin_open: true
+    tty: true
+    environment:
+      - GH_TOKEN
+      - GITHUB_REF_NAME
+      - GITHUB_SERVER_URL
+      - GITHUB_REPOSITORY
+      - GITHUB_RUN_ID
+      - ISUCON_JWT_KEY_FILE=./isuports.pem
+    volumes:
+      - ../:/home/isucon
+      - tenant_db:/home/isucon/webapp/tenant_db
+      - initial_data:/home/isucon/initial_data
+      - gopkg:/home/isucon/go/pkg
+    working_dir: /home/isucon/bench
+    command:
+      - "bash"
+      - "-c"
+      - "sleep infinity"
+
+volumes:
+  mysql:
+  gopkg:
+  tenant_db:
+  initial_data:

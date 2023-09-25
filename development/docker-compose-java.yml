@@ -1,0 +1,29 @@
+version: '3.0'
+
+services:
+  webapp: 
+    cpus: 1
+    mem_limit: 1g
+    build: ./backend-java
+    environment:
+      ISUCON_DB_HOST: mysql
+      ISUCON_DB_PORT: 3306
+      ISUCON_DB_USER: isucon
+      ISUCON_DB_PASSWORD: isucon
+      ISUCON_DB_NAME: isuports
+      ISUCON_ADMIN_HOSTNAME: admin.t.isucon.dev
+    ports:
+      - "3000:3000"
+    links:
+      - mysql
+    volumes:
+      - ../webapp:/home/isucon/webapp
+      - tenant_db:/home/isucon/webapp/tenant_db
+      - initial_data:/home/isucon/initial_data
+    init: true
+    tty: true
+    restart: always
+
+volumes:
+  tenant_db:
+  initial_data:
