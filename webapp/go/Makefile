@@ -1,5 +1,5 @@
-isuports: test go.mod go.sum *.go cmd/isuports/*
-	go build -o isuports ./cmd/isuports
-
-test:
-	go test -v ./...
+# [make deploy]で起動
+deploy:
+    echo "deploying..."
+	scp * isucon@<IP>:/home/isucon/webapp/go
+	ssh isucon@<IP> sudo docker restart webapp-webapp-1 
