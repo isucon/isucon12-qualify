@@ -93,10 +93,72 @@ https://github.com/isucon/isucon12-qualify/releases 以下にビルド済みの�
 - [ISUCON12 予選 解説(Node.js で SQLite のまま 10 万点行く方法)](https://isucon.net/archives/56842718.html)
 - [ISUCON12 予選 問題の解説と講評](https://isucon.net/archives/56850281.html)
 
-## 準備
+## 以下、山根がいろいろいじりながら練習した際のもろもろメモ
 
-### アクセスログ取得用
+### Local のコードを持って行ってデプロイする make ファイル
+
+【前提】
+
+- isuports.service で動いてることを確認する（サーバに入って）
+- 鍵なしでログインできる（多分/etc/hosts とかいじる）
+
+```
+deploy:
+    echo "deploying..."
+	ssh isucon@<IP> sudo systemctl stop isuports.service
+	scp * isucon@<IP>:/home/isucon/webapp/go
+	ssh isucon@<IP> sudo systemctl start isuports.service
+	ssh isucon@<IP> sudo systemctl enable isuports.service
+```
+
+### 監視
+
+#### サーバメトリクスの監視
+
+- Prometheus
+  - install,デーモン化で EC2 起動と共にサービス起動するようにする: https://hamutetublog.com/prometheus-grafana-install/#toc4
+  - 9090 ポートのリクエストを許す
+- node_exporter
+  - install,デーモン化で EC2 起動と共にサービス起動するようにする:https://zenn.dev/uchidaryo/articles/setup-node-exporter#%E3%83%80%E3%82%A6%E3%83%B3%E3%83%AD%E3%83%BC%E3%83%89
+  - (ポートは 9100 で動く)
+- Prometheus 側で、9100 ポートを見るようにする（prometheus.yml をいじるようにする）
+
+#### アクセスログの監視
+
+- nginx の/var/nginx/access.log ログを ltsv 形式にする(json もあるっぽいけど一旦実績が先にできたので ltsv)
+  - 1. nginx.conf を/etc/nginx に再配置する(make 等経由しつつ Local からいじれると尚良い)
+  - 2. systemctl reload nginx
+- alp を入れるhttps://reiichii.hateblo.jp/entry/2021/11/02/214846
+- ベンチ回した後に、以下で取得
+  - aggregates 以下は、マニュアル等から API 一覧を見て生成(今回だと ID 部分を`[0-9a-z]*`で置き換えするところ)
 
 ```
 alp -f /var/log/nginx/access.log --aggregates=/api/player/player/[0-9a-z]*,/api/player/competition/[0-9a-z]*/ranking,/api/organizer/competition/[0-9a-z]*/score,/api/organizer/competition/[0-9a-z]*/finish,/api/organizer/player/[0-9a-z]*/disqualified
 ```
+
+※alp は単一 log ファイルの解析にはちょうどいいが、実務だと複数サーバいっぱいあったりして微妙なので、そこで ElasticSearch とか Redshift とか出てくるらしい(ISUCON 本より)
+
+## TODO
+
+### Go
+
+この書き方に慣れたい！（知識が足りぬ。。）
+
+- エラーハンドリング周り
+- 配列周り
+- Flock によるロック取得とは？
+
+```Go
+  pss := []PlayerScoreRow{} //これ配列？
+	if err := tenantDB.SelectContext(
+		ctx,
+		&pss,
+		"SELECT * FROM player_score WHERE tenant_id = ? AND competition_id = ? ORDER BY row_num DESC",
+		tenant.ID,
+		competitionID,
+	); err != nil {
+		return fmt.Errorf("error Select player_score: tenantID=%d, competitionID=%s, %w", tenant.ID, competitionID, err)
+	}
+```
+
+[補足]ここまでいじったり触ったりメモったりするのに連休 3 時間溶かした。ISUCON 本番なら最初の 30 分ぐらいで完了しないといけないところ。
