@@ -9,10 +9,11 @@ services:
       - ./public:/public
     ports:
       - "443:443"
-    network_mode: host
+#    network_mode: host
     restart: always
 
   webapp:
+    platform: linux/amd64
     build: ./webapp/go
     environment:
       ISUCON_DB_HOST: mysql
@@ -34,7 +35,8 @@ services:
     restart: always
 
   mysql:
-    image: mysql/mysql-server:8.0.31
+    platform: linux/amd64
+    image: amd64/mysql:8.0.35
     environment:
       - "MYSQL_ROOT_HOST=%"
       - "MYSQL_ROOT_PASSWORD=root"
@@ -46,6 +48,7 @@ services:
     restart: always
 
   blackauth:
+    platform: linux/amd64
     build: ./webapp/go
     ports:
       - "3001:3001"
@@ -60,6 +63,7 @@ services:
       - main.go
 
   bench:
+    platform: linux/amd64
     build: ./webapp/go
     stdin_open: true
     tty: true
