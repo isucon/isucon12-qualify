@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
   apt-get -y upgrade && \
   apt-get install -y wget make libzip-dev unzip sqlite3 procps && \
-  wget -q https://dev.mysql.com/get/mysql-apt-config_0.8.22-1_all.deb && \
+  wget -q https://dev.mysql.com/get/mysql-apt-config_0.8.29-1_all.deb && \
   apt-get -y install ./mysql-apt-config_*_all.deb && \
   apt-get -y update && \
   apt-get -y install mysql-client && \
