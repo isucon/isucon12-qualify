@@ -8,7 +8,7 @@ RUN apt-get update && \
   wget -q https://dev.mysql.com/get/mysql-apt-config_0.8.29-1_all.deb && \
   apt-get -y install ./mysql-apt-config_*_all.deb && \
   apt-get -y update && \
-  apt-get -y install mysql-client build-essential libssl-dev libffi-dev python3-dev cargo
+  apt-get -y install default-mysql-client build-essential libssl-dev libffi-dev python3-dev cargo
 
 RUN useradd --uid=1001 --create-home isucon
 USER isucon
