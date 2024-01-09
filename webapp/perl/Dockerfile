@@ -10,14 +10,16 @@ RUN apt-get update && \
   apt-get -y update && \
   apt-get -y install default-mysql-client
 
+RUN cpanm -n Carton::Snapshot
+
 RUN useradd --uid=1001 --create-home isucon
 USER isucon
 
 RUN mkdir -p /home/isucon/webapp/perl
 WORKDIR /home/isucon/webapp/perl
 
-COPY cpanfile ./
-RUN cpm install
+COPY cpanfile cpanfile.snapshot ./
+RUN cpm install --show-build-log-on-failure
 
 COPY --chown=isucon:isucon ./ /home/isucon/webapp/perl/
 ENV PERL5LIB=/home/isucon/webapp/perl/local/lib/perl5

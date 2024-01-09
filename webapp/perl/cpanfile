@@ -4,7 +4,7 @@ requires 'Kossy', '0.60';
 requires 'HTTP::Status', '6.37';
 requires 'Cpanel::JSON::XS', '4.26';
 requires 'Starlet', '0.31';
-requires 'DBD::mysql', '4.050';
+requires 'DBD::mysql', '>= 4.050, < 5';
 requires 'DBD::SQLite', '1.70';
 requires 'DBIx::Sunny', '0.9992';
 requires 'DBIx::Tracer', '0.03';
