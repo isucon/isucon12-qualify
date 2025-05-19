@@ -320,7 +320,7 @@ func parseViewer(c echo.Context) (*Viewer, error) {
 
 func retrieveTenantRowFromHeader(c echo.Context) (*TenantRow, error) {
 	// JWTに入っているテナント名とHostヘッダのテナント名が一致しているか確認
-	baseHost := getEnv("ISUCON_BASE_HOSTNAME", ".t.isucon.dev")
+	baseHost := getEnv("ISUCON_BASE_HOSTNAME", ".t.isucon.local")
 	tenantName := strings.TrimSuffix(c.Request().Host, baseHost)
 
 	// SaaS管理者用ドメイン
@@ -625,7 +625,7 @@ type TenantsBillingHandlerResult struct {
 // GET /api/admin/tenants/billing
 // URL引数beforeを指定した場合、指定した値よりもidが小さいテナントの課金レポートを取得する
 func tenantsBillingHandler(c echo.Context) error {
-	if host := c.Request().Host; host != getEnv("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.dev") {
+	if host := c.Request().Host; host != getEnv("ISUCON_ADMIN_HOSTNAME", "admin.t.isucon.local") {
 		return echo.NewHTTPError(
 			http.StatusNotFound,
 			fmt.Sprintf("invalid hostname %s", host),
